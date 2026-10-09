@@ -1,0 +1,8 @@
+# The three repos are separate git clones (see setup.sh)
+/httptoolkit-server/
+/httptoolkit-ui/
+/httptoolkit-desktop/
+
+/logs/
+PROJECT_LOG.md
+.DS_Store
