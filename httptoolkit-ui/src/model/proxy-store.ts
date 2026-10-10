@@ -37,6 +37,15 @@ import { persist, hydrate } from '../util/mobx-persist/persist';
 import { isValidPort } from './network';
 import { serverVersion } from '../services/service-versions';
 import { getMockttpPort } from '../services/desktop-api';
+import { // wirepane: a stable proxy port
+    forgetProxySessionId,
+    getPreferredProxyPort,
+    getSessionIdFromUrl,
+    readLastProxyPort,
+    readWindowProxySession,
+    rememberProxySession,
+    stopLeftoverProxySession
+} from './proxy-port-memory';
 
 type HtkAdminClient =
     // WebRTC is only supported for new servers:
@@ -49,7 +58,9 @@ function startServer(
     adminClient: HtkAdminClient,
     config: Parameters<HtkAdminClient['start']>[0],
     maxDelay = 500,
-    delayMs = 200
+    delayMs = 200,
+    // wirepane: the port config to try if config's port is taken. After that, any free port.
+    fallbackPort?: PortRange
 ): Promise<void> {
     return adminClient.start(config as any).catch((e) => {
         console.log('Server initialization failed', e);
@@ -72,21 +83,22 @@ function startServer(
                     ...config,
                     http: {
                         ...config.http,
-                        port: undefined
+                        port: fallbackPort // wirepane: was undefined
                     }
                 }
+                fallbackPort = undefined; // wirepane
             }
 
             // Retry with our updated config after the tiniest possible delay:
             return delay(100).then(() =>
-                startServer(adminClient, config, maxDelay, delayMs)
+                startServer(adminClient, config, maxDelay, delayMs, fallbackPort)
             );
         }
 
         // For anything else (unknown errors, or more likely server not listening yet),
         // wait briefly and then retry the same config:
         return delay(Math.min(delayMs, maxDelay)).then(() =>
-            startServer(adminClient, config, maxDelay, delayMs * 1.2)
+            startServer(adminClient, config, maxDelay, delayMs * 1.2, fallbackPort)
         );
     }) as Promise<void>;
 }
@@ -201,6 +213,18 @@ export class ProxyStore {
 
         this.monitorRemoteClientConnection(this.adminClient);
 
+        // wirepane: come back on this window's previous port (or the app's last one), so phones
+        // and other devices set up with it keep working. See proxy-port-memory.ts.
+        const previousSession = readWindowProxySession();
+        if (previousSession.id) {
+            // The previous page didn't stop its own session (e.g. it crashed), so it may hold the port:
+            yield stopLeftoverProxySession(`http://127.0.0.1:${getMockttpPort()}`, previousSession.id);
+        }
+        const preferredPort = getPreferredProxyPort(
+            [previousSession.port, readLastProxyPort()],
+            this.portConfig
+        );
+
         yield startServer(this.adminClient, {
             http: {
                 options: {
@@ -217,13 +241,13 @@ export class ProxyStore {
                         ? ['unknown-protocol']
                         : undefined
                 },
-                port: this.portConfig,
+                port: preferredPort ?? this.portConfig, // wirepane: was this.portConfig
                 // We manage our own decoding client side - rules should not try to send
                 // use pre-decoded data (e.g. for breakpoints).
                 messageBodyDecoding: 'none'
             },
             webrtc: {}
-        });
+        }, undefined, undefined, this.portConfig); // wirepane: the fallback if preferredPort is taken
 
         this.mockttpRequestBuilder = new MockttpPluggableAdmin.MockttpAdminRequestBuilder(
             this.adminClient.schema,
@@ -234,6 +258,11 @@ export class ProxyStore {
 
         announceServerReady();
         console.log('Server started');
+
+        rememberProxySession({ // wirepane: the admin client keeps its session URL private
+            port: this.httpProxyPort,
+            id: getSessionIdFromUrl((this.adminClient as unknown as { adminSessionBaseUrl?: string }).adminSessionBaseUrl)
+        });
 
         yield getConfig(this.httpProxyPort).then((config) => {
             this.certPath = config.certificatePath;
@@ -251,6 +280,7 @@ export class ProxyStore {
         console.log(`Server started on port ${this.httpProxyPort}`);
 
         window.addEventListener('beforeunload', () => {
+            forgetProxySessionId(); // wirepane: stopped right here, so nothing is left over next time
             this.adminClient.stop().catch(() => { });
         });
     });

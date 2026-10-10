@@ -13,13 +13,12 @@ import { CustomActivationFunction, InterceptorCustomUiConfig } from "../../compo
 import { ManualInterceptCustomUi } from "../../components/intercept/config/manual-intercept-config";
 import { ExistingTerminalCustomUi } from "../../components/intercept/config/existing-terminal-config";
 import { ElectronCustomUi } from '../../components/intercept/config/electron-config';
-import { AndroidDeviceCustomUi } from "../../components/intercept/config/android-device-config";
 import { AndroidAdbCustomUi } from "../../components/intercept/config/android-adb-config";
 import { FridaCustomUi } from "../../components/intercept/config/frida-config";
 import { onActivateExistingBrowser } from "../../components/intercept/config/existing-browser-config";
 import { JvmCustomUi } from "../../components/intercept/config/jvm-config";
 import { DockerAttachCustomUi } from "../../components/intercept/config/docker-attach-config";
-import { ManualIOSCustomUi } from "../../components/intercept/config/manual-ios-config";
+import { openAndroidSetup, openIPhoneSetup } from "../../components/intercept/phone/phone-setup-routes"; // wirepane
 
 interface InterceptorConfig {
     name: string;
@@ -280,7 +279,7 @@ const INTERCEPT_OPTIONS: _.Dictionary<InterceptorConfig> = {
             return versionSatisfies(serverVersion || '', DETAILED_CONFIG_RANGE);
         },
         clientOnly: true,
-        uiConfig: AndroidDeviceCustomUi,
+        customActivation: openAndroidSetup, // wirepane: was uiConfig: AndroidDeviceCustomUi, now on that page
         tags: [...MOBILE_TAGS, ...ANDROID_TAGS]
     },
     'android-frida': {
@@ -314,7 +313,7 @@ const INTERCEPT_OPTIONS: _.Dictionary<InterceptorConfig> = {
         description: ["Manually intercept all HTTP and HTTPS traffic from any iPhone or iPad"],
         iconProps: SourceIcons.iOS,
         clientOnly: true,
-        uiConfig: ManualIOSCustomUi,
+        customActivation: openIPhoneSetup, // wirepane: was uiConfig: ManualIOSCustomUi, a link to the docs
         tags: [...MOBILE_TAGS, ...IOS_TAGS]
     },
     'ios-device': {
@@ -429,7 +428,7 @@ export const RECOMMENDED_INTERCEPTOR_IDS = [
 
 export const RECOMMENDED_INTERCEPTOR_TITLES: _.Dictionary<string> = {
     'manual-ios-device': 'iPhone or iPad',
-    'android-device': 'Android (QR code)'
+    'android-device': 'Android'
 };
 
 // Wirepane: options the UI knows about but the server has no interceptor for, so they

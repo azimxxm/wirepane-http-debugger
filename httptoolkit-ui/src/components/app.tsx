@@ -26,6 +26,9 @@ import {
 import { Rail, RailItem } from './rail';
 import { StatusBar } from './status-bar';
 import { GuidedInterceptPage } from './intercept/guided-intercept-page';
+import { ConnectIPhonePage } from './intercept/phone/connect-iphone-page';
+import { ConnectAndroidPage } from './intercept/phone/connect-android-page';
+import { IPHONE_SETUP_PATH, ANDROID_SETUP_PATH } from './intercept/phone/phone-setup-routes';
 import { ViewPage } from './view/view-page';
 import { ModifyPage } from './modify/modify-page';
 import { SendPage } from './send/send-page';
@@ -237,6 +240,8 @@ class App extends React.Component<{
                         <Router>
                             <Redirect noThrow from="/" to={'/intercept'} />
                             <Route path={'/intercept'} pageComponent={GuidedInterceptPage} />
+                            <Route path={IPHONE_SETUP_PATH} pageComponent={ConnectIPhonePage} />
+                            <Route path={ANDROID_SETUP_PATH} pageComponent={ConnectAndroidPage} />
                             <Route path={'/view'} pageComponent={ViewPage} />
                             <Route path={'/view/:eventId'} pageComponent={ViewPage} />
                             <Route path={'/modify'} pageComponent={ModifyPage} />

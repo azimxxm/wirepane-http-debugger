@@ -161,6 +161,6 @@ Promise.race([
     });
 });
 
-if (module.hot) {
-    module.hot.accept();
-}
+// wirepane: no module.hot.accept() here. Re-running this file in place built a second set of
+// stores and proxy sessions next to the old ones, and the old sessions kept their ports. Now a
+// code change in dev reloads the page instead, which stops the old session first.

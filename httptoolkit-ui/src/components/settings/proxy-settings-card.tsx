@@ -339,9 +339,11 @@ export class ProxySettingsCard extends React.Component<
                 }
             </ProxyPortStateExplanation>
             <SettingsExplanation>
-                When opening Wirepane, it will start the proxy on the first port in
-                this range that is available. If all ports in the range are in use, the
-                first free port above 8000 will be used instead.
+                { /* wirepane: the last port is reused, see model/proxy-port-memory.ts */ }
+                When opening Wirepane, it reuses the port it had last time if that's free
+                and in this range, so phones and other devices keep working. Otherwise it
+                starts the proxy on the first port in this range that is available. If all
+                ports in the range are in use, the first free port above 8000 will be used instead.
             </SettingsExplanation>
 
             {
