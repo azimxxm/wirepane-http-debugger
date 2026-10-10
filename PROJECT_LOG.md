@@ -41,6 +41,8 @@
   - Commit `79db50b` on branch `worktree-agent-a8cb887ff544861c2`, worktree `.claude/worktrees/agent-a8cb887ff544861c2`.
   - Merge it AFTER the Collections UI is committed: `git cherry-pick 79db50b`, then `scripts/build-bruno.sh`, then `cd httptoolkit-server && npm ci`, then `npm run test:unit`. After that, remove the worktree and branch.
 
+> The full list of remaining work, with details and acceptance criteria, is in `docs/remaining-work.md`.
+
 ### Next, in order
 
 1. (done) Commit the Collections UI and merge B1.
