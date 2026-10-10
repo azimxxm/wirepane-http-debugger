@@ -412,6 +412,8 @@ class BaseEditor extends React.Component<EditorProps> {
             },
 
             quickSuggestions: false,
+            // wirepane: the suggest widget is loaded for GraphQL, so other editors keep it closed until asked
+            suggestOnTriggerCharacters: false,
             parameterHints: { enabled: false },
             codeLens: true,
             minimap: { enabled: false },
