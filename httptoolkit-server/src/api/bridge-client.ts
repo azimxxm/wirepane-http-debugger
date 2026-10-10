@@ -170,7 +170,7 @@ function createBridgeConnectionError(
         return `${socketPath} (${detail || String(error)})`;
     });
     const error: any = new Error(
-        'Cannot connect to the HTTP Toolkit control socket. Tried: ' +
+        'Cannot connect to the Wirepane control socket. Tried: ' +
         attemptsDescription.join(', ')
     );
     const representativeAttempt =

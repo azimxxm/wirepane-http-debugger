@@ -47,9 +47,9 @@ const END_CONFIG_SECTION = '# --httptoolkit-end--';
 // Works in bash, zsh, dash, ksh, sh (not fish)
 const SH_SHELL_PATH_CONFIG = `
 ${START_CONFIG_SECTION}
-# This section will be reset each time a HTTP Toolkit terminal is opened
+# This section will be reset each time a Wirepane terminal is opened
 if [ -n "$HTTP_TOOLKIT_ACTIVE" ]; then
-    # When HTTP Toolkit is active, we inject various overrides into PATH
+    # When Wirepane is active, we inject various overrides into PATH
     export PATH="${POSIX_OVERRIDE_BIN_PATH}:$PATH"
 
     if command -v winpty >/dev/null 2>&1; then
@@ -61,9 +61,9 @@ fi
 ${END_CONFIG_SECTION}`;
 const FISH_SHELL_PATH_CONFIG = `
 ${START_CONFIG_SECTION}
-# This section will be reset each time a HTTP Toolkit terminal is opened
+# This section will be reset each time a Wirepane terminal is opened
 if [ -n "$HTTP_TOOLKIT_ACTIVE" ]
-    # When HTTP Toolkit is active, we inject various overrides into PATH
+    # When Wirepane is active, we inject various overrides into PATH
     set -x PATH "${POSIX_OVERRIDE_BIN_PATH}" $PATH;
 
     if command -v winpty >/dev/null 2>&1
@@ -86,11 +86,11 @@ export const getBashShellScript = (callbackUrl: string, env: { [name: string]: s
     fi
 
     if command -v curl >/dev/null 2>&1; then
-        # Let the HTTP Toolkit app know this ran successfully
+        # Let the Wirepane app know this ran successfully
         (curl --noproxy '*' -X POST "${callbackUrl}" >/dev/null 2>&1 &) &> /dev/null
     fi
 
-    echo 'HTTP Toolkit interception enabled'
+    echo 'Wirepane interception enabled'
 `;
 
 // Build a Bash script, but first just translate the $PATH (which Git Bash expects to include its own
@@ -117,11 +117,11 @@ export const getFishShellScript = (callbackUrl: string, env: { [name: string]: s
     end
 
     if command -v curl >/dev/null 2>&1
-        # Let the HTTP Toolkit app know this ran successfully
+        # Let the Wirepane app know this ran successfully
         curl --noproxy '*' -X POST "${callbackUrl}" >/dev/null 2>&1 &
     end
 
-    echo 'HTTP Toolkit interception enabled'
+    echo 'Wirepane interception enabled'
 `;
 
 export const getPowerShellScript = (callbackUrl: string, env: { [name: string]: string }) => `
@@ -148,7 +148,7 @@ ${
         $PSDefaultParameterValues.Remove("invoke-webrequest:proxy")
         $PSDefaultParameterValues.Remove("invoke-webrequest:SkipCertificateCheck")
 
-        Write-Host 'HTTP Toolkit interception disabled'
+        Write-Host 'Wirepane interception disabled'
     }
 
     # We add a few special hooks just for Invoke-WebRequest.
@@ -157,10 +157,10 @@ ${
     # Then we disable cert checks completely - all traffic will go to us, we'll handle HTTPS upstream
     $PSDefaultParameterValues["invoke-webrequest:SkipCertificateCheck"] = $True
 
-    # Let the HTTP Toolkit app know this ran successfully
+    # Let the Wirepane app know this ran successfully
     Start-Job -ScriptBlock { Invoke-WebRequest "${callbackUrl}" -NoProxy -Method 'POST' } | out-null
 
-    Write-Host "HTTP Toolkit interception enabled\`nTo stop intercepting type " -NoNewline
+    Write-Host "Wirepane interception enabled\`nTo stop intercepting type " -NoNewline
     Write-Host "Stop-Intercepting" -ForegroundColor Red
 `;
 

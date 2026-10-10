@@ -1,0 +1,4 @@
+# Upstream HTTP Toolkit code keeps its own formatting; reformatting it would conflict with ./sync-upstream.sh
+httptoolkit-ui/
+httptoolkit-server/
+httptoolkit-desktop/

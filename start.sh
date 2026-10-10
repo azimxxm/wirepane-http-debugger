@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Runs HTTP Toolkit from local source as one app:
+# Runs Wirepane from local source as one app:
 #   httptoolkit-server  -> API on :45457, Mockttp admin on :45456 (restarts on code changes)
 #   httptoolkit-ui      -> webpack dev server on :8080 (hot reload)
 #   httptoolkit-desktop -> Electron window that loads the local UI

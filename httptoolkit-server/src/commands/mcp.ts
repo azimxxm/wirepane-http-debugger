@@ -144,16 +144,16 @@ function getBridgeFailureInstruction(error: any): string {
             'Toolkit and the MCP client after all application components have updated.';
     }
     if (error?.statusCode === 401 || error?.statusCode === 403) {
-        return 'The control server rejected this MCP process. Check that HTTP Toolkit and its ' +
+        return 'The control server rejected this MCP process. Check that Wirepane and its ' +
             'MCP process use the same authentication configuration.';
     }
     if (error?.statusCode !== undefined) {
-        return `The control server returned HTTP ${error.statusCode}. Restart HTTP Toolkit and ` +
+        return `The control server returned HTTP ${error.statusCode}. Restart Wirepane and ` +
             'the MCP client, then retry.';
     }
 
-    return 'Restart HTTP Toolkit and retry. If the failure continues, report these diagnostic ' +
-        'details with the HTTP Toolkit and MCP versions.';
+    return 'Restart Wirepane and retry. If the failure continues, report these diagnostic ' +
+        'details with the Wirepane and MCP versions.';
 }
 
 const POLL_INTERVAL_MS = 5_000;
@@ -167,8 +167,8 @@ const OPEN_TIMEOUT_MS = 10_000;
 function getDefaultHtkExeCandidates(): string[] {
     if (process.platform === 'darwin') {
         return [
-            '/Applications/HTTP Toolkit.app/Contents/MacOS/HTTP Toolkit',
-            path.join(os.homedir(), 'Applications/HTTP Toolkit.app/Contents/MacOS/HTTP Toolkit')
+            '/Applications/Wirepane.app/Contents/MacOS/Wirepane',
+            path.join(os.homedir(), 'Applications/Wirepane.app/Contents/MacOS/Wirepane')
         ];
     }
 
@@ -177,16 +177,16 @@ function getDefaultHtkExeCandidates(): string[] {
         const programFiles = process.env.PROGRAMFILES;
         const candidates: string[] = [];
         if (localAppData) {
-            candidates.push(path.join(localAppData, 'Programs', 'HTTP Toolkit', 'HTTP Toolkit.exe'));
+            candidates.push(path.join(localAppData, 'Programs', 'Wirepane', 'Wirepane.exe'));
         }
         if (programFiles) {
-            candidates.push(path.join(programFiles, 'HTTP Toolkit', 'HTTP Toolkit.exe'));
+            candidates.push(path.join(programFiles, 'Wirepane', 'Wirepane.exe'));
         }
         return candidates;
     }
 
     // Linux (default for deb/rpm at least)
-    return ['/opt/HTTP Toolkit/httptoolkit'];
+    return ['/opt/Wirepane/httptoolkit'];
 }
 
 async function getLaunchableHtkExePath(): Promise<string | null> {
@@ -256,25 +256,25 @@ async function startHttpToolkit(
     if ((await apiRequest('GET', '/api/status').catch(() => null))?.ready) {
         await refreshOperations();
         return {
-            content: [{ type: 'text', text: 'HTTP Toolkit is already running and ready.' }]
+            content: [{ type: 'text', text: 'Wirepane is already running and ready.' }]
         };
     }
 
     const exePath = await getLaunchableHtkExePath();
     if (!exePath) {
         return {
-            content: [{ type: 'text', text: 'Cannot launch HTTP Toolkit: desktop app path not available.' }],
+            content: [{ type: 'text', text: 'Cannot launch Wirepane: desktop app path not available.' }],
             isError: true
         };
     }
 
-    log('Launching HTTP Toolkit desktop app...');
+    log('Launching Wirepane desktop app...');
     try {
         await launchDesktopApp(exePath);
     } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
         return {
-            content: [{ type: 'text', text: `Could not launch HTTP Toolkit: ${message}` }],
+            content: [{ type: 'text', text: `Could not launch Wirepane: ${message}` }],
             isError: true
         };
     }
@@ -287,9 +287,9 @@ async function startHttpToolkit(
         try {
             const status = await apiRequest('GET', '/api/status');
             if (status?.ready) {
-                log('HTTP Toolkit is ready');
+                log('Wirepane is ready');
                 return {
-                    content: [{ type: 'text', text: 'HTTP Toolkit has been launched and is ready.' }]
+                    content: [{ type: 'text', text: 'Wirepane has been launched and is ready.' }]
                 };
             }
         } catch {
@@ -298,7 +298,7 @@ async function startHttpToolkit(
     }
 
     return {
-        content: [{ type: 'text', text: 'HTTP Toolkit was launched but is not yet ready. It may still be starting up — try again in a moment.' }],
+        content: [{ type: 'text', text: 'Wirepane was launched but is not yet ready. It may still be starting up — try again in a moment.' }],
         isError: true
     };
 }
@@ -342,7 +342,7 @@ async function runMcpServer(): Promise<void> {
         if (shouldExposeBridgeDiagnostics(lastBridgeError)) {
             tools.push({
                 name: 'diagnose_httptoolkit_connection',
-                description: 'Show details and recovery instructions for the current broken HTTP Toolkit connection.',
+                description: 'Show details and recovery instructions for the current broken Wirepane connection.',
                 inputSchema: { type: 'object', properties: {} },
                 annotations: {
                     readOnlyHint: true,
@@ -354,7 +354,7 @@ async function runMcpServer(): Promise<void> {
         if (await getLaunchableHtkExePath()) {
             tools.push({
                 name: 'start_httptoolkit',
-                description: 'HTTP Toolkit is not currently running. Call this to launch it — once started, more tools will become available.',
+                description: 'Wirepane is not currently running. Call this to launch it — once started, more tools will become available.',
                 inputSchema: { type: 'object', properties: {} }
             });
         }
@@ -372,7 +372,7 @@ async function runMcpServer(): Promise<void> {
                 return {
                     content: [{
                         type: 'text',
-                        text: 'The HTTP Toolkit connection is no longer reporting a broken state. Refresh the available tools.'
+                        text: 'The Wirepane connection is no longer reporting a broken state. Refresh the available tools.'
                     }]
                 };
             }
@@ -537,7 +537,7 @@ async function runMcpServer(): Promise<void> {
 }
 
 class McpCommand extends Command {
-    static description = 'start an MCP server for HTTP Toolkit'
+    static description = 'start an MCP server for Wirepane'
 
     static flags = {
         help: flags.help({ char: 'h' }),

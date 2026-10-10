@@ -55,7 +55,7 @@ curl $CURL_OPTIONS "$WITH_ORIGIN" -X POST http://127.0.0.1:45457/update
 # This ensures that the server is startable, and has minimal functionality for launch.
 
 echo "\nCan run ctl help?"
-./httptoolkit-server/bin/httptoolkit-server ctl help | grep -q "HTTP Toolkit Remote Control"
+./httptoolkit-server/bin/httptoolkit-server ctl help | grep -q "Wirepane Remote Control"
 
 echo "\nCan run ctl status?"
 CTL_STATUS=$(./httptoolkit-server/bin/httptoolkit-server ctl status)

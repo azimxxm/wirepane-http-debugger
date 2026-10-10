@@ -107,7 +107,7 @@ export class ErrorBoundary extends React.Component<{
                         Tell us what happened
                     </ButtonLink>
                     <Button onClick={() => window.location.reload()}>
-                        Reload HTTP Toolkit
+                        Reload Wirepane
                     </Button>
                 </ButtonContainer>
             </ErrorOverlay>

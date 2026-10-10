@@ -101,7 +101,7 @@ async function createDockerProxy(
     // Forward all requests & responses to & from the real docker server:
     const server = http.createServer(async (req, res) => {
         if (!await isDockerAvailable()) {
-            res.writeHead(504, "Docker not available").end("HTTP Toolkit could not connect to Docker");
+            res.writeHead(504, "Docker not available").end("Wirepane could not connect to Docker");
             return;
         }
 
@@ -138,7 +138,7 @@ async function createDockerProxy(
 
             if (containerData && !isInterceptedContainer(containerData, proxyPort)) {
                 res.writeHead(400).end(
-                    "HTTP Toolkit cannot intercept startup of preexisting non-intercepted containers. " +
+                    "Wirepane cannot intercept startup of preexisting non-intercepted containers. " +
                     "The container must be recreated here first - try `docker run <image>` instead."
                 );
             }
@@ -151,9 +151,9 @@ async function createDockerProxy(
                 logError("Build interception failed due to unsupported 'remote' param");
 
                 if (reqUrl.searchParams.get('remote') === 'client-session') {
-                    res.end("HTTP Toolkit does not yet support BuildKit-powered builds");
+                    res.end("Wirepane does not yet support BuildKit-powered builds");
                 } else {
-                    res.end("HTTP Toolkit does not support intercepting remote build sources");
+                    res.end("Wirepane does not support intercepting remote build sources");
                 }
                 return;
             }
@@ -204,7 +204,7 @@ async function createDockerProxy(
 
             if (reqPath.match(BUILD_IMAGE_MATCHER) && dockerRes.statusCode === 200) {
                 // We transform the build output to replace the docker build interception steps with a cleaner
-                // & simpler HTTP Toolkit interception message:
+                // & simpler Wirepane interception message:
                 dockerRes.pipe(getBuildOutputPipeline(await extraDockerCommandCount!)).pipe(res);
             } else if (shouldRemapContainerData) {
                 // We need to remap container data, to hook all docker-compose behaviour:
@@ -247,7 +247,7 @@ async function createDockerProxy(
         if (!await isDockerAvailable()) {
             socket.end(
                 "HTTP/1.1 504 Docker not available\r\n\r\n" +
-                "HTTP Toolkit could not connect to Docker\r\n"
+                "Wirepane could not connect to Docker\r\n"
             );
             return;
         }

@@ -4,9 +4,9 @@
     <meta charset="UTF-8">
     <meta name="robots" content="noindex">
     <base href="/" />
-    <link rel='shortcut icon' type='image/x-icon' href='https://httptoolkit.com/favicon.ico' />
+    <link rel='icon' type='image/svg+xml' href="<%=require('./images/logo-icon.svg')%>" />
     <meta name="viewport" content="width=device-width">
-    <title>HTTP Toolkit</title>
+    <title>Wirepane</title>
     <style>
         html, body {
             height: 100%;
@@ -152,11 +152,11 @@
                 if (error.isTimeout) {
                     errorElement.innerText = 'This is taking longer than normal...';
                     errorDetailsElement.innerHTML = 'If this persists or happens often ' +
-                        'please <a href="https://github.com/httptoolkit/httptoolkit/issues/new">file an issue</a> ' + 'and help make HTTP Toolkit faster.';
+                        'please <a href="https://github.com/azimxxm/wirepane/issues/new">file an issue</a> ' + 'and help make Wirepane faster.';
                 } else {
                     errorElement.innerText = 'Startup failed: "' + error.message + '"';
                     errorDetailsElement.innerHTML = 'Please ' +
-                        '<a href="https://github.com/httptoolkit/httptoolkit/issues/new">file an issue</a>, ' +
+                        '<a href="https://github.com/azimxxm/wirepane/issues/new">file an issue</a>, ' +
                         "and we'll get this fixed ASAP";
                 }
             });
@@ -173,9 +173,9 @@
                 }));
 
                 alert(
-                    "HTTP Toolkit is failing to start, due to an unknown significant compatibility error." +
+                    "Wirepane is failing to start, due to an unknown significant compatibility error." +
                     "\n\n" +
-                    "This may mean your HTTP Toolkit installation is very outdated and requires a manual " +
+                    "This may mean your Wirepane installation is very outdated and requires a manual " +
                     "update to continue working. Please try reinstalling the app from httptoolkit.com." +
                     "\n\n" +
                     "If that doesn't work, please report this bug at github.com/httptoolkit/httptoolkit to " +

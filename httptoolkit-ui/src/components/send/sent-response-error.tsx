@@ -78,7 +78,7 @@ export const SentResponseError = (props: {
                         : errorType === 'connection-refused'
                             ? 'refused the connection'
                         : unreachableCheck(errorType)
-                    }, so HTTP Toolkit didn't send the request.
+                    }, so Wirepane didn't send the request.
                 </ExplanationBlock>
             : wasServerIssue(errorType)
                 ? <ExplanationBlock>
@@ -99,11 +99,11 @@ export const SentResponseError = (props: {
                     </ExplanationBlock>
                     <ExplanationBlock>
                         The server may have received and could still be processing this request, but
-                        the connection has been closed so HTTP Toolkit will not receive any response.
+                        the connection has been closed so Wirepane will not receive any response.
                     </ExplanationBlock>
                 </>
             : <ExplanationBlock>
-                It's not clear what's gone wrong here, but for some reason HTTP Toolkit
+                It's not clear what's gone wrong here, but for some reason Wirepane
                 couldn't successfully and/or securely complete this request. This might be an
                 intermittent issue, and may be resolved by retrying the request.
             </ExplanationBlock>

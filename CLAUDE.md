@@ -6,7 +6,18 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 @README.md
 
-The README (in Uzbek) is the source of truth for the goal, setup and roadmap: a free HTTP debugger for developers and QA, a Proxyman alternative built on HTTP Toolkit's open-source code under our own brand, shipped as one `.app`. Update it when the plan changes. Markdown files are tracked in this repo (docs will be written as `.md`), which overrides the global "only README.md is tracked" rule.
+The README (in Uzbek) is the source of truth for the goal, setup and roadmap: **Wirepane**, a free HTTP debugger for developers, QA and beginners, a Proxyman alternative built on HTTP Toolkit's open-source code and shipped as one `.app` (GitHub `azimxxm/wirepane`, bundle ID `com.wirepane.app`). Update it when the plan changes. Markdown files are tracked in this repo (docs will be written as `.md`), which overrides the global "only README.md is tracked" rule.
+
+## Branding
+
+User-visible text says "Wirepane". These keep the "HTTP Toolkit" name on purpose, don't rename them:
+
+- "HTTP Toolkit CA" (CA `commonName` in `httptoolkit-server/src/index.ts`, the Firefox `certutil -n` nickname, UI texts naming it): the CA is shared with the official app, and renaming it means reinstalling it on every device.
+- The `HTTP Toolkit Rules` title in saved rule files (file format), the HTTP Toolkit Android app (its real Play Store name) and links to httptoolkit.com docs.
+- Internal identifiers: package names, the `httptoolkit` config and Electron userData dirs (`extraMetadata` in `httptoolkit-desktop/package.json`), `HTK_*` / `HTTPTOOLKIT_*` env vars, `amiusing.httptoolkit.tech`.
+- "HTTP Toolkit Pro" / account / subscription texts: they go away with the paid gating, not through a rename.
+
+The logo source is `brand/icon.svg`. `./brand/build-icons.sh` regenerates every icon and logo file from it (`httptoolkit-desktop/src/icons/*`, `httptoolkit-ui/src/images/logo-icon.svg` and `loading-logo.png`), so change the source and rerun the script instead of editing those files.
 
 ## Repo layout
 
@@ -42,6 +53,9 @@ Pitfalls:
 - UI integration tests also need puppeteer's Chromium, which `setup.sh` skips on purpose (puppeteer 5 has no Apple Silicon build).
 - The server rejects requests whose `Origin` isn't in `ALLOWED_ORIGINS` (`httptoolkit-server/src/constants.ts`): any localhost / 127.0.0.x origin in dev, only `https://app.httptoolkit.tech` in prod builds (`HTTPTOOLKIT_SERVER_BINPATH` set). Even health checks need it: `curl -H "Origin: http://localhost:8080" http://127.0.0.1:45457/version`.
 - Server `engines` pins Node `v24.19.0`; other 24.x versions work with an `EBADENGINE` warning.
+- In the UI, plain `npx tsc --noEmit` fails on DOM vs WebWorker lib conflicts inside `node_modules`. The dev server's ForkTsChecker is the real type check: look for `No issues found.` in `logs/ui.log`.
+- Everything runs natively on Apple Silicon without Rosetta. The only x86_64 binary in `node_modules` is node-notifier's `terminal-notifier`, and `httptoolkit-ui/automation/webpack.common.ts` skips it there, because its failed spawn used to kill the UI dev server.
+- The global auto-lint hook runs `prettier --write` on every file changed with Edit/Write. `.prettierignore` keeps it off the upstream folders, but only when the hook runs from the repo root. After editing upstream code, check `git diff --stat` for whole-file reformatting, or make those edits with sed/python.
 
 ## Architecture
 

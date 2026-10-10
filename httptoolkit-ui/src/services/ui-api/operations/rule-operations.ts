@@ -62,7 +62,7 @@ function rulesListOperation(rulesStore: RulesStore): Operation {
     return {
         definition: {
             name: 'rules.list',
-            description: 'List the currently configured HTTP Toolkit rules, which define how ' +
+            description: 'List the currently configured Wirepane rules, which define how ' +
                 'matching traffic is mocked, rewritten, breakpointed or otherwise modified. ' +
                 'Rules are returned in their configured order, within their groups, and each is ' +
                 'summarized rather than returning its full configuration.\n' +

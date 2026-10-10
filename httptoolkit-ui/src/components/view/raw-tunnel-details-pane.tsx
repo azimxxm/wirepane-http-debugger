@@ -57,7 +57,7 @@ export class RawTunnelDetailsPane extends React.Component<{
                 <ContentLabelBlock>Details</ContentLabelBlock>
                 <Content>
                     <p>
-                        This connection was not intercepted by HTTP Toolkit, as it contains
+                        This connection was not intercepted by Wirepane, as it contains
                         an unrecognized non-HTTP protocol, so was tunnelled directly to its destination.
                     </p>
                 </Content>

@@ -357,14 +357,14 @@ describe('End-to-end server API test', function () {
 
         it("shows help with --help", async () => {
             const result = await runCtl('--help');
-            expect(result.stdout).to.contain('HTTP Toolkit Remote Control');
+            expect(result.stdout).to.contain('Wirepane Remote Control');
             expect(result.stdout).to.contain('httptoolkit-ctl');
             expect(result.exitCode).to.equal(0);
         });
 
         it("shows help with 'help' subcommand", async () => {
             const result = await runCtl('help');
-            expect(result.stdout).to.contain('HTTP Toolkit Remote Control');
+            expect(result.stdout).to.contain('Wirepane Remote Control');
             expect(result.exitCode).to.equal(0);
         });
 

@@ -53,7 +53,7 @@ export class TlsFailureDetailsPane extends React.Component<{
                             </>,
                             'cert-rejected': <>
                                 This connection was aborted, before any HTTP request was sent,
-                                because the client did not trust the HTTP Toolkit certificate.
+                                because the client did not trust the Wirepane certificate.
                             </>,
                             'no-shared-cipher': <>
                                 This connection was aborted, before any HTTP request was sent,
@@ -77,7 +77,7 @@ export class TlsFailureDetailsPane extends React.Component<{
                     failure.failureCause === 'cert-rejected'
                         ? <p>
                             This means that the client hasn't yet been fully configured
-                            to work with HTTP Toolkit. It has the proxy settings,
+                            to work with Wirepane. It has the proxy settings,
                             but it doesn't trust our certificate authority (CA), so we
                             can't intercept its HTTPS traffic.
                         </p>
@@ -85,7 +85,7 @@ export class TlsFailureDetailsPane extends React.Component<{
                         ? <>
                             <p>
                                 This usually means that the client hasn't yet been 100% configured
-                                to work with HTTP Toolkit, although it's also possible that
+                                to work with Wirepane, although it's also possible that
                                 it has an unusual TLS setup.
                             </p>
                             <p>
@@ -119,7 +119,7 @@ export class TlsFailureDetailsPane extends React.Component<{
                                     HTTP Toolkit CA.
                                 </>
                             : <>
-                                In the first two cases, this is not related to HTTP Toolkit.
+                                In the first two cases, this is not related to Wirepane.
                                 In the third case, you need to configure the client to trust your
                                 HTTP Toolkit CA.
                             </>
@@ -132,7 +132,7 @@ export class TlsFailureDetailsPane extends React.Component<{
                     </p>
 
                     <p>
-                        Your HTTP Toolkit certificate is stored on your machine at <CopyableMonoValue>
+                        Your Wirepane certificate is stored on your machine at <CopyableMonoValue>
                             { certPath }
                         </CopyableMonoValue>
                     </p>
@@ -148,7 +148,7 @@ export class TlsFailureDetailsPane extends React.Component<{
                         Trusting user CA certificates in your own app is a small & simple
                         configuration change, see <a
                             href="https://httptoolkit.com/docs/guides/android#intercepting-traffic-from-your-own-android-app"
-                        >the HTTP Toolkit docs</a> for more details. Alternatively HTTP Toolkit
+                        >the HTTP Toolkit docs</a> for more details. Alternatively Wirepane
                         can inject the system certificate for you automatically, on devices that
                         support this, by connecting the device with ADB and using the "Android
                         device via ADB" interception option.

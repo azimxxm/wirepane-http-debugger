@@ -153,8 +153,8 @@ export const UNKNOWN_SOURCE = {
 
 export const MANUALLY_SENT_SOURCE = {
     ua: '',
-    summary: 'HTTP Toolkit (Send)',
-    description: 'Sent manually from HTTP Toolkit',
+    summary: 'Wirepane (Send)',
+    description: 'Sent manually from Wirepane',
     icon: {
         icon: 'PaperPlaneTilt',
         color: popColor

@@ -29,7 +29,7 @@ initErrorTracking();
 import { Command, flags } from '@oclif/command'
 
 class HttpToolkitServer extends Command {
-    static description = 'start the HTTP Toolkit server'
+    static description = 'start the Wirepane server'
 
     static flags = {
         version: flags.version({char: 'v'}),
@@ -72,7 +72,7 @@ class HttpToolkitServer extends Command {
         // path to the 'run' bin plus 'start', but we include a shorter fallback just in case too:
         const currentProcessTitle = [process.argv0, ...process.argv.slice(1)].join(' ');
         process.title = currentProcessTitle.length > 18
-            ? "HTTP Toolkit Server"
+            ? "Wirepane Server"
             : "htk-server";
 
     }

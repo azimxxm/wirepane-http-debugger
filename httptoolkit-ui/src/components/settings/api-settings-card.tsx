@@ -164,7 +164,7 @@ export class ApiSettingsCard extends React.Component<
                 requests within their base URL.
             </SettingsExplanation>
             <SettingsExplanation>
-                HTTP Toolkit also includes built-in specifications for 2600+ popular public APIs.
+                Wirepane also includes built-in specifications for 2600+ popular public APIs.
             </SettingsExplanation>
         </CollapsibleCard>
     }

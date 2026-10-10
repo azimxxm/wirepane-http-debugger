@@ -1,0 +1,40 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <!-- Wirepane: a wire (the "W") running through a glass pane. The wire is dim outside
+       the pane and bright inside it, i.e. the traffic you can see through Wirepane. -->
+  <defs>
+    <linearGradient id="tile" x1="0" y1="0" x2="0.9" y2="1">
+      <stop offset="0" stop-color="#1B2C4B"/>
+      <stop offset="1" stop-color="#0A1222"/>
+    </linearGradient>
+    <linearGradient id="wire" x1="170" y1="0" x2="854" y2="0" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#2DD4BF"/>
+      <stop offset="1" stop-color="#38BDF8"/>
+    </linearGradient>
+    <clipPath id="pane">
+      <rect x="232" y="252" width="560" height="520" rx="64"/>
+    </clipPath>
+    <filter id="tile-shadow" x="-10%" y="-10%" width="120%" height="125%">
+      <feDropShadow dx="0" dy="12" stdDeviation="14" flood-color="#000000" flood-opacity="0.3"/>
+    </filter>
+  </defs>
+
+  <!-- app tile on the macOS icon grid: 824px body, 185px corner radius -->
+  <rect x="100" y="100" width="824" height="824" rx="185" fill="url(#tile)" filter="url(#tile-shadow)"/>
+
+  <!-- the pane, with window dots -->
+  <rect x="232" y="252" width="560" height="520" rx="64" fill="#FFFFFF" fill-opacity="0.06"
+        stroke="#FFFFFF" stroke-opacity="0.24" stroke-width="12"/>
+  <g fill="#FFFFFF" fill-opacity="0.32">
+    <circle cx="290" cy="310" r="13"/>
+    <circle cx="334" cy="310" r="13"/>
+    <circle cx="378" cy="310" r="13"/>
+  </g>
+
+  <!-- the wire -->
+  <polyline points="170,430 352,672 512,476 672,672 854,430" fill="none" stroke="url(#wire)"
+            stroke-width="60" stroke-linecap="round" stroke-linejoin="round" stroke-opacity="0.45"/>
+  <polyline points="170,430 352,672 512,476 672,672 854,430" fill="none" stroke="url(#wire)"
+            stroke-width="60" stroke-linecap="round" stroke-linejoin="round" clip-path="url(#pane)"/>
+  <circle cx="170" cy="430" r="38" fill="#2DD4BF"/>
+  <circle cx="854" cy="430" r="38" fill="#38BDF8"/>
+</svg>

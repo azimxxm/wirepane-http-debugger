@@ -27,7 +27,7 @@ interface IntegrationConfig {
 const jsonClientConfig = (mcpCommand: { command: string; args: string[] }) =>
     JSON.stringify({
         mcpServers: {
-            'http-toolkit': {
+            'wirepane': {
                 command: mcpCommand.command,
                 ...(mcpCommand.args.length > 0 ? { args: mcpCommand.args } : {})
             }
@@ -37,7 +37,7 @@ const jsonClientConfig = (mcpCommand: { command: string; args: string[] }) =>
 const vscodeClientConfig = (mcpCommand: { command: string; args: string[] }) =>
     JSON.stringify({
         servers: {
-            'http-toolkit': {
+            'wirepane': {
                 type: 'stdio',
                 command: mcpCommand.command,
                 ...(mcpCommand.args.length > 0 ? { args: mcpCommand.args } : {})
@@ -54,9 +54,9 @@ const INTEGRATIONS: IntegrationConfig[] = [
     {
         id: 'claude-code',
         name: 'Claude Code',
-        description: 'Register HTTP Toolkit as an MCP server in Claude Code by running this command in your terminal:',
+        description: 'Register Wirepane as an MCP server in Claude Code by running this command in your terminal:',
         buildSnippet: ({ command, args }) =>
-            `claude mcp add http-toolkit -- ${[command, ...args].map(shellEscape).join(' ')}`,
+            `claude mcp add wirepane -- ${[command, ...args].map(shellEscape).join(' ')}`,
         docsUrl: 'https://docs.claude.com/en/docs/claude-code/mcp'
     },
     {
@@ -69,29 +69,29 @@ const INTEGRATIONS: IntegrationConfig[] = [
     {
         id: 'codex',
         name: 'Codex',
-        description: 'Register HTTP Toolkit as an MCP server in Codex by running this command in your terminal:',
+        description: 'Register Wirepane as an MCP server in Codex by running this command in your terminal:',
         buildSnippet: ({ command, args }) =>
-            `codex mcp add http-toolkit -- ${[command, ...args].map(shellEscape).join(' ')}`,
+            `codex mcp add wirepane -- ${[command, ...args].map(shellEscape).join(' ')}`,
         docsUrl: 'https://developers.openai.com/codex/mcp/'
     },
     {
         id: 'vscode',
         name: 'VS Code',
-        description: 'Use HTTP Toolkit from GitHub Copilot in VS Code by adding the following to .vscode/mcp.json in your project (or your user mcp.json):',
+        description: 'Use Wirepane from GitHub Copilot in VS Code by adding the following to .vscode/mcp.json in your project (or your user mcp.json):',
         buildSnippet: vscodeClientConfig,
         docsUrl: 'https://code.visualstudio.com/docs/copilot/customization/mcp-servers'
     },
     {
         id: 'cursor',
         name: 'Cursor',
-        description: 'Use HTTP Toolkit from Cursor\'s AI features by adding the following to ~/.cursor/mcp.json (or .cursor/mcp.json in your project):',
+        description: 'Use Wirepane from Cursor\'s AI features by adding the following to ~/.cursor/mcp.json (or .cursor/mcp.json in your project):',
         buildSnippet: jsonClientConfig,
         docsUrl: 'https://docs.cursor.com/context/mcp'
     },
     {
         id: 'generic',
         name: 'Other MCP clients',
-        description: 'HTTP Toolkit speaks the standard Model Context Protocol over stdio — configure your client to spawn the following command:',
+        description: 'Wirepane speaks the standard Model Context Protocol over stdio — configure your client to spawn the following command:',
         buildSnippet: ({ command, args }) =>
             [command, ...args].map(shellEscape).join(' ')
     }
@@ -257,7 +257,7 @@ class McpModal extends React.Component<McpModalProps> {
                 aria-labelledby='mcp-modal-title'
             >
                 <Header>
-                    <h1 id='mcp-modal-title'>Connect HTTP Toolkit to your LLM</h1>
+                    <h1 id='mcp-modal-title'>Connect Wirepane to your LLM</h1>
                     <CloseButton title="Close" onClick={onClose}>
                         <Icon icon={['fas', 'times']} />
                     </CloseButton>
@@ -265,7 +265,7 @@ class McpModal extends React.Component<McpModalProps> {
 
                 <Body>
                     <p className='intro'>
-                        HTTP Toolkit exposes intercepted traffic and operations to AI agents via the{' '}
+                        Wirepane exposes intercepted traffic and operations to AI agents via the{' '}
                         <a href='https://modelcontextprotocol.io/' target='_blank' rel='noreferrer'>
                             Model Context Protocol
                         </a>
@@ -308,7 +308,7 @@ class McpModal extends React.Component<McpModalProps> {
                     </FooterNote> }
 
                     <FooterNote>
-                        HTTP Toolkit must be running for the AI client to connect.
+                        Wirepane must be running for the AI client to connect.
                         { !this.props.accountStore.user.isPaidUser() && <>
                             {' '}Free accounts have per-session call limits — see{' '}
                             <a href='https://httptoolkit.com/pricing/' target='_blank' rel='noreferrer'>

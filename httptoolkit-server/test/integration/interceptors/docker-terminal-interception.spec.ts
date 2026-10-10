@@ -154,7 +154,7 @@ describe('Docker CLI interception', function () {
 `Sending build context to Docker daemon  3.072kB\r\r
 Step 1/8 : FROM node:14 as base-image
  ---> <hash>
- *** Enabling HTTP Toolkit interception ***
+ *** Enabling Wirepane interception ***
  ---> <hash>
 Step 2/8 : RUN curl -s https://base-request.test
  ---> Running in <hash>
@@ -163,7 +163,7 @@ Removing intermediate container <hash>
  ---> <hash>
 Step 3/8 : FROM node:14 as base-image-2
  ---> <hash>
- *** Enabling HTTP Toolkit interception ***
+ *** Enabling Wirepane interception ***
  ---> <hash>
 Step 4/8 : COPY . .
  ---> <hash>
@@ -174,7 +174,7 @@ Removing intermediate container <hash>
  ---> <hash>
 Step 6/8 : FROM base-image
  ---> <hash>
- *** Enabling HTTP Toolkit interception ***
+ *** Enabling Wirepane interception ***
  ---> <hash>
 Step 7/8 : COPY --from=base-image-2 make-request.js .
  ---> <hash>

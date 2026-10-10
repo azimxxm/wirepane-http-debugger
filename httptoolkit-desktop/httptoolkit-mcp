@@ -3,7 +3,7 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 APP_DIR="$(dirname "$SCRIPT_DIR")"
 export HTK_DESKTOP_RESOURCES="$SCRIPT_DIR"
 if [ "$(uname)" = "Darwin" ]; then
-    export HTK_DESKTOP_EXE="$APP_DIR/MacOS/HTTP Toolkit"
+    export HTK_DESKTOP_EXE="$APP_DIR/MacOS/Wirepane"
 else
     export HTK_DESKTOP_EXE="$APP_DIR/httptoolkit"
 fi

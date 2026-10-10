@@ -95,7 +95,7 @@ const createWindow = () => {
     });
 
     const window = new BrowserWindow({
-        title: 'HTTP Toolkit',
+        title: 'Wirepane',
         backgroundColor: '#d8e2e6',
 
         minWidth: 700,
@@ -196,7 +196,7 @@ if (!amMainInstance) {
     console.log('Not the main instance - quitting');
     app.quit();
 } else {
-    writeLog(`--- Launching HTTP Toolkit desktop v${DESKTOP_VERSION} at ${new Date().toISOString()} ---`);
+    writeLog(`--- Launching Wirepane desktop v${DESKTOP_VERSION} at ${new Date().toISOString()} ---`);
 
     yargs
         .version(DESKTOP_VERSION)
@@ -285,7 +285,7 @@ if (!amMainInstance) {
             logError(`Renderer gone: ${details.reason}`);
             showErrorAlert(
                 "UI crashed",
-                "The HTTP Toolkit UI stopped unexpected.\n\nPlease file an issue at github.com/httptoolkit/httptoolkit."
+                "The Wirepane UI stopped unexpected.\n\nPlease file an issue at github.com/azimxxm/wirepane."
             );
 
             setImmediate(() => {
@@ -307,7 +307,7 @@ if (!amMainInstance) {
 
             showErrorAlert(
                 "UI load failed",
-                `The HTTP Toolkit UI could not be loaded from\n${baseURL}.` +
+                `The Wirepane UI could not be loaded from\n${baseURL}.` +
                 "\n\n" +
                 `${description} (${code})`
             );
@@ -331,7 +331,7 @@ if (!amMainInstance) {
             .catch((error) => {
                 showErrorAlert(
                     "Failed to open URL",
-                    `HTTP Toolkit could not open ${url.toString()} in your browser, because: ${error?.message ?? error ?? 'unknown error'}`
+                    `Wirepane could not open ${url.toString()} in your browser, because: ${error?.message ?? error ?? 'unknown error'}`
                 );
             });
     }
@@ -527,10 +527,10 @@ if (!amMainInstance) {
             logError(error, ['server-exit', error.message, (error as any).code?.toString() || '']);
 
             showErrorAlert(
-                'HTTP Toolkit hit an error',
+                'Wirepane hit an error',
                 `${error.message}.\n\n` +
                 `See ${LAST_RUN_LOG_PATH} for more details.\n\n` +
-                `Please file an issue at github.com/httptoolkit/httptoolkit.`
+                `Please file an issue at github.com/azimxxm/wirepane.`
             );
 
             // Retry limited times, but not for near-immediate failures.
@@ -557,8 +557,8 @@ if (!amMainInstance) {
     ) {
         showErrorAlert(
             "Unsupported COMSPEC configuration",
-            "HTTP Toolkit has detected that your default command interpreter is not cmd.exe.\n\n" +
-            "This will cause problems with HTTP Toolkit, and many other applications. " +
+            "Wirepane has detected that your default command interpreter is not cmd.exe.\n\n" +
+            "This will cause problems with Wirepane, and many other applications. " +
             "To fix this, set the COMSPEC environment variable to point to cmd.exe - most "  +
             "commonly that means 'C:\\Windows\\System32\\cmd.exe'.\n\n" +
             "(Having trouble? File an issue at github.com/httptoolkit/httptoolkit)"
@@ -574,7 +574,7 @@ if (!amMainInstance) {
             let shouldDisableProxy = false;
 
             if (proxyConfig) {
-                // If the proxy is local, we don't use it (this probably means HTTP Toolkit itself is the
+                // If the proxy is local, we don't use it (this probably means Wirepane itself is the
                 // system proxy, which causes lots of problems - we avoid in that case).
                 const proxyHostname = new URL(proxyConfig.proxyUrl).hostname;
                 if (proxyHostname === 'localhost' || proxyHostname.startsWith('127.0.0')) {

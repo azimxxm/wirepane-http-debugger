@@ -1,6 +1,6 @@
 {
   "name": "httptoolkit-desktop",
-  "productName": "HTTP Toolkit",
+  "productName": "Wirepane",
   "version": "1.27.2",
   "homepage": "https://httptoolkit.com",
   "private": true,
@@ -27,9 +27,9 @@
     "httptoolkit-server-version": "1.27.2"
   },
   "build": {
-    "appId": "tech.httptoolkit.desktop",
+    "appId": "com.wirepane.app",
     "extends": null,
-    "productName": "HTTP Toolkit",
+    "productName": "Wirepane",
     "directories": {
       "buildResources": "build-resources"
     },
@@ -61,7 +61,7 @@
       "httptoolkit-ctl{,.*}",
       "httptoolkit-mcp{,.*}"
     ],
-    "artifactName": "HttpToolkit-${version}-${arch}.${ext}",
+    "artifactName": "Wirepane-${version}-${arch}.${ext}",
     "mac": {
       "target": [
         "dmg"
@@ -78,7 +78,7 @@
         "nsis",
         "zip"
       ],
-      "artifactName": "HttpToolkit-${version}-${os}-${arch}.${ext}",
+      "artifactName": "Wirepane-${version}-${os}-${arch}.${ext}",
       "icon": "./src/icons/icon.ico",
       "forceCodeSigning": true,
       "azureSignOptions": {
@@ -90,7 +90,7 @@
     },
     "nsis": {
       "installerIcon": "./src/icons/icon.ico",
-      "artifactName": "HttpToolkit-${version}.${ext}",
+      "artifactName": "Wirepane-${version}.${ext}",
       "deleteAppDataOnUninstall": true,
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
@@ -104,14 +104,14 @@
         "AppImage",
         "zip"
       ],
-      "artifactName": "HttpToolkit-${version}-${os}-${arch}.${ext}",
+      "artifactName": "Wirepane-${version}-${os}-${arch}.${ext}",
       "executableName": "httptoolkit",
       "category": "Development",
       "icon": "./src/icons/icon.svg",
       "maintainer": "contact@httptoolkit.com",
       "desktop": {
         "entry": {
-          "Name": "HTTP Toolkit",
+          "Name": "Wirepane",
           "Comment": "HTTP(S) debugging, development & testing tool",
           "Categories": "Development;Network",
           "StartupNotify": true
@@ -119,7 +119,7 @@
       }
     },
     "deb": {
-      "artifactName": "HttpToolkit-${version}-${arch}.${ext}",
+      "artifactName": "Wirepane-${version}-${arch}.${ext}",
       "depends": [
         "libgtk-3-0",
         "libnotify4",
@@ -133,11 +133,11 @@
       ]
     },
     "rpm": {
-      "artifactName": "HttpToolkit-${version}-${arch}.${ext}",
+      "artifactName": "Wirepane-${version}-${arch}.${ext}",
       "afterRemove": "scripts/post-uninstall-rpm.sh"
     },
     "appImage": {
-      "artifactName": "HttpToolkit-${version}-${arch}.${ext}"
+      "artifactName": "Wirepane-${version}-${arch}.${ext}"
     },
     "publish": null,
     "electronFuses": {

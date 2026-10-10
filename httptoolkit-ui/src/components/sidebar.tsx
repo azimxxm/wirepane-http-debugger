@@ -67,7 +67,7 @@ const sidebarItemStyles = css`
 
 const SidebarLogo = styled.img.attrs(() => ({
     src: logo,
-    alt: 'HTTP Toolkit logo'
+    alt: 'Wirepane logo'
 }))`
     ${sidebarItemStyles}
     padding: 13px;

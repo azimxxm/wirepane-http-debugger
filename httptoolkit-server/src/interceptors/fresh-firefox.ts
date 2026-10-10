@@ -201,7 +201,7 @@ abstract class Firefox implements Interceptor {
     async setupFirefoxProfile(profilePath: string) {
         const messageServer = new MessageServer(
             this.config,
-            `HTTP Toolkit is preparing a Firefox profile, please wait...`
+            `Wirepane is preparing a Firefox profile, please wait...`
         );
         await messageServer.start();
 

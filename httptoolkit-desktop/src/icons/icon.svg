@@ -1,18 +1,40 @@
-<?xml version="1.0" encoding="utf-8"?>
-<!-- Generator: Adobe Illustrator 27.5.0, SVG Export Plug-In . SVG Version: 6.00 Build 0)  -->
-<svg version="1.1" id="Layer_1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" x="0px" y="0px"
-	 viewBox="0 0 120 120" style="enable-background:new 0 0 120 120;" xml:space="preserve">
-<style type="text/css">
-	.st0{fill:#E24120;}
-</style>
-<path class="st0" d="M39,107.6L64,22.1l0,0c0.2-0.8,1-1.4,1.9-1.4H75c0.9,0,1.5,0.8,1.3,1.7l-27.9,95.8c-0.3,1.1-1.3,1.9-2.5,1.9
-	H23.6C10.6,120,0,109.4,0,96.4V23.6C0,10.6,10.6,0,23.6,0H81c0.9,0,1.5,0.8,1.3,1.7L79.6,11c-0.2,0.8-1,1.4-1.9,1.4H23.4
-	c-6.1,0-11,4.9-11,11v73.2c0,6.1,4.9,11,11,11H39z"/>
-<path class="st0" d="M96.4,0c13,0,23.6,10.6,23.6,23.6v72.8c0,13-10.6,23.6-23.6,23.6H57.8c-0.9,0-1.5-0.8-1.3-1.7l2.7-9.3
-	c0.2-0.8,1-1.4,1.9-1.4h35.5c6.1,0,11-4.9,11-11V23.4c0-5-3.3-9.2-7.9-10.6l-24.8,85c-0.2,0.8-1,1.4-1.9,1.4h-9.2
-	c-0.9,0-1.5-0.8-1.3-1.7L90.5,1.9C90.8,0.8,91.8,0,93,0H96.4L96.4,0z"/>
-<path class="st0" d="M34.2,37.2h2c2.9,0,5.2,2.3,5.2,5.2v2c0,2.9-2.3,5.2-5.2,5.2h-2c-2.9,0-5.2-2.3-5.2-5.2v-2
-	C29,39.6,31.3,37.2,34.2,37.2z"/>
-<path class="st0" d="M34.2,66.2h2c2.9,0,5.2,2.3,5.2,5.2v2c0,2.9-2.3,5.2-5.2,5.2h-2c-2.9,0-5.2-2.3-5.2-5.2v-2
-	C29,68.5,31.3,66.2,34.2,66.2z"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <!-- Wirepane: a wire (the "W") running through a glass pane. The wire is dim outside
+       the pane and bright inside it, i.e. the traffic you can see through Wirepane. -->
+  <defs>
+    <linearGradient id="tile" x1="0" y1="0" x2="0.9" y2="1">
+      <stop offset="0" stop-color="#1B2C4B"/>
+      <stop offset="1" stop-color="#0A1222"/>
+    </linearGradient>
+    <linearGradient id="wire" x1="170" y1="0" x2="854" y2="0" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#2DD4BF"/>
+      <stop offset="1" stop-color="#38BDF8"/>
+    </linearGradient>
+    <clipPath id="pane">
+      <rect x="232" y="252" width="560" height="520" rx="64"/>
+    </clipPath>
+    <filter id="tile-shadow" x="-10%" y="-10%" width="120%" height="125%">
+      <feDropShadow dx="0" dy="12" stdDeviation="14" flood-color="#000000" flood-opacity="0.3"/>
+    </filter>
+  </defs>
+
+  <!-- app tile on the macOS icon grid: 824px body, 185px corner radius -->
+  <rect x="100" y="100" width="824" height="824" rx="185" fill="url(#tile)" filter="url(#tile-shadow)"/>
+
+  <!-- the pane, with window dots -->
+  <rect x="232" y="252" width="560" height="520" rx="64" fill="#FFFFFF" fill-opacity="0.06"
+        stroke="#FFFFFF" stroke-opacity="0.24" stroke-width="12"/>
+  <g fill="#FFFFFF" fill-opacity="0.32">
+    <circle cx="290" cy="310" r="13"/>
+    <circle cx="334" cy="310" r="13"/>
+    <circle cx="378" cy="310" r="13"/>
+  </g>
+
+  <!-- the wire -->
+  <polyline points="170,430 352,672 512,476 672,672 854,430" fill="none" stroke="url(#wire)"
+            stroke-width="60" stroke-linecap="round" stroke-linejoin="round" stroke-opacity="0.45"/>
+  <polyline points="170,430 352,672 512,476 672,672 854,430" fill="none" stroke="url(#wire)"
+            stroke-width="60" stroke-linecap="round" stroke-linejoin="round" clip-path="url(#pane)"/>
+  <circle cx="170" cy="430" r="38" fill="#2DD4BF"/>
+  <circle cx="854" cy="430" r="38" fill="#38BDF8"/>
 </svg>

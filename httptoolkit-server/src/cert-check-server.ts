@@ -7,7 +7,7 @@ import { EPHEMERAL_PORT_RANGE } from './constants';
 const buildPage = (style: string, script?: string, body?: string) =>
     `<html>
         <head>
-            <title>HTTP Toolkit HTTPS Test</title>
+            <title>Wirepane HTTPS Test</title>
             <meta charset="UTF-8" />
             <link href="http://fonts.googleapis.com/css?family=Lato" rel="stylesheet" />
             <style>
@@ -146,9 +146,9 @@ export class CertCheckServer {
                             }
                         `, ``, `
                             <p>
-                                This browser does not trust the HTTP Toolkit certificate authority, so HTTPS traffic can't be intercepted.
+                                This browser does not trust the Wirepane certificate authority, so HTTPS traffic can't be intercepted.
                             </p><p>
-                                Closing the browser and starting it again from HTTP Toolkit will often resolve this. If not,
+                                Closing the browser and starting it again from Wirepane will often resolve this. If not,
                                 please file a bug at <strong>github.com/httptoolkit/httptoolkit</strong>.
                             </p>
                     `)

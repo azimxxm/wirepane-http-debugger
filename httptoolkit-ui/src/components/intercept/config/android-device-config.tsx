@@ -220,13 +220,13 @@ class AndroidConfig extends React.Component<{
             </p>
 
             <p>
-                Once active, this will send all traffic to HTTP Toolkit, and configure
+                Once active, this will send all traffic to Wirepane, and configure
                 the device to trust its HTTPS certificate by default.
             </p>
 
             <p>
                 <strong>This won't work immediately for all apps.</strong> Some may need changes
-                to trust HTTP Toolkit for HTTPS traffic. <a
+                to trust Wirepane for HTTPS traffic. <a
                     href="https://httptoolkit.com/docs/guides/android"
                     target='_blank'
                     rel='noreferrer noopener'

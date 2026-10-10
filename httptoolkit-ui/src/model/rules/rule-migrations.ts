@@ -34,7 +34,7 @@ export function migrateRuleData(data: any) {
     } else {
         throw new Error(dedent`
             Could not migrate rules from unknown format (${data.version}).
-            Please restart HTTP Toolkit to update.
+            Please restart Wirepane to update.
         `);
     }
 

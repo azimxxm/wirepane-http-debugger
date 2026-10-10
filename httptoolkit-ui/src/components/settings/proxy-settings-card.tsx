@@ -339,7 +339,7 @@ export class ProxySettingsCard extends React.Component<
                 }
             </ProxyPortStateExplanation>
             <SettingsExplanation>
-                When opening HTTP Toolkit, it will start the proxy on the first port in
+                When opening Wirepane, it will start the proxy on the first port in
                 this range that is available. If all ports in the range are in use, the
                 first free port above 8000 will be used instead.
             </SettingsExplanation>
@@ -384,7 +384,7 @@ export class ProxySettingsCard extends React.Component<
                     <SettingsExplanation>
                         { tlsMode === 'intercept-only'
                             ? <>
-                                Only TLS connections to these hostnames will be intercepted by HTTP Toolkit.
+                                Only TLS connections to these hostnames will be intercepted by Wirepane.
                                 All other TLS connections will be forwarded upstream without
                                 interception. Non-TLS traffic is always visible regardless of this setting.
                             </>

@@ -134,7 +134,7 @@ export async function generateHar(
         log: {
             version: "1.2",
             creator: {
-                name: "HTTP Toolkit",
+                name: "Wirepane",
                 version: UI_VERSION
             },
             pages: sourcePages,

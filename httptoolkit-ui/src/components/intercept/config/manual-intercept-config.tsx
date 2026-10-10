@@ -114,7 +114,7 @@ const ManualInterceptConfig = inject('proxyStore')(
                 <InstructionsStep>
                     <p>To intercept traffic you need to:</p>
                     <ol>
-                        <li><strong>Proxy your traffic through HTTP Toolkit</strong></li>
+                        <li><strong>Proxy your traffic through Wirepane</strong></li>
                         <li><strong>Trust the certificate authority</strong></li>
                     </ol>
                     <p>
@@ -132,7 +132,7 @@ const ManualInterceptConfig = inject('proxyStore')(
                 </InstructionsStep>
 
                 <InstructionsStep>
-                    <h2>1. Proxy traffic through HTTP Toolkit</h2>
+                    <h2>1. Proxy traffic through Wirepane</h2>
                     <p>
                         To intercept an HTTP client on this machine, configure it to send traffic via{' '}
                         <CopyableMonoValue>http://localhost:{httpProxyPort}</CopyableMonoValue>.
@@ -168,7 +168,7 @@ const ManualInterceptConfig = inject('proxyStore')(
                     <h2>2. Trust the certificate authority</h2>
                     <p><em>Only required to intercept traffic using HTTPS</em></p>
                     <p>
-                        HTTP Toolkit has generated a certificate authority (CA) on your machine. All
+                        Wirepane has generated a certificate authority (CA) on your machine. All
                         HTTPS interception uses this CA.
                     </p>
                     { certContent // Not defined in some older server versions

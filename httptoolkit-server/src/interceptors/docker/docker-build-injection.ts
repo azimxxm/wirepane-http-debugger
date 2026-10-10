@@ -197,7 +197,7 @@ const END_OF_STEP_REGEX = /^ ---\u003e [a-z0-9]+\n$/;
 
 /**
  * Takes a response stream of a Docker build (i.e. build output) and transforms it to simplify all the
- * HTTP Toolkit interception noise down to a single clear line, and normalize the step count text
+ * Wirepane interception noise down to a single clear line, and normalize the step count text
  * to match.
  */
 export function getBuildOutputPipeline(extraDockerCommandCount: number): EventStream.MapStream {
@@ -225,7 +225,7 @@ export function getBuildOutputPipeline(extraDockerCommandCount: number): EventSt
                 // that's actually required to intercept everything.
                 outputToHide = 'all';
                 return JSON.stringify({
-                    stream: " *** Enabling HTTP Toolkit interception ***\n"
+                    stream: " *** Enabling Wirepane interception ***\n"
                 });
             } else if (outputToHide === 'all') {
                 if (data.stream?.includes(`LABEL ${DOCKER_BUILD_LABEL}=`)) {

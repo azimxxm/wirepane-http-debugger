@@ -30,7 +30,7 @@ export class HideWarningServer {
 
         await this.server.forGet('/hide-warning').thenReply(200, `
             <html>
-                <title>HTTP Toolkit Warning Fix</title>
+                <title>Wirepane Warning Fix</title>
                 <meta charset="UTF-8" />
                 <style>
                     body { background-color: #d8e2e6; }

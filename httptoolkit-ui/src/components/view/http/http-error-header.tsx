@@ -78,7 +78,7 @@ export const HttpErrorHeader = (p: {
                         : p.type === 'client-unparseable'
                             ? 'could not be parsed'
                         : unreachableCheck(p.type)
-                    }, so HTTP Toolkit did not handle this request.
+                    }, so Wirepane did not handle this request.
                 </>
             : wasNotForwarded(p.type)
                 ? <>
@@ -100,7 +100,7 @@ export const HttpErrorHeader = (p: {
                         : p.type === 'connection-refused'
                             ? 'refused the connection'
                         : unreachableCheck(p.type)
-                    }, so HTTP Toolkit didn't forward the request.
+                    }, so Wirepane didn't forward the request.
                 </>
             : wasTimeout(p.type)
                 ? <>
@@ -125,12 +125,12 @@ export const HttpErrorHeader = (p: {
                         : p.type === 'server-unparseable'
                             ? 'the response from the server was unparseable'
                         : unreachableCheck(p.type)
-                    }, so HTTP Toolkit could not return a response to the client.
+                    }, so Wirepane could not return a response to the client.
                 </>
             : p.type === 'unknown'
                 ? <>
                     The request failed because of an unknown error,
-                    so HTTP Toolkit could not return a response.
+                    so Wirepane could not return a response.
                 </>
             : unreachableCheck(p.type)
         }
@@ -141,7 +141,7 @@ export const HttpErrorHeader = (p: {
                 <HeaderText>
                     This could be caused by the server not supporting modern ciphers or
                     TLS versions, expecting a client certificate that wasn't provided,
-                    or TLS configuration issues in either the server or HTTP Toolkit.
+                    or TLS configuration issues in either the server or Wirepane.
                 </HeaderText>
                 <HeaderText>
                     { p.isPaidUser
@@ -244,13 +244,13 @@ export const HttpErrorHeader = (p: {
             </HeaderText>
         : isClientBug(p.type)
             ? <HeaderText>
-                This means the client sent HTTP Toolkit some fundamentally invalid data that does
+                This means the client sent Wirepane some fundamentally invalid data that does
                 not follow the HTTP spec. That suggests either a major bug in the client, or that
                 they're not sending HTTP at all.
             </HeaderText>
         : p.type === 'server-unparseable'
             ? <HeaderText>
-                This means the server sent HTTP Toolkit some fundamentally invalid data that does
+                This means the server sent Wirepane some fundamentally invalid data that does
                 not follow the HTTP spec. That suggests either a major bug in the server, or that
                 they're not sending HTTP at all.
             </HeaderText>
@@ -261,12 +261,12 @@ export const HttpErrorHeader = (p: {
                         This means the request included more than 100KB of headers. The HTTP specification
                         doesn't set a max length, but most servers will refuse to process anything longer
                         than 8KB. This is likely an issue with your client, but if necessary you can increase
-                        the HTTP Toolkit limit by setting <code>max-http-header-size</code> using the <code>HTTPTOOLKIT_NODE_OPTIONS</code> environment variable.
+                        the Wirepane limit by setting <code>max-http-header-size</code> using the <code>HTTPTOOLKIT_NODE_OPTIONS</code> environment variable.
                     </>
                 : desktopVersion.value // Old desktop:
                     ? <>
-                        In more recent HTTP Toolkit versions the built-in limit has been increased, so please
-                        update HTTP Toolkit to handle requests like these.
+                        In more recent Wirepane versions the built-in limit has been increased, so please
+                        update Wirepane to handle requests like these.
                     </>
                 : // Non-desktop use:
                     <>
@@ -277,7 +277,7 @@ export const HttpErrorHeader = (p: {
             </HeaderText>
         : p.type === 'invalid-method'
             ? <HeaderText>
-                Because this method is unrecognized, HTTP Toolkit doesn't know how it should
+                Because this method is unrecognized, Wirepane doesn't know how it should
                 be handled, and cannot safely forward it on elsewhere. If you think this
                 method should be supported, please <a
                     href='https://github.com/httptoolkit/httptoolkit/issues/new'
@@ -297,7 +297,7 @@ export const HttpErrorHeader = (p: {
             </HeaderText>
         : p.type === 'unknown'
             ? <HeaderText>
-                It's not clear what's gone wrong here, but for some reason HTTP Toolkit
+                It's not clear what's gone wrong here, but for some reason Wirepane
                 couldn't successfully and/or securely complete this request.
                 This might be an intermittent issue, and may be resolved by retrying
                 the request.

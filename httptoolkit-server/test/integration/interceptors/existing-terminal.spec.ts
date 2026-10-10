@@ -90,7 +90,7 @@ describe('Existing terminal interceptor', function () {
             shell: '/bin/bash'
         });
 
-        expect(scriptOutput.stdout).to.contain("HTTP Toolkit interception enabled");
+        expect(scriptOutput.stdout).to.contain("Wirepane interception enabled");
         expect(interceptor.isActive(server.port)).to.equal(true);
 
         const seenRequests = _.concat(...await Promise.all([

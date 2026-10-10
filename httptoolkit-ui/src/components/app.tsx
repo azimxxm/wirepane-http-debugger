@@ -138,7 +138,7 @@ class App extends React.Component<{
         return [
             {
                 name: 'Intercept',
-                title: `Connect clients to HTTP Toolkit (${Ctrl}+1)`,
+                title: `Connect clients to Wirepane (${Ctrl}+1)`,
                 icon: 'Plugs',
                 position: 'top',
                 type: 'router',
@@ -186,7 +186,7 @@ class App extends React.Component<{
             (this.canVisitSettings
                 ? {
                     name: 'Settings',
-                    title: `Reconfigure HTTP Toolkit and manage your account (${Ctrl}+9)`,
+                    title: `Reconfigure Wirepane and manage your account (${Ctrl}+9)`,
                     icon: 'GearSix',
                     position: 'bottom',
                     type: 'router',
@@ -205,7 +205,7 @@ class App extends React.Component<{
             ...(this.canUseMcp
                 ? [{
                     name: 'MCP',
-                    title: 'Connect HTTP Toolkit to AI assistants via MCP',
+                    title: 'Connect Wirepane to AI assistants via MCP',
                     icon: 'Sparkle',
                     position: 'bottom',
                     type: 'callback',

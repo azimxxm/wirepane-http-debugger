@@ -77,7 +77,7 @@ export const getMenu = (
                     click () { shell.openExternal('https://github.com/httptoolkit/httptoolkit/issues/new/choose') }
                 },
                 {
-                    label: 'View HTTP Toolkit Logs',
+                    label: 'View Wirepane Logs',
                     click () { shell.showItemInFolder(path.join(app.getPath('logs'), 'last-run.log')) }
                 },
                 ...getVersionMenuItems(componentVersions)

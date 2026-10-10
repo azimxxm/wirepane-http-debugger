@@ -80,7 +80,7 @@ REM This ensures that the server is startable, and has minimal functionality for
 echo:
 echo:
 echo Can run ctl help?
-.\httptoolkit-server\bin\httptoolkit-server ctl help | findstr /C:"HTTP Toolkit Remote Control" >NUL || goto :error
+.\httptoolkit-server\bin\httptoolkit-server ctl help | findstr /C:"Wirepane Remote Control" >NUL || goto :error
 
 echo:
 echo:

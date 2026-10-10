@@ -156,11 +156,11 @@ function generateGeneralHelp(operations: HtkOperation[]): string {
     const descWidth = termWidth - cmdColWidth;
 
     const lines = [
-        'HTTP Toolkit Remote Control',
+        'Wirepane Remote Control',
         '',
         'Usage: httptoolkit-ctl <command> [options]',
         '',
-        `  ${'status'.padEnd(27)}Check if HTTP Toolkit is running`,
+        `  ${'status'.padEnd(27)}Check if Wirepane is running`,
         `  ${'help'.padEnd(27)}Show this help message`,
         ''
     ];
@@ -354,7 +354,7 @@ async function runCtl(args: string[]): Promise<void> {
 }
 
 class CtlCommand extends Command {
-    static description = 'remote control a running HTTP Toolkit instance'
+    static description = 'remote control a running Wirepane instance'
 
     static strict = false
 
