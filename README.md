@@ -28,7 +28,7 @@ Kerak: macOS, Node.js 24, git.
 ```bash
 git clone https://github.com/azimxxm/wirepane.git ~/Documents/wirepane
 cd ~/Documents/wirepane
-./setup.sh   # bir marta: uchala papkada npm ci
+./setup.sh   # bir marta: Bruno package'larini build qiladi (~25 s, ~290 MB), keyin uchala papkada npm ci
 ./start.sh   # app ochiladi. Cmd+Q bosilsa, hammasi to'xtaydi
 ```
 

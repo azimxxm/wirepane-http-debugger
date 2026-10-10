@@ -21,7 +21,11 @@
   - export: Postman v2.1 or Bruno zip, with secret redaction;
   - REST endpoints `/collections*`.
 
-### In progress
+### Done later the same day
+- Collections UI committed (`c5aa852`), including the fix for `{{var}}` URLs and the alert loop.
+- B1 merged (`4820cb2`): the server runs Bruno from `bruno/packages/*`, built by `scripts/build-bruno.sh` (run by `./setup.sh`). Server tests 65/65, UI tests 1068.
+
+### Was in progress (now done)
 
 - **Collections UI (C2–C4).** Uncommitted in `httptoolkit-ui`:
   - Collections panel in Send;
@@ -39,7 +43,7 @@
 
 ### Next, in order
 
-1. Commit the Collections UI and merge B1 (steps above). Then `/compact`.
+1. (done) Commit the Collections UI and merge B1.
 2. **Send v2:**
    - body modes Form, Multipart (files/images/media) and Binary;
    - GraphQL mode (query, variables, schema autocomplete);
