@@ -1,0 +1,128 @@
+{
+    "info": {
+        "_postman_id": "8a9c3f2e-1b2d-4c5e-9f00-123456789abc",
+        "name": "Pet Store API",
+        "description": "Pet Store backend for the mobile and web apps.\n\nSet `baseUrl` in your environment.",
+        "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+    },
+    "auth": {
+        "type": "bearer",
+        "bearer": [
+            { "key": "token", "value": "{{authToken}}", "type": "string" }
+        ]
+    },
+    "variable": [
+        { "key": "baseUrl", "value": "https://api.petstore.test/v1", "type": "string" },
+        { "key": "petId", "value": "42", "type": "string" }
+    ],
+    "item": [
+        {
+            "name": "Pets",
+            "description": "Everything about pets.",
+            "item": [
+                {
+                    "name": "List pets",
+                    "request": {
+                        "method": "GET",
+                        "header": [
+                            { "key": "Accept", "value": "application/json" }
+                        ],
+                        "url": {
+                            "raw": "{{baseUrl}}/pets?limit=10",
+                            "host": ["{{baseUrl}}"],
+                            "path": ["pets"],
+                            "query": [
+                                { "key": "limit", "value": "10" }
+                            ]
+                        },
+                        "description": "Returns all pets, newest first."
+                    },
+                    "response": [
+                        {
+                            "name": "Two pets",
+                            "originalRequest": {
+                                "method": "GET",
+                                "header": [],
+                                "url": {
+                                    "raw": "{{baseUrl}}/pets?limit=10",
+                                    "host": ["{{baseUrl}}"],
+                                    "path": ["pets"],
+                                    "query": [
+                                        { "key": "limit", "value": "10" }
+                                    ]
+                                }
+                            },
+                            "status": "OK",
+                            "code": 200,
+                            "_postman_previewlanguage": "json",
+                            "header": [
+                                { "key": "Content-Type", "value": "application/json" }
+                            ],
+                            "cookie": [],
+                            "body": "[{\"id\": 1, \"name\": \"Rex\"}, {\"id\": 2, \"name\": \"Tom\"}]"
+                        }
+                    ]
+                },
+                {
+                    "name": "Get pet",
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{baseUrl}}/pets/{{petId}}",
+                            "host": ["{{baseUrl}}"],
+                            "path": ["pets", "{{petId}}"]
+                        },
+                        "description": "Fetch one pet by its id."
+                    }
+                }
+            ]
+        },
+        {
+            "name": "Auth",
+            "item": [
+                {
+                    "name": "Login",
+                    "request": {
+                        "auth": { "type": "noauth" },
+                        "method": "POST",
+                        "header": [
+                            { "key": "Content-Type", "value": "application/json" }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"email\": \"dev@example.com\",\n  \"password\": \"{{password}}\"\n}",
+                            "options": { "raw": { "language": "json" } }
+                        },
+                        "url": {
+                            "raw": "{{baseUrl}}/auth/login",
+                            "host": ["{{baseUrl}}"],
+                            "path": ["auth", "login"]
+                        },
+                        "description": "Exchange credentials for a JWT."
+                    }
+                }
+            ]
+        },
+        {
+            "name": "Health check",
+            "request": {
+                "auth": {
+                    "type": "basic",
+                    "basic": [
+                        { "key": "username", "value": "admin", "type": "string" },
+                        { "key": "password", "value": "{{adminPassword}}", "type": "string" }
+                    ]
+                },
+                "method": "GET",
+                "header": [],
+                "url": {
+                    "raw": "{{baseUrl}}/health",
+                    "host": ["{{baseUrl}}"],
+                    "path": ["health"]
+                },
+                "description": "Liveness probe."
+            }
+        }
+    ]
+}

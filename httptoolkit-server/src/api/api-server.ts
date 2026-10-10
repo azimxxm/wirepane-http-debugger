@@ -16,6 +16,7 @@ import { exposeGraphQLAPI } from './graphql-api';
 import { exposeRestAPI } from './rest-api';
 import { HttpClient } from '../client/http-client';
 import { UiOperationBridge, getSocketPath } from './ui-operation-bridge';
+import { exposeCollectionsAPI } from '../collections/collections-api';
 
 /**
  * This file contains the core server API, used by the UI to query
@@ -134,6 +135,8 @@ export class HttpToolkitServerApi extends events.EventEmitter {
             }
         )
 
+        // After the Origin/auth checks, before the default JSON parser (collections take bigger bodies)
+        exposeCollectionsAPI(this.server, config.configPath);
         this.server.use(express.json());
 
         exposeRestAPI(this.server, apiModel);

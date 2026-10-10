@@ -1,0 +1,51 @@
+openapi: 3.0.3
+info:
+  title: Tiny Todo API
+  version: 1.0.0
+  description: A tiny todo API used by the collection import tests.
+servers:
+  - url: https://todo.example.test/api
+paths:
+  /todos:
+    get:
+      summary: List todos
+      operationId: listTodos
+      tags: [Todos]
+      parameters:
+        - name: done
+          in: query
+          schema:
+            type: boolean
+      responses:
+        '200':
+          description: OK
+    post:
+      summary: Create todo
+      operationId: createTodo
+      tags: [Todos]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                title:
+                  type: string
+      responses:
+        '201':
+          description: Created
+  /todos/{id}:
+    get:
+      summary: Get todo
+      operationId: getTodo
+      tags: [Todos]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK
