@@ -99,6 +99,7 @@ O'zgartirgan kodingiz saqlanib qoladi. Conflict chiqsa, uni oddiy `git merge`dag
     - P1: Access Control (LAN'dan kim ulana olishi), macOS system proxy toggle, iOS Simulator auto-setup, telefon ulash uchun QR.
     - P2: Highlight/Comment, Diff, Network Conditions, DNS Spoofing.
     - P3: Scripting, Reverse Proxy, native Swift + SwiftNIO versiya.
+- [ ] Collections va file orqali ulashish, Bruno package'lari asosida ([reja](docs/collections-plan.md)): API'ni hujjati bilan bitta faylga export qilish (Postman v2.1 JSON yoki Bruno). Secret'lar faylga tushmaydi. Oluvchi faylni import qilsa, hammasi tayyor ochiladi.
 - [ ] Postman'dan olinadigan feature'lar ([tadqiqot](docs/research/postman.md)):
   - P1:
     - Ushlangan trafikni collection sifatida saqlash.
