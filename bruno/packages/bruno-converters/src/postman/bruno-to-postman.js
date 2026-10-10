@@ -80,7 +80,8 @@ export const transformUrl = (url, params) => {
   const splitUrl = (url) => {
     const urlParts = url.split(urlRegexPatterns.protocolAndRestSeparator);
     if (urlParts.length === 1) {
-      return { protocol: '', rawHostAndPath: urlParts[0] };
+      // wirepane: drop the query string here too, or "{{baseUrl}}/pets?limit=10" gets the path ["pets?limit=10"]
+      return { protocol: '', rawHostAndPath: urlParts[0].split(urlRegexPatterns.queryStringSeparator)[0] };
     } else if (urlParts.length === 2) {
       const [hostAndPath, _] = urlParts[1].split(urlRegexPatterns.queryStringSeparator);
       return { protocol: urlParts[0], rawHostAndPath: hostAndPath };
@@ -929,6 +930,8 @@ export const brunoToPostman = (collection, { preserveScripts = false } = {}) => 
         return {
           name: item.name || 'Untitled Folder',
           item: generateItemSection(item.items),
+          // wirepane: Postman folders have a description, so the folder docs are kept
+          ...(item.root?.docs ? { description: item.root.docs } : {}),
           ...(folderAuth ? { auth: folderAuth } : {}),
           ...(folderEvents.length ? { event: folderEvents } : {})
         };

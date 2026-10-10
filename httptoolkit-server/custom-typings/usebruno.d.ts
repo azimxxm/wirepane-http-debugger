@@ -1,5 +1,5 @@
-// Minimal typings for the parts of Bruno's npm packages (MIT, usebruno/bruno) that the
-// collections service uses. The packages ship no TypeScript declarations of their own.
+// Minimal typings for the parts of Bruno's packages (MIT, usebruno/bruno; our copy in
+// ../bruno/packages) that the collections service uses. They have no TypeScript declarations.
 // Their outputs are typed as unknown on purpose: callers narrow them before use.
 
 declare module '@usebruno/converters' {

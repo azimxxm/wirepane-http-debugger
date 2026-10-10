@@ -171,7 +171,7 @@ async function convert(format: ImportFormat, file: DecodedFile): Promise<Convert
         case 'postman-environment':
             return { environment: requireEnvironment(converters.postmanToBrunoEnvironment(file.json), file), warnings: [] };
         case 'insomnia':
-            return convertInsomnia(file);
+            return { collection: converters.insomniaToBruno(file.json ?? file.text), warnings: [] };
         case 'openapi':
             return { collection: converters.openApiToBruno(file.json ?? file.text), warnings: [] };
         case 'wsdl':
@@ -205,40 +205,6 @@ async function convertPostman(json: unknown): Promise<Converted> {
     }
 
     return { collection, warnings };
-}
-
-function convertInsomnia(file: DecodedFile): Converted {
-    const collection = brunoConverters().insomniaToBruno(file.json ?? file.text);
-
-    // @usebruno/converters 0.24 lists every request of an Insomnia v4 folder twice
-    if (isRecord(file.json) && file.json._type === 'export' && isRecord(collection)) {
-        dropDoubledFolderRequests(collection.items);
-    }
-    return { collection, warnings: [] };
-}
-
-const ignoreGeneratedFields = (_value: unknown, _other: unknown, key: unknown) =>
-    key === 'uid' || key === 'seq' ? true : undefined;
-
-// Drops the second half of a folder's requests when it repeats the first half exactly
-function dropDoubledFolderRequests(items: unknown) {
-    if (!Array.isArray(items)) return;
-
-    for (const item of items) {
-        if (!isRecord(item) || item.type !== 'folder' || !Array.isArray(item.items)) continue;
-        dropDoubledFolderRequests(item.items);
-
-        const isSubfolder = (child: unknown) => isRecord(child) && child.type === 'folder';
-        const subfolders = item.items.filter(isSubfolder);
-        const requests = item.items.filter((child) => !isSubfolder(child));
-        const half = requests.length / 2;
-
-        if (requests.length && Number.isInteger(half) &&
-            _.isEqualWith(requests.slice(0, half), requests.slice(half), ignoreGeneratedFields)
-        ) {
-            item.items = [...subfolders, ...requests.slice(0, half)];
-        }
-    }
 }
 
 async function convertBrunoZip(file: DecodedFile): Promise<Converted> {

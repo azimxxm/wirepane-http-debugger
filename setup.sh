@@ -1,17 +1,22 @@
 #!/usr/bin/env bash
-# Installs dependencies for the server, UI and desktop app.
+# Installs dependencies for the server, UI and desktop app, after building the Bruno
+# packages the server runs from bruno/ (scripts/build-bruno.sh).
 # Run it once after cloning, and again when a package-lock.json changes (e.g. after ./sync-upstream.sh).
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")" && pwd)"
 REPOS=(httptoolkit-server httptoolkit-ui httptoolkit-desktop)
-MIN_NODE_MAJOR=22 # httptoolkit-desktop needs Node 22+
+MIN_NODE_MAJOR=22 # httptoolkit-desktop and Bruno need Node 22+
 
 node_major=$(node -p 'process.versions.node.split(".")[0]' 2>/dev/null || echo 0)
 if [ "$node_major" -lt "$MIN_NODE_MAJOR" ]; then
   echo "ERROR: Node.js $MIN_NODE_MAJOR+ is required (found: $(node -v 2>/dev/null || echo none))" >&2
   exit 1
 fi
+
+# httptoolkit-server depends on bruno/packages through file: links, so those are built first
+# (build-bruno.sh skips whatever is already up to date)
+"$ROOT/scripts/build-bruno.sh"
 
 # The UI uses puppeteer 5 only for its integration tests, and that version has no
 # Chromium download for Apple Silicon, so npm ci fails without this. The app itself doesn't need it.

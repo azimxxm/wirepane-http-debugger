@@ -27,7 +27,10 @@ Three upstream HTTP Toolkit projects, imported with `git subtree --squash` (no u
 - `httptoolkit-ui/`: React + MobX app bundled with webpack.
 - `httptoolkit-desktop/`: Electron shell that starts the server and loads the UI.
 - The proxy engine `mockttp` is an npm dependency, not part of this repo.
-- `bruno/`: Bruno (MIT, usebruno/bruno), tracked for its packages: `bruno-converters` (Postman/Insomnia/OpenAPI import), `bruno-lang` (`.bru` files), `bruno-js` (scripts/tests runtime), `bruno-cli`. It is not built or run as an app. Its UI is Redux-based, so Wirepane screens are written in our own React + MobX stack and use Bruno's packages for the logic. Keep its `license.md` notices.
+- `bruno/`: Bruno (MIT, usebruno/bruno), tracked for its packages: `bruno-converters` (Postman/Insomnia/OpenAPI import), `bruno-lang` (`.bru` files), `bruno-js` (scripts/tests runtime), `bruno-cli`. It is not run as an app. Its UI is Redux-based, so Wirepane screens are written in our own React + MobX stack and use Bruno's packages for the logic. Keep its `license.md` notices.
+  - The server runs our copy, not the npm releases: `httptoolkit-server/package.json` links `bruno-common`, `bruno-lang`, `bruno-schema`, `bruno-converters` and `bruno-filestore` with `file:../bruno/packages/...`, and those packages load their own dependencies from `bruno/node_modules`.
+  - We change Bruno's code on purpose; it doesn't have to match upstream. Fix Bruno bugs there instead of working around them in the server. Mark every edit with a `// wirepane:` comment and keep the diff small, so syncs show our edits clearly. Update Bruno's own tests along with it: `npm run test:ci --workspace=packages/bruno-converters` inside `bruno/`.
+  - `scripts/build-bruno.sh` installs what those packages need (`npm ci` with `--workspace` flags, from Bruno's own lockfile) and builds `bruno-common`, `bruno-schema-types`, `bruno-converters` and `bruno-filestore` into `dist/`. `./setup.sh` runs it. It must run again after every Bruno sync, or the server keeps the old build. Re-runs skip what is up to date; `--force` redoes everything.
 
 `./sync-upstream.sh` runs `git subtree pull --squash` for each folder, Bruno included (needs a clean tree). Every line we change in upstream files can conflict on the next sync, so keep fork changes small and contained, and prefer adding new files over rewriting upstream ones.
 
@@ -35,7 +38,7 @@ Three upstream HTTP Toolkit projects, imported with `git subtree --squash` (no u
 
 From the repo root (macOS, Node 24):
 
-- `./setup.sh`: `npm ci` in all three projects. Re-run whenever a `package-lock.json` changes, e.g. after a sync.
+- `./setup.sh`: builds Bruno's packages (`scripts/build-bruno.sh`), then `npm ci` in all three projects. Re-run whenever a `package-lock.json` changes, e.g. after a sync.
 - `./start.sh`: runs the whole app from local source, logs go to `logs/`. Server (`npm start`, restarts on change) on :45457 (API) and :45456 (Mockttp admin); UI (`npm run start:web`, webpack-dev-server with hot reload) on :8080; then it compiles the desktop TypeScript and opens Electron with `HTK_DEV=true APP_URL=http://localhost:8080`. Cmd+Q or Ctrl+C stops everything. Extra args go to Electron, e.g. `./start.sh --remote-debugging-port=9222`.
 
 Inside each project folder:

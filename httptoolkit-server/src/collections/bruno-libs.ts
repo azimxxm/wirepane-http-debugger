@@ -10,9 +10,9 @@ import type * as BrunoSchema from '@usebruno/schema';
 
 export type BrunoFileFormat = 'bru' | 'yml';
 
-// Only the functions we call. @usebruno/filestore ships .d.ts files that import its
-// dev-only packages (@usebruno/schema-types, @opencollection/types), which don't
-// resolve here and would fail the type check, so it's described locally instead.
+// Only the functions we call. @usebruno/filestore's .d.ts files come from Bruno's build and
+// import its dev-only packages (@usebruno/schema-types, @opencollection/types), so it's
+// described locally to keep the server's type check independent of them.
 export interface BrunoFilestore {
     parseRequest(content: string, options: { format: BrunoFileFormat }): unknown;
     stringifyRequest(item: unknown, options: { format: 'bru' }): string;

@@ -110,6 +110,7 @@ const expectedOutput = {
   ],
   items: [
     {
+      // wirepane: each folder request is listed once
       items: [
         {
           name: 'Request1',
@@ -134,36 +135,6 @@ const expectedOutput = {
             url: 'https://testbench-sanity.usebruno.com/ping'
           },
           seq: 1,
-          type: 'http-request',
-          uid: 'mockeduuidvalue123456',
-          settings: {
-            encodeUrl: false,
-            forwardAuthorizationHeader: false
-          }
-        },
-        {
-          name: 'Request1',
-          request: {
-            auth: {
-              basic: null,
-              bearer: null,
-              digest: null,
-              mode: 'none'
-            },
-            body: {
-              formUrlEncoded: [],
-              json: null,
-              mode: 'none',
-              multipartForm: [],
-              text: null,
-              xml: null
-            },
-            headers: [],
-            method: 'GET',
-            params: [],
-            url: 'https://testbench-sanity.usebruno.com/ping'
-          },
-          seq: 2,
           type: 'http-request',
           uid: 'mockeduuidvalue123456',
           settings: {
@@ -201,36 +172,6 @@ const expectedOutput = {
             url: 'https://testbench-sanity.usebruno.com/ping'
           },
           seq: 1,
-          type: 'http-request',
-          uid: 'mockeduuidvalue123456',
-          settings: {
-            encodeUrl: true,
-            forwardAuthorizationHeader: false
-          }
-        },
-        {
-          name: 'Request2',
-          request: {
-            auth: {
-              basic: null,
-              bearer: null,
-              digest: null,
-              mode: 'none'
-            },
-            body: {
-              formUrlEncoded: [],
-              json: null,
-              mode: 'none',
-              multipartForm: [],
-              text: null,
-              xml: null
-            },
-            headers: [],
-            method: 'GET',
-            params: [],
-            url: 'https://testbench-sanity.usebruno.com/ping'
-          },
-          seq: 2,
           type: 'http-request',
           uid: 'mockeduuidvalue123456',
           settings: {
