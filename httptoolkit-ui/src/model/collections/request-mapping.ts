@@ -4,6 +4,7 @@ import { RawHeaders } from '../../types';
 import { getHeaderValue } from '../http/headers';
 import { EditableContentType, getEditableContentType } from '../events/content-types';
 import { RequestInput } from '../send/send-request-model';
+import { SendExtrasData } from '../send/send-extras';
 
 import {
     BrunoBody,
@@ -33,6 +34,8 @@ export interface RequestParts {
     headers: RawHeaders;
     body: Buffer;
     contentType: EditableContentType;
+    // The request type and structured body modes (send-extras.ts). Missing means a raw HTTP request.
+    extras?: SendExtrasData;
 }
 
 export interface OpenedRequest {
@@ -524,7 +527,8 @@ export function requestInputToParts(input: RequestInput): RequestParts {
         url: input.url,
         headers: input.headers.map(([name, value]) => [name, value]),
         body: input.rawBody.decoded,
-        contentType: input.requestContentType
+        contentType: input.requestContentType,
+        extras: input.extras.toData()
     };
 }
 
@@ -534,6 +538,7 @@ export function partsToRequestInput(parts: RequestParts): RequestInput {
         url: parts.url,
         headers: parts.headers.map(([name, value]) => [name, value]),
         requestContentType: parts.contentType,
-        rawBody: parts.body
+        rawBody: parts.body,
+        extras: parts.extras
     });
 }

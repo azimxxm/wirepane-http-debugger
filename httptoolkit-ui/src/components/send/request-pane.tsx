@@ -28,7 +28,7 @@ import { useHotkeys, copyToClipboard } from '../../util/ui';
 import { SendCardContainer } from './send-card-section';
 import { SendRequestLine } from './send-request-line';
 import { SendRequestHeadersCard } from './send-request-headers-card';
-import { SendRequestBodyCard } from './send-request-body-card';
+import { SendBodyCard } from './body/send-body-card';
 
 // Layout here is tricky. Current setup seems to work (flex grow & shrink everywhere,
 // card basis: auto and min-height: 0, with editor 50% + min-height, and then
@@ -128,8 +128,9 @@ export class RequestPane extends React.Component<{
                 headers={requestInput.headers}
                 updateHeaders={this.updateHeaders}
             />
-            <SendRequestBodyCard
+            <SendBodyCard
                 {...this.cardProps.requestBody}
+                requestInput={requestInput}
                 headers={requestInput.headers}
                 contentType={requestInput.requestContentType}
                 onContentTypeUpdated={this.updateRequestContentType}

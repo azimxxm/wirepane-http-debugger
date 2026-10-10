@@ -137,6 +137,8 @@ export class HttpToolkitServerApi extends events.EventEmitter {
 
         // After the Origin/auth checks, before the default JSON parser (collections take bigger bodies)
         exposeCollectionsAPI(this.server, config.configPath);
+        // wirepane: Send bodies can be files (multipart, binary), sent as base64 JSON
+        this.server.use('/client/send', express.json({ limit: '256mb' }));
         this.server.use(express.json());
 
         exposeRestAPI(this.server, apiModel);

@@ -8,6 +8,7 @@ import * as CollectionsApi from '../../services/collections-api';
 
 import { SendStore } from '../send/send-store';
 import { RequestInput, SendRequest } from '../send/send-request-model';
+import { buildRequestForSend, SendBuildError } from '../send/build-request';
 
 import {
     BrunoCollection,
@@ -748,14 +749,14 @@ export class CollectionsStore {
 
     // Called on every Send (button or ⌘↵). A request that can't be sent isn't: the reason is
     // shown under the URL until the next attempt, or until the URL or environment changes.
-    private resolveSendRequest(sendRequest: SendRequest): RequestInput | undefined {
+    private async resolveSendRequest(sendRequest: SendRequest): Promise<RequestInput | undefined> {
         const context = this.sendContextFor(sendRequest.id);
         try {
-            const resolved = resolveVariables(sendRequest.request, context);
+            const resolved = await buildRequestForSend(resolveVariables(sendRequest.request, context));
             this.setSendProblem(sendRequest.id, undefined);
             return resolved;
         } catch (error) {
-            if (!(error instanceof UnsendableRequestError)) throw error;
+            if (!(error instanceof UnsendableRequestError) && !(error instanceof SendBuildError)) throw error;
             this.setSendProblem(sendRequest.id, {
                 message: error.message,
                 url: sendRequest.request.url,

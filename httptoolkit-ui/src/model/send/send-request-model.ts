@@ -22,6 +22,7 @@ import {
 } from '../http/editable-request-parts';
 import { getHeaderValue, h2HeadersToH1, rawHeadersToHeaders } from '../http/headers';
 import { parseHarRequest } from '../http/har';
+import { SendExtras, SendExtrasData } from './send-extras';
 
 // This is our model of a Request for sending. Similar to the API model,
 // but not identical, as we add extra UI metadata etc.
@@ -42,13 +43,18 @@ export class RequestInput {
     @observable
     public rawBody: EditableBody;
 
+    // wirepane: request type (HTTP or WebSocket) and form, multipart, binary & GraphQL bodies
+    @observable
+    public extras: SendExtras = new SendExtras();
+
     constructor(
         existingData?: {
             method: string,
             url: string,
             headers: RawHeaders,
             requestContentType: EditableContentType,
-            rawBody: Buffer | EditableBody
+            rawBody: Buffer | EditableBody,
+            extras?: SendExtras | Partial<SendExtrasData>
         }
     ) {
         // When deserializing, we need to ensure the body is provided directly
@@ -58,6 +64,7 @@ export class RequestInput {
             this.url = existingData.url;
             this.headers = existingData.headers;
             this.requestContentType = existingData.requestContentType;
+            this.extras = SendExtras.from(existingData.extras);
 
             const rawBody = existingData.rawBody instanceof EditableBody
                 ? existingData.rawBody.decoded
@@ -106,6 +113,10 @@ const requestInputSchema = serializr.createModelSchema(RequestInput, {
     rawBody: serializr.custom(
         (body: EditableBody) => body.decoded.toString('base64'),
         () => serializr.SKIP // Handled manually in the factory below
+    ),
+    extras: serializr.custom(
+        (extras: SendExtras) => extras.toData(),
+        () => serializr.SKIP // Passed to the constructor by the factory below
     )
 }, (context) => {
     const data = context.json;

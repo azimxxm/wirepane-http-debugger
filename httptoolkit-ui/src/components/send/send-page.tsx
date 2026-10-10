@@ -25,6 +25,8 @@ import { ResponsePane } from './response-pane';
 import { CollectionsHeaderActions, CollectionsWorkspace, collectionTabTitle } from '../collections/send-workspace';
 import { CollectionRequestColumn } from '../collections/request-docs-card';
 import { SendProblemMessage } from '../collections/send-problem';
+import { WebSocketRequestPane } from './websocket/websocket-request-pane';
+import { WebSocketMessagesPane } from './websocket/websocket-messages-pane';
 
 const SendPageContainer = styled.div`
     height: 100%;
@@ -125,6 +127,8 @@ class SendPage extends React.Component<{
         const {
             handleContextMenuEvent
         } = this.props.uiStore;
+        // wirepane: WebSocket requests get their own panes
+        const isWebSocket = selectedRequest.request.extras.requestType === 'websocket';
 
         return <SendPageContainer>
             <PageHeader
@@ -159,7 +163,9 @@ class SendPage extends React.Component<{
                     minSize={300}
                     maxSize={-300}
                 >
-                    <CollectionRequestColumn sendRequest={selectedRequest}><RequestPane
+                    <CollectionRequestColumn sendRequest={selectedRequest}>{ isWebSocket
+                        ? <WebSocketRequestPane sendRequest={selectedRequest} />
+                        : <RequestPane
                         requestInput={selectedRequest.request}
                         sendRequest={this.sendRequest}
                         isSending={
@@ -168,8 +174,10 @@ class SendPage extends React.Component<{
                         editorNode={this.requestEditorNode}
                         updateFromHar={this.updateFromHar}
                         belowRequestLine={<SendProblemMessage sendRequest={selectedRequest} />}
-                    /></CollectionRequestColumn>
-                    <ResponsePane
+                    /> }</CollectionRequestColumn>
+                    { isWebSocket
+                    ? <WebSocketMessagesPane sendRequest={selectedRequest} />
+                    : <ResponsePane
                         requestInput={selectedRequest.request}
                         exchange={selectedRequest.sentExchange}
                         abortRequest={selectedRequest.pendingSend?.abort}
@@ -178,7 +186,7 @@ class SendPage extends React.Component<{
                             : undefined
                         }
                         editorNode={this.responseEditorNode}
-                    />
+                    /> }
                 </SplitPane>
             </TabContentContainer></CollectionsWorkspace>
 

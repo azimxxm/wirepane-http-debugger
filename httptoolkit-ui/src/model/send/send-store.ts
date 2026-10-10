@@ -36,6 +36,7 @@ import {
     sendRequestSchema,
     RequestOptions
 } from './send-request-model';
+import { buildRequestForSend } from './build-request';
 
 export class SendStore {
 
@@ -46,9 +47,11 @@ export class SendStore {
         private proxyStore: ProxyStore
     ) {}
 
-    // Collections fill in {{variables}} and collection auth here, just before sending.
+    // Collections fill in {{variables}} and collection auth here, just before sending, then
+    // form, multipart, binary & GraphQL bodies are built (build-request.ts).
     // No result cancels the send: the hook shows why, inline, instead of an error dialog.
-    prepareRequestInput: (sendRequest: SendRequest) => RequestInput | undefined = (sendRequest) => sendRequest.request;
+    prepareRequestInput: (sendRequest: SendRequest) => Promise<RequestInput | undefined> =
+        (sendRequest) => buildRequestForSend(sendRequest.request);
 
     readonly initialized = lazyObservablePromise(async () => {
         await Promise.all([
@@ -141,7 +144,7 @@ export class SendStore {
     readonly sendRequest = async (sendRequest: SendRequest) => {
         trackEvent({ category: 'Send', action: 'Sent request' });
 
-        const requestInput = this.prepareRequestInput(sendRequest);
+        const requestInput = await this.prepareRequestInput(sendRequest);
         if (!requestInput) return;
         const pendingRequestDeferred = getObservableDeferred();
         const abortController = new AbortController();
