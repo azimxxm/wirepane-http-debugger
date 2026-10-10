@@ -1,3 +1,4 @@
+import * as fs from 'fs';
 import * as path from 'path';
 import * as Webpack from 'webpack';
 
@@ -12,6 +13,15 @@ const MonacoWebpackPlugin = require('monaco-editor-webpack-plugin');
 
 const SRC_DIR = path.resolve(__dirname, '..', 'src');
 const OUTPUT_DIR = path.resolve(__dirname, '..', 'dist');
+
+// The notifier shows type-check results through node-notifier's terminal-notifier, which is an
+// x86_64-only binary. On Apple Silicon without Rosetta it can't start, and that failed spawn
+// crashes the whole dev server as soon as the first type check finishes.
+const canShowTypeCheckNotifications = !(
+    process.platform === 'darwin' &&
+    process.arch === 'arm64' &&
+    !fs.existsSync('/Library/Apple/usr/libexec/oah/libRosettaRuntime')
+);
 
 export default <Webpack.Configuration>{
     entry: path.join(SRC_DIR, 'index.tsx'),
@@ -119,7 +129,7 @@ export default <Webpack.Configuration>{
                 }
             }
         }),
-        new ForkTsCheckerNotifierWebpackPlugin(),
+        ...(canShowTypeCheckNotifications ? [new ForkTsCheckerNotifierWebpackPlugin()] : []),
         new Webpack.IgnorePlugin({
             // Fallback, only used in wasm isn't supported. We just don't support zstd
             // if wasm isn't supported (i.e. if loaded custom in old old browsers).
