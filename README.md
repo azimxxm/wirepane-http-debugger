@@ -2,7 +2,7 @@
 
 Developerlar va QA uchun bepul, ochiq kodli HTTP(S) debugger. U brauzer, iPhone, Android, Docker va boshqa ilovalarning trafigini ushlaydi va ko'rsatadi, mock va rewrite qiladi. Proxyman'ga muqobil.
 
-**Maqsad:** developerlar, QA va boshlovchilar uchun eng yaxshi bepul HTTP debugger yasash va odamlarni pullik tool'larga qaramlikdan xalos qilish. Asosi — [HTTP Toolkit](https://httptoolkit.com) ochiq kodi. Hammasi bitta repoda: UI, server va desktop bitta app bo'lib ishga tushadi. Oxirgi natija — bitta o'rnatiladigan `Wirepane.app` (bundle ID: `com.wirepane.app`).
+**Maqsad:** 5 ta yoki 10 ta tool o'rniga **bitta dastur**. Wirepane trafikni ushlash va debug qilish (Proxyman, Charles), API client, collections, testlar, mock va hujjat (Postman, Bruno) hamda file orqali ulashishni bitta joyda qiladi. U developerlar, QA va boshlovchilar uchun bepul bo'ladi va odamlarni pullik tool'larga qaramlikdan xalos qiladi. Bruno kodi bizning kodimiz sifatida olinadi va kerakli joylarda o'zgartiriladi; Bruno bilan 1:1 bo'lishi shart emas. Asosi — [HTTP Toolkit](https://httptoolkit.com) ochiq kodi. Hammasi bitta repoda: UI, server va desktop bitta app bo'lib ishga tushadi. Oxirgi natija — bitta o'rnatiladigan `Wirepane.app` (bundle ID: `com.wirepane.app`).
 
 > Wirepane [HTTP Toolkit](https://httptoolkit.com) asosida yasalgan, lekin rasmiy HTTP Toolkit emas va u bilan bog'liq emas.
 
