@@ -27,6 +27,10 @@ All in `httptoolkit-ui/src/model/send/`:
   - the collections store's `resolveSendRequest` calls it and shows a `SendBuildError` inline under the URL, like a missing variable.
 
 - **Collections plumbing.** `RequestParts.extras` (`request-mapping.ts`) carries the extras through `requestInputToParts` / `partsToRequestInput`, so variable resolution keeps them. Mapping them to and from Bruno items is part D's work.
+- **`SendStore` helpers.**
+  - `getRequestOptions(url)` gives the connection options Send uses: proxy, upstream CAs, client certificates, ignored HTTPS errors. GraphQL schema fetches and WebSocket connections use it.
+  - `prepareRequestInput(sendRequest)` gives the request as it will be sent, with variables filled in and the body built.
+  - `resolveTemplates(sendRequest, text)` fills in `{{variables}}` in text sent outside a request, like WebSocket messages. It is a no-op until part D sets it from the collections store.
 - **Server.** `/client/send` accepts JSON bodies up to 256 MB (`httptoolkit-server/src/api/api-server.ts`).
 - **UI hooks** (stubs, each owned by one part):
   - `components/send/body/send-body-card.tsx` (`SendBodyCard`) replaces upstream's body card in `request-pane.tsx`;
@@ -162,6 +166,16 @@ Owns:
 - **Keep upstream diffs small.** Put new code in new files. Mark upstream edits `// wirepane:` where that helps a future sync. Check `git diff --stat` for whole-file reformatting after editing upstream files (see CLAUDE.md, Pitfalls).
 - **No `alert()` or `confirm()`.** Errors show inline.
 - **Use the existing UI pieces and theme tokens** (`styles.ts`, `docs/design-plan.md`): teal for actions and selection, sky for focus. Keep the compact density and keyboard access, and show shortcuts in tooltips.
+- **Testing UI changes.** Don't click around in the Electron window, because the owner and the other parts use it. Launch your own headless Chrome; its localStorage and IndexedDB are separate:
+
+  ```js
+  const { chromium } = require('/Users/codingtech/Documents/GitHub/httptoolkit/httptoolkit-desktop/node_modules/playwright');
+  const browser = await chromium.launch({ channel: 'chrome', headless: true });
+  const page = await browser.newPage({ viewport: { width: 1400, height: 900 } });
+  await page.goto('http://localhost:8080/send'); // wait ~8 s for the app to load
+  ```
+
+  Focusing the empty URL field prefills `https://`, so type the rest of the URL after it, or paste a full URL; Playwright's `fill()` doesn't replace it.
 - **The app is already running** (`./start.sh --remote-debugging-port=9222`, hot reload; the server restarts on change). Don't start a second one. Screenshots and clicks go through CDP (`logs/design/capture.cjs` and the Playwright `connectOverCDP` helpers in `logs/`).
 - **Done means:**
   - `logs/ui.log` ends with `No issues found.`;
