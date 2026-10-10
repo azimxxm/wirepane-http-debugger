@@ -1,0 +1,413 @@
+import styled from 'styled-components';
+
+const StyledWrapper = styled.div`
+  width: 100%;
+  height: 100%;
+  background: ${(props) => props.theme.console.bg};
+  border-top: 1px solid ${(props) => props.theme.console.border};
+  display: flex;
+  flex-direction: column;
+
+  .console-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 8px;
+    background: ${(props) => props.theme.console.headerBg};
+    border-bottom: 1px solid ${(props) => props.theme.console.border};
+    flex-shrink: 0;
+    position: relative;
+  }
+
+  .console-tabs {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+  }
+
+  .console-tab {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 8px;
+    background: transparent;
+    border: none;
+    border-bottom: 2px solid transparent;
+    color: ${(props) => props.theme.console.buttonColor};
+    cursor: pointer;
+    transition: all 0.2s ease;
+    font-size: ${(props) => props.theme.font.size.sm};
+
+    &:hover {
+      background: ${(props) => props.theme.console.buttonHoverBg};
+      color: ${(props) => props.theme.console.buttonHoverColor};
+    }
+
+    &.active {
+      color: ${(props) => props.theme.primary.strong};
+      border-bottom-color: ${(props) => props.theme.primary.strong};
+      background: ${(props) => props.theme.background.mantle};
+    }
+  }
+
+  .console-controls {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+
+  .console-content {
+    flex: 1;
+    overflow: hidden;
+    background: ${(props) => props.theme.console.contentBg};
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .tab-content {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+  }
+
+  .tab-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 16px;
+    background: ${(props) => props.theme.console.headerBg};
+    border-bottom: 1px solid ${(props) => props.theme.console.border};
+    flex-shrink: 0;
+  }
+
+  .tab-title {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: ${(props) => props.theme.console.titleColor};
+    font-size: ${(props) => props.theme.font.size.base};
+    font-weight: 500;
+
+    .log-count {
+      color: ${(props) => props.theme.console.countColor};
+      font-size: ${(props) => props.theme.font.size.sm};
+      font-weight: 400;
+    }
+  }
+
+  .tab-controls {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .tab-content-area {
+    flex: 1;
+    overflow-y: auto;
+    background: ${(props) => props.theme.console.contentBg};
+    min-height: 0;
+  }
+
+  .network-with-details {
+    display: flex;
+    height: 100%;
+    overflow: hidden;
+  }
+
+  .network-main {
+    flex: 1;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+  }
+
+  .debug-with-details {
+    display: flex;
+    height: 100%;
+    overflow: hidden;
+  }
+
+  .debug-main {
+    flex: 1;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+  }
+
+  .filter-controls {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+
+  .details-panel-wrapper {
+    position: relative;
+    flex-shrink: 0;
+    height: 100%;
+    display: flex;
+  }
+
+  div.details-drag-handle {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    cursor: col-resize;
+    background-color: transparent;
+    width: 6px;
+    position: absolute;
+    left: -3px;
+    top: 0;
+    z-index: 10;
+    transition: opacity 0.2s ease;
+
+    div.drag-request-border {
+      width: 1px;
+      height: 100%;
+      border-left: solid 1px ${(props) => props.theme.sidebar.dragbar.border};
+    }
+
+    &:hover div.drag-request-border {
+      width: 1px;
+      height: 100%;
+      border-left: solid 1px ${(props) => props.theme.sidebar.dragbar.activeBorder};
+    }
+  }
+
+
+  .action-controls {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+
+  .control-button {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    background: transparent;
+    border: none;
+    border-radius: 4px;
+    color: ${(props) => props.theme.text};
+    cursor: pointer;
+    transition: all 0.2s ease;
+
+    &:hover {
+      background: ${(props) => props.theme.background.surface0};
+    }
+
+    &.close-button:hover {
+      background: ${(props) => props.theme.background.surface0};
+    }
+  }
+
+  .console-empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    color: ${(props) => props.theme.console.emptyColor};
+    text-align: center;
+    gap: 8px;
+    padding: 40px 20px;
+
+    p {
+      margin: 0;
+      font-size: ${(props) => props.theme.font.size.base};
+      font-weight: 500;
+    }
+
+    span {
+      font-size: ${(props) => props.theme.font.size.sm};
+      opacity: 0.7;
+    }
+  }
+
+  .logs-container {
+    padding: 8px 0;
+  }
+
+  .log-entry {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 4px 16px;
+    font-family: ui-monospace, 'SF Mono', 'Monaco', 'Cascadia Code', 'Roboto Mono', Consolas, 'Courier New', monospace;
+    font-size: ${(props) => props.theme.font.size.sm};
+    line-height: 1.4;
+    border-left: 2px solid transparent;
+    transition: background-color 0.1s ease;
+
+    &:hover {
+      background: ${(props) => props.theme.console.logHoverBg};
+    }
+
+    &.error {
+      border-left-color: ${(props) => props.theme.status.danger.text};
+
+      .log-level {
+        background: ${(props) => props.theme.status.danger.text};
+        color: white;
+      }
+
+      .log-icon {
+        color: ${(props) => props.theme.status.danger.text};
+      }
+    }
+
+    &.warn {
+      border-left-color: ${(props) => props.theme.status.warning.text};
+
+      .log-level {
+        background: ${(props) => props.theme.status.warning.text};
+        color: #000;
+      }
+
+      .log-icon {
+        color: ${(props) => props.theme.status.warning.text};
+      }
+    }
+
+    &.info {
+      border-left-color: ${(props) => props.theme.status.info.text};
+
+      .log-level {
+        background: ${(props) => props.theme.status.info.text};
+        color: white;
+      }
+
+      .log-icon {
+        color: ${(props) => props.theme.status.info.text};
+      }
+    }
+
+    &.debug {
+      border-left-color: ${(props) => props.theme.colors?.text?.purple || props.theme.status.danger.text};
+
+      .log-level {
+        background: ${(props) => props.theme.colors?.text?.purple || props.theme.status.danger.text};
+        color: white;
+      }
+
+      .log-icon {
+        color: ${(props) => props.theme.colors?.text?.purple || props.theme.status.danger.text};
+      }
+    }
+
+    &.log {
+      border-left-color: ${(props) => props.theme.colors.text.muted};
+
+      .log-level {
+        background: ${(props) => props.theme.colors.text.muted};
+        color: white;
+      }
+
+      .log-icon {
+        color: ${(props) => props.theme.colors.text.muted};
+      }
+    }
+  }
+
+  .log-meta {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-shrink: 0;
+    min-width: 120px;
+  }
+
+  .log-timestamp {
+    color: ${(props) => props.theme.console.timestampColor};
+    font-size: ${(props) => props.theme.font.size.xs};
+    font-weight: 400;
+  }
+
+  .log-level {
+    font-size: 9px;
+    font-weight: 500;
+    padding: 2px 4px;
+    border-radius: 2px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+
+  .log-icon {
+    flex-shrink: 0;
+  }
+
+  .log-message {
+    color: ${(props) => props.theme.console.messageColor};
+    white-space: pre-wrap;
+    word-break: break-word;
+    flex: 1;
+    
+    .log-object {
+      margin: 4px 0;
+      padding: 8px;
+      background: ${(props) => props.theme.console.headerBg};
+      border-radius: 4px;
+      border: 1px solid ${(props) => props.theme.console.border};
+      
+      .react-json-view {
+        background: transparent !important;
+        
+        .object-key-val {
+          font-size: ${(props) => props.theme.font.size.sm} !important;
+        }
+        
+        .object-key {
+          color: ${(props) => props.theme.console.messageColor} !important;
+          font-weight: 500 !important;
+        }
+        
+        .object-value {
+          color: ${(props) => props.theme.console.messageColor} !important;
+        }
+        
+        .string-value {
+          color: ${(props) => props.theme.colors?.text?.green || (props.theme.console.messageColor)} !important;
+        }
+        
+        .number-value {
+          color: ${(props) => props.theme.colors?.text?.purple || (props.theme.console.messageColor)} !important;
+        }
+        
+        .boolean-value {
+          color: ${(props) => props.theme.colors?.text?.yellow || (props.theme.console.messageColor)} !important;
+        }
+        
+        .null-value {
+          color: ${(props) => props.theme.colors?.text?.danger || (props.theme.console.messageColor)} !important;
+        }
+        
+        .object-size {
+          color: ${(props) => props.theme.console.timestampColor} !important;
+        }
+        
+        .brace, .bracket {
+          color: ${(props) => props.theme.console.messageColor} !important;
+        }
+        
+        .collapsed-icon, .expanded-icon {
+          color: ${(props) => props.theme.console.checkboxColor} !important;
+        }
+        
+        .icon-container {
+          color: ${(props) => props.theme.console.checkboxColor} !important;
+        }
+        
+        .click-to-expand, .click-to-collapse {
+          color: ${(props) => props.theme.console.checkboxColor} !important;
+        }
+      }
+    }
+  }
+`;
+
+export default StyledWrapper;

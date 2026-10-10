@@ -1,0 +1,19 @@
+import find from 'lodash/find';
+
+export const isItemARequest = (item) => {
+  return item.hasOwnProperty('request') && ['http-request', 'graphql-request', 'grpc-request', 'ws-request'].includes(item.type);
+};
+
+export const isItemAFolder = (item) => {
+  return !item.hasOwnProperty('request') && item.type === 'folder';
+};
+
+export const itemIsOpenedInTabs = (item, tabs) => {
+  return find(tabs, (t) => t.uid === item.uid);
+};
+
+export const getActiveScriptTab = (scriptPaneTab, requestScript) => {
+  if (scriptPaneTab) return scriptPaneTab;
+  const hasPreRequestScript = requestScript && requestScript.trim().length > 0;
+  return hasPreRequestScript ? 'pre-request' : 'post-response';
+};

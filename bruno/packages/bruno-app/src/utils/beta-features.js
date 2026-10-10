@@ -1,0 +1,25 @@
+import { useSelector } from 'react-redux';
+
+/**
+ * Beta features configuration object
+ * Contains all available beta feature keys
+ */
+export const BETA_FEATURES = Object.freeze({
+  NODE_VM: 'nodevm',
+  OPENAPI_SYNC: 'openapi-sync',
+  AI_ASSISTANT: 'ai-assistant',
+  FILE_CACHE: 'file-cache',
+  AKAMAI_EDGEGRID: 'akamai-edgegrid',
+  MOCK_SERVER: 'mock-server',
+  GRPC_SCRIPTING: 'grpc-scripting'
+});
+
+/**
+ * Hook to check if a beta feature is enabled
+ * @param {string} featureName - The name of the beta feature
+ * @returns {boolean} - Whether the feature is enabled
+ */
+export const useBetaFeature = (featureName) => {
+  const preferences = useSelector((state) => state.app.preferences);
+  return preferences?.beta?.[featureName] || false;
+};

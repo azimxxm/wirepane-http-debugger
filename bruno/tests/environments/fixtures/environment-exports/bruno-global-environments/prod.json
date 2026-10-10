@@ -1,0 +1,26 @@
+{
+  "name": "prod",
+  "variables": [
+    {
+      "name": "host",
+      "value": "https://echo.usebruno.com",
+      "type": "text",
+      "enabled": true,
+      "secret": false,
+      "description": "Single-line host desc"
+    },
+    {
+      "name": "secretToken",
+      "value": "",
+      "type": "text",
+      "enabled": true,
+      "secret": true,
+      "description": "Secret line one\nSecret line two"
+    }
+  ],
+  "info": {
+    "type": "bruno-environment",
+    "exportedAt": "2024-01-01T00:00:00.000Z",
+    "exportedUsing": "Bruno/v1.0.0"
+  }
+}

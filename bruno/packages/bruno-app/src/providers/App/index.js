@@ -1,0 +1,98 @@
+import React, { useEffect } from 'react';
+import { get } from 'lodash';
+import { useDispatch } from 'react-redux';
+import { refreshScreenWidth, hydrateSidebarState } from 'providers/ReduxStore/slices/app';
+import ConfirmAppClose from './ConfirmAppClose';
+import MigrateCollectionToYmlModal from 'components/MigrateCollectionToYmlModal';
+import useIpcEvents from './useIpcEvents';
+import useTelemetry from './useTelemetry';
+import StyledWrapper from './StyledWrapper';
+import useOpenAPISyncPolling from './useOpenAPISyncPolling';
+import useChangelogOnUpdate from './useChangelogOnUpdate';
+import { version } from '../../../package.json';
+import { checkpoint, startBenchmarkFlush, stopBenchmarkFlush, flushEvents } from 'utils/benchmark';
+
+export const AppContext = React.createContext();
+
+export const AppProvider = (props) => {
+  useTelemetry({ version });
+  useIpcEvents();
+  useOpenAPISyncPolling();
+  useChangelogOnUpdate();
+  const dispatch = useDispatch();
+
+  useEffect(() => {
+    dispatch(refreshScreenWidth());
+    dispatch(hydrateSidebarState());
+    // v3.5.0 v4 migration tab state; feature was removed from main.
+    localStorage.removeItem('v4-migration');
+  }, []);
+
+  useEffect(() => {
+    if (!__BRUNO_BENCHMARK__) {
+      return undefined;
+    }
+
+    startBenchmarkFlush();
+    checkpoint('renderer-ready', { version });
+
+    return () => {
+      stopBenchmarkFlush();
+      flushEvents().catch((err) => {
+        console.error('[benchmark] Final renderer flush failed:', err);
+      });
+    };
+  }, []);
+
+  useEffect(() => {
+    const platform = get(navigator, 'platform', '').toLowerCase();
+
+    if (!platform) {
+      return;
+    }
+
+    if (platform.includes('mac')) {
+      document.body.classList.add('os-mac');
+      return;
+    }
+
+    if (platform.includes('win')) {
+      document.body.classList.add('os-windows');
+      return;
+    }
+
+    if (platform.includes('linux')) {
+      document.body.classList.add('os-linux');
+    }
+  }, []);
+
+  useEffect(() => {
+    const handleResize = () => {
+      dispatch(refreshScreenWidth());
+    };
+
+    window.addEventListener('resize', handleResize);
+
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  return (
+    <AppContext.Provider {...props} value={{ version }}>
+      <StyledWrapper>
+        <ConfirmAppClose />
+        <MigrateCollectionToYmlModal />
+        {props.children}
+      </StyledWrapper>
+    </AppContext.Provider>
+  );
+};
+
+export const useApp = () => {
+  const context = React.useContext(AppContext);
+  if (!context) {
+    throw new Error('useApp must be used within an AppProvider');
+  }
+  return context;
+};
+
+export default AppProvider;

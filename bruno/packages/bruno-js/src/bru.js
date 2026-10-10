@@ -1,0 +1,438 @@
+const { cloneDeep, isEqual } = require('lodash');
+const xmlFormat = require('xml-formatter');
+const { interpolate: _interpolate } = require('@usebruno/common');
+const { createSendRequest } = require('@usebruno/requests').scripting;
+const { jar: createCookieJar, getCookiesForUrl } = require('@usebruno/requests').cookies;
+const CookieList = require('./cookie-list');
+
+const variableNameRegex = /^[\w-.]*$/;
+
+const assertValidVariableName = (key) => {
+  if (variableNameRegex.test(key) === false) {
+    throw new Error(
+      `Variable name: "${key}" contains invalid characters!`
+      + ' Names must only contain alpha-numeric characters, "-", "_", "."'
+    );
+  }
+};
+
+class Bru {
+  #onUnresolved;
+
+  /**
+   * @param {object} options - Single options object (destructured)
+   * @property {string} options.runtime - The runtime environment ('quickjs' or 'nodevm')
+   * @property {object} [options.envVariables={}] - Environment variables
+   * @property {object} [options.runtimeVariables={}] - Runtime variables
+   * @property {object} [options.processEnvVars={}] - Process environment variables (deep cloned)
+   * @property {string} [options.collectionPath] - Path to the collection
+   * @property {object} [options.collectionVariables={}] - Collection-level variables
+   * @property {object} [options.folderVariables={}] - Folder-level variables
+   * @property {object} [options.requestVariables={}] - Request-level variables
+   * @property {object} [options.globalEnvironmentVariables={}] - Global environment variables
+   * @property {object} [options.oauth2CredentialVariables={}] - OAuth2 credential variables
+   * @property {string} [options.collectionName] - Name of the collection
+   * @property {object} [options.promptVariables={}] - Prompt variables
+   * @property {object} [options.certsAndProxyConfig] - Configuration for bru.sendRequest (proxy, certs, TLS)
+   * @property {string} [options.certsAndProxyConfig.collectionPath] - Path to the collection
+   * @property {object} [options.certsAndProxyConfig.options] - TLS and proxy options
+   * @property {object} [options.certsAndProxyConfig.clientCertificates] - Client certificate configuration
+   * @property {object} [options.certsAndProxyConfig.collectionLevelProxy] - Collection-level proxy settings
+   * @property {object} [options.certsAndProxyConfig.systemProxyConfig] - System proxy configuration
+   * @property {string} [options.requestUrl] - The URL of the current request (used for cookie access)
+   * @property {function(string): void} [options.onUnresolved] - Called with each variable a script reads or interpolates that is not defined
+   */
+  constructor({
+    runtime,
+    envVariables,
+    runtimeVariables,
+    processEnvVars,
+    collectionPath,
+    collectionVariables,
+    folderVariables,
+    requestVariables,
+    globalEnvironmentVariables,
+    oauth2CredentialVariables,
+    collectionName,
+    promptVariables,
+    certsAndProxyConfig,
+    requestUrl,
+    onUnresolved
+  }) {
+    this.envVariables = envVariables || {};
+    this.runtimeVariables = runtimeVariables || {};
+    this.promptVariables = promptVariables || {};
+    this.processEnvVars = cloneDeep(processEnvVars || {});
+    this.collectionVariables = collectionVariables || {};
+    this.folderVariables = folderVariables || {};
+    this.requestVariables = requestVariables || {};
+    this.globalEnvironmentVariables = globalEnvironmentVariables || {};
+    this.oauth2CredentialVariables = oauth2CredentialVariables || {};
+    this.collectionPath = collectionPath;
+    this.collectionName = collectionName;
+    this.#onUnresolved = onUnresolved;
+    // Set by the host-side __bruSetScope global at the top of each segment's IIFE.
+    this._currentScope = null;
+    this.scriptedRequestEntries = [];
+    this.sendRequest = (...args) => {
+      const scopeSnapshot = this._currentScope ? { ...this._currentScope } : null;
+      const send = createSendRequest(certsAndProxyConfig, {
+        onComplete: (entry) =>
+          this._recordScriptedRequest({ source: 'sendRequest', scope: scopeSnapshot, ...entry })
+      });
+      return send(...args);
+    };
+    this.runtime = runtime;
+    this.requestUrl = requestUrl;
+    this.cookies = new CookieList({
+      getUrl: () => this.interpolate(this.requestUrl),
+      interpolate: (str) => this.interpolate(str),
+      createCookieJar,
+      getCookiesForUrl
+    });
+    // Dirty flags — set by mutators so runtimes can skip IPC/disk writes for unchanged scopes
+    this._envDirty = false;
+    this._globalEnvDirty = false;
+    this._collVarsDirty = false;
+    this._runtimeVarsDirty = false;
+    // Holds credential IDs to be reset after script execution
+    this.oauth2CredentialsToReset = [];
+    this.runner = {
+      skipRequest: () => {
+        this.skipRequest = true;
+      },
+      stopExecution: () => {
+        this.stopExecution = true;
+      },
+      setNextRequest: (nextRequest) => {
+        this.nextRequest = nextRequest;
+      }
+    };
+
+    this.utils = {
+      minifyJson: (json) => {
+        if (json === null || json === undefined) {
+          throw new Error('Failed to minify');
+        }
+
+        if (typeof json === 'object') {
+          try {
+            return JSON.stringify(json);
+          } catch (err) {
+            throw new Error(`Failed to minify: ${err?.message || err}`);
+          }
+        }
+
+        if (typeof json === 'string') {
+          const trimmed = json.trim();
+          if (trimmed === '') return trimmed;
+          try {
+            return JSON.stringify(JSON.parse(trimmed));
+          } catch (err) {
+            throw new Error(`Failed to minify: ${err?.message || err}`);
+          }
+        }
+
+        throw new TypeError('minifyJson expects a string or object');
+      },
+
+      minifyXml: (xml) => {
+        if (xml === null || xml === undefined) {
+          throw new Error('Failed to minify');
+        }
+
+        if (typeof xml === 'string') {
+          try {
+            return xmlFormat(xml, { collapseContent: false, indentation: '', lineSeparator: '' });
+          } catch (err) {
+            throw new Error(`Failed to minify: ${err?.message || err}`);
+          }
+        }
+
+        throw new TypeError('minifyXml expects a string');
+      }
+    };
+  }
+
+  interpolate = (strOrObj) => {
+    if (!strOrObj) return strOrObj;
+    const isObj = typeof strOrObj === 'object';
+    const strToInterpolate = isObj ? JSON.stringify(strOrObj) : strOrObj;
+
+    const combinedVars = {
+      ...this.globalEnvironmentVariables,
+      ...this.collectionVariables,
+      ...this.envVariables,
+      ...this.folderVariables,
+      ...this.requestVariables,
+      ...this.oauth2CredentialVariables,
+      ...this.runtimeVariables,
+      ...this.promptVariables,
+      process: {
+        env: {
+          ...this.processEnvVars
+        }
+      }
+    };
+
+    const interpolatedStr = _interpolate(strToInterpolate, combinedVars, {
+      onUnresolved: this.#onUnresolved
+    });
+    return isObj ? JSON.parse(interpolatedStr) : interpolatedStr;
+  };
+
+  #readVariable(scope, key) {
+    if (!Object.hasOwn(scope, key)) {
+      this.#onUnresolved?.(key);
+    }
+    return this.interpolate(scope[key]);
+  }
+
+  cwd() {
+    return this.collectionPath;
+  }
+
+  _recordScriptedRequest(entry) {
+    // Prefer scope passed in by the caller (snapshot at call time). Fall back to
+    // _currentScope for callers that don't supply one (e.g. bru.runRequest).
+    const { scope: providedScope, ...rest } = entry;
+    const scope = providedScope !== undefined
+      ? providedScope
+      : (this._currentScope ? { ...this._currentScope } : null);
+    this.scriptedRequestEntries.push({ ...rest, scope });
+  }
+
+  getEnvName() {
+    return this.envVariables.__name__;
+  }
+
+  getProcessEnv(key) {
+    if (!Object.hasOwn(this.processEnvVars, key)) {
+      this.#onUnresolved?.(`process.env.${key}`);
+    }
+    return this.processEnvVars[key];
+  }
+
+  hasEnvVar(key) {
+    return Object.hasOwn(this.envVariables, key);
+  }
+
+  getEnvVar(key) {
+    return this.#readVariable(this.envVariables, key);
+  }
+
+  setEnvVar(key, value) {
+    if (!key) {
+      throw new Error('Creating a env variable without specifying a name is not allowed.');
+    }
+
+    assertValidVariableName(key);
+
+    // Deep-equal compare so object/array writes that mutate in place
+    // (e.g. `const c = bru.getEnvVar('cfg'); c.port = 4000; bru.setEnvVar('cfg', c);`)
+    // still flip the dirty flag — strict `!==` returned false for same-reference writes.
+    if (!Object.hasOwn(this.envVariables, key) || !isEqual(this.envVariables[key], value)) {
+      this.envVariables[key] = value;
+      this._envDirty = true;
+    }
+  }
+
+  deleteEnvVar(key) {
+    if (key === '__name__') return;
+    if (Object.hasOwn(this.envVariables, key)) {
+      delete this.envVariables[key];
+      this._envDirty = true;
+    }
+  }
+
+  getAllEnvVars() {
+    const vars = Object.assign({}, this.envVariables);
+    delete vars.__name__;
+    return vars;
+  }
+
+  deleteAllEnvVars() {
+    // Iterate via Object.keys (own enumerable) so a user-set `hasOwnProperty` var
+    // can't shadow Object.prototype.hasOwnProperty and crash the loop.
+    let removed = false;
+    for (const key of Object.keys(this.envVariables)) {
+      if (key === '__name__') continue;
+      delete this.envVariables[key];
+      removed = true;
+    }
+    if (removed) this._envDirty = true;
+  }
+
+  hasGlobalEnvVar(key) {
+    return Object.hasOwn(this.globalEnvironmentVariables, key);
+  }
+
+  getGlobalEnvVar(key) {
+    return this.#readVariable(this.globalEnvironmentVariables, key);
+  }
+
+  setGlobalEnvVar(key, value) {
+    if (!key) {
+      throw new Error('Creating a env variable without specifying a name is not allowed.');
+    }
+
+    assertValidVariableName(key);
+
+    if (!Object.hasOwn(this.globalEnvironmentVariables, key) || !isEqual(this.globalEnvironmentVariables[key], value)) {
+      this.globalEnvironmentVariables[key] = value;
+      this._globalEnvDirty = true;
+    }
+  }
+
+  deleteGlobalEnvVar(key) {
+    if (Object.hasOwn(this.globalEnvironmentVariables, key)) {
+      delete this.globalEnvironmentVariables[key];
+      this._globalEnvDirty = true;
+    }
+  }
+
+  getAllGlobalEnvVars() {
+    return Object.assign({}, this.globalEnvironmentVariables);
+  }
+
+  deleteAllGlobalEnvVars() {
+    const keys = Object.keys(this.globalEnvironmentVariables);
+    if (!keys.length) return;
+    for (const key of keys) {
+      delete this.globalEnvironmentVariables[key];
+    }
+    this._globalEnvDirty = true;
+  }
+
+  getOauth2CredentialVar(key) {
+    return this.#readVariable(this.oauth2CredentialVariables, key);
+  }
+
+  resetOauth2Credential(credentialId) {
+    if (!credentialId || typeof credentialId !== 'string') {
+      throw new Error('credentialId must be a non-empty string');
+    }
+
+    if (!this.oauth2CredentialsToReset.includes(credentialId)) {
+      this.oauth2CredentialsToReset.push(credentialId);
+    }
+
+    // Remove matching credential variables so subsequent getOauth2CredentialVar() calls return undefined
+    const prefix = `$oauth2.${credentialId}.`;
+    for (const key of Object.keys(this.oauth2CredentialVariables)) {
+      if (key.startsWith(prefix)) {
+        delete this.oauth2CredentialVariables[key];
+      }
+    }
+  }
+
+  hasVar(key) {
+    return Object.hasOwn(this.runtimeVariables, key);
+  }
+
+  setVar(key, value) {
+    if (!key) {
+      throw new Error('Creating a variable without specifying a name is not allowed.');
+    }
+
+    assertValidVariableName(key);
+
+    if (!Object.hasOwn(this.runtimeVariables, key) || !isEqual(this.runtimeVariables[key], value)) {
+      this.runtimeVariables[key] = value;
+      this._runtimeVarsDirty = true;
+    }
+  }
+
+  getVar(key) {
+    assertValidVariableName(key);
+
+    return this.#readVariable(this.runtimeVariables, key);
+  }
+
+  deleteVar(key) {
+    if (Object.hasOwn(this.runtimeVariables, key)) {
+      delete this.runtimeVariables[key];
+      this._runtimeVarsDirty = true;
+    }
+  }
+
+  deleteAllVars() {
+    const keys = Object.keys(this.runtimeVariables);
+    if (!keys.length) return;
+    for (const key of keys) {
+      delete this.runtimeVariables[key];
+    }
+    this._runtimeVarsDirty = true;
+  }
+
+  getAllVars() {
+    return Object.assign({}, this.runtimeVariables);
+  }
+
+  getCollectionVar(key) {
+    return this.#readVariable(this.collectionVariables, key);
+  }
+
+  setCollectionVar(key, value) {
+    if (!key) {
+      throw new Error('Creating a variable without specifying a name is not allowed.');
+    }
+
+    assertValidVariableName(key);
+
+    if (!Object.hasOwn(this.collectionVariables, key) || !isEqual(this.collectionVariables[key], value)) {
+      this.collectionVariables[key] = value;
+      this._collVarsDirty = true;
+    }
+  }
+
+  hasCollectionVar(key) {
+    return Object.hasOwn(this.collectionVariables, key);
+  }
+
+  deleteCollectionVar(key) {
+    if (Object.hasOwn(this.collectionVariables, key)) {
+      delete this.collectionVariables[key];
+      this._collVarsDirty = true;
+    }
+  }
+
+  deleteAllCollectionVars() {
+    const keys = Object.keys(this.collectionVariables);
+    if (!keys.length) return;
+    for (const key of keys) {
+      delete this.collectionVariables[key];
+    }
+    this._collVarsDirty = true;
+  }
+
+  getAllCollectionVars() {
+    return Object.assign({}, this.collectionVariables);
+  }
+
+  getFolderVar(key) {
+    return this.#readVariable(this.folderVariables, key);
+  }
+
+  getRequestVar(key) {
+    return this.#readVariable(this.requestVariables, key);
+  }
+
+  setNextRequest(nextRequest) {
+    this.nextRequest = nextRequest;
+  }
+
+  sleep(ms) {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+  }
+
+  getCollectionName() {
+    return this.collectionName;
+  }
+
+  isSafeMode() {
+    return this.runtime === 'quickjs';
+  }
+}
+
+module.exports = Bru;

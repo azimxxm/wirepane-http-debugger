@@ -1,0 +1,16 @@
+{
+  "collections": [
+    {
+      "path": "{{collectionPath}}/requests-settings-bru",
+      "securityConfig": {
+        "jsSandboxMode": "safe"
+      }
+    },
+    {
+      "path": "{{collectionPath}}/requests-settings-yml",
+      "securityConfig": {
+        "jsSandboxMode": "safe"
+      }
+    }
+  ]
+}
