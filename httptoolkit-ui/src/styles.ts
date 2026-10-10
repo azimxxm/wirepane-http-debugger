@@ -5,45 +5,121 @@ import type * as monacoTypes from 'monaco-editor';
 
 import { generateHexColors, buildHexTokenRules } from './util/hex-colors';
 
-import "@fontsource/dm-sans";
-import "@fontsource/dm-mono";
-import "@fontsource/saira";
+// Real weights, so bold and italic text is never synthesized by the browser:
+import "@fontsource/dm-sans/400.css";
+import "@fontsource/dm-sans/500.css";
+import "@fontsource/dm-sans/600.css";
+import "@fontsource/dm-sans/700.css";
+import "@fontsource/dm-sans/400-italic.css";
+import "@fontsource/dm-mono/400.css";
+import "@fontsource/dm-mono/500.css";
 
 import reset from 'styled-reset';
 
+// Desktop type scale: 12px captions & column headers, 13px inputs & buttons,
+// 14px body text & list rows, 16px card titles, 22px page titles.
 const fontSizes = {
     smallPrintSize: '12px',
     textInputFontSize: '13px',
-    textSize: '14.5px',
-    subHeadingSize: '17px',
-    headingSize: '20px',
-    largeHeadingSize: '24px',
-    loudHeadingSize: '38px',
-    screamingHeadingSize: '80px'
+    textSize: '14px',
+    subHeadingSize: '16px',
+    headingSize: '16px',
+    largeHeadingSize: '22px',
+    loudHeadingSize: '22px',
+    screamingHeadingSize: '22px'
 };
 import "react-contexify/dist/ReactContexify.css";
 
 export const NARROW_LAYOUT_BREAKPOINT = 1100;
 
-export const warningColor = '#f1971f';
-const warningBackground = '#f1971f40';
-export const popColor = '#e1421f';
+// An amber that reads on light and dark surfaces, for the few places with no theme
+// access (static icon HTML, pill base colours). Themed code uses theme.warningColor.
+export const warningColor = '#D97706';
 
 const black = "#000000";
-const inkBlack = "#16181e";
-const inkGrey = "#1e2028";
-const darkerGrey = "#25262e";
 const darkGrey = "#32343B";
-const darkishGrey =  "#53565e";
 const mediumGrey = "#818490";
-const lightGrey = "#9a9da8";
-const ghostGrey = "#e4e8ed";
-const greyWhite = "#f2f2f2";
-const almostWhite = "#fafafa";
-const white = "#ffffff";
 
-const darkerBlue = "#2d4cbd";
-const lighterBlue = "#6284fa";
+// The Wirepane palette (docs/design-plan.md): navy chrome, teal for action and
+// selection, sky for keyboard focus, and green/amber/red/sky only for HTTP outcomes.
+// Text colours are AA-checked against every surface they're used on.
+const brandNavy700 = '#1B2C4B';
+const brandNavy900 = '#0A1222';
+const brandTeal = '#2DD4BF';
+const brandSky = '#38BDF8';
+
+const gradientWire = `linear-gradient(90deg, ${brandTeal}, ${brandSky})`; // Decoration only, never behind text
+const gradientTile = `linear-gradient(160deg, ${brandNavy700}, ${brandNavy900})`;
+const navyBackdrop = `radial-gradient(${brandNavy700}, ${brandNavy900})`; // The logo tile, behind modals
+
+const light = {
+    canvas: '#F4F7FB',
+    surface: '#FFFFFF',
+    surfaceRaised: '#FFFFFF',
+    surfaceSunken: '#EEF2F7',
+    borderSubtle: '#D5DDE8',
+    borderControl: '#78869B',
+    textPrimary: '#0F1B2D',
+    textSecondary: '#475569',
+    textTertiary: '#5E6B7E',
+    accent: '#0F766E',
+    accentHover: '#115E59',
+    textOnAccent: '#FFFFFF',
+    focusRing: '#0284C7',
+    rowHover: '#F1F5F9',
+    selectionInactive: '#E8EDF3',
+    success: '#157238',
+    warning: '#9A4A07',
+    error: '#B91C1C',
+    info: '#0369A1'
+} as const;
+
+const dark = {
+    canvas: '#0B1220',
+    surface: '#111B2E',
+    surfaceRaised: '#18253C',
+    surfaceSunken: '#0D1626',
+    borderSubtle: '#22314A',
+    borderControl: '#5F7088',
+    textPrimary: '#E6EDF7',
+    textSecondary: '#A9B6C9',
+    textTertiary: '#94A3B8',
+    accent: '#2DD4BF',
+    accentHover: '#5EEAD4',
+    textOnAccent: '#042F2E',
+    focusRing: '#38BDF8',
+    rowHover: '#16233A',
+    selectionInactive: '#22314A',
+    success: '#4ADE80',
+    warning: '#FBBF24',
+    error: '#FB8585',
+    info: '#7DD3FC'
+} as const;
+
+// Request method & 1xx status text colours, for list rows and tabs:
+const lightHttpColors = {
+    methodGet: '#0F766E',
+    methodPost: '#0369A1',
+    methodPut: '#6D28D9', // PUT & PATCH
+    methodDelete: '#B91C1C',
+    methodOther: '#475569', // HEAD, OPTIONS, CONNECT & anything else
+    statusNeutral: '#475569' // 1xx
+} as const;
+
+const darkHttpColors = {
+    methodGet: '#5EEAD4',
+    methodPost: '#7DD3FC',
+    methodPut: '#C4B5FD',
+    methodDelete: '#FCA5A5',
+    methodOther: '#94A3B8',
+    statusNeutral: '#94A3B8'
+} as const;
+
+// The focused list selection: the same deep teal in light & dark, with white text:
+const selectionTeal = '#0F766E';
+
+// The neutral base colour for pills that don't set their own:
+const pillGrey = '#94A3B8';
 
 const globalMonacoOverrides = {
     'editorWarning.foreground': '#ff0000'
@@ -51,49 +127,48 @@ const globalMonacoOverrides = {
 
 export const lightTheme = {
     fontFamily: '"DM Sans", Arial, sans-serif',
-    titleTextFamily: 'Saira, "DM Sans", Arial, sans-serif',
+    titleTextFamily: '"DM Sans", Arial, sans-serif',
     monoFontFamily: '"DM Mono", monospace',
 
-    mainBackground: almostWhite,
-    mainLowlightBackground: greyWhite,
-    mainColor: inkGrey,
-    mainLowlightColor: darkishGrey,
+    mainBackground: light.surface,
+    mainLowlightBackground: light.surfaceSunken,
+    mainColor: light.textPrimary,
+    mainLowlightColor: light.textSecondary,
 
-    highlightBackground: white,
-    highlightColor: inkGrey,
+    highlightBackground: light.surfaceRaised,
+    highlightColor: light.textPrimary,
 
     lowlightTextOpacity: 0.65,
-    boxShadowAlpha: 0.3,
+    boxShadowAlpha: 0.15,
 
     pillContrast: 0.9,
-    pillDefaultColor: lightGrey,
+    pillDefaultColor: pillGrey,
 
-    primaryInputBackground: darkerBlue,
-    primaryInputColor: white,
+    primaryInputBackground: light.accent,
+    primaryInputColor: light.textOnAccent,
 
-    secondaryInputBorder: lighterBlue,
-    secondaryInputColor: darkerBlue,
+    secondaryInputBorder: light.borderControl,
+    secondaryInputColor: light.textPrimary,
 
-    inputBackground: white,
-    inputHoverBackground: greyWhite,
-    inputBorder: darkishGrey,
-    inputColor: inkGrey,
-    inputPlaceholderColor: darkishGrey,
-    inputWarningPlaceholder: '#8c5c1d', // Mix of warning + inkGrey
+    inputBackground: light.surface,
+    inputHoverBackground: light.rowHover,
+    inputBorder: light.borderControl,
+    inputColor: light.textPrimary,
+    inputPlaceholderColor: light.textTertiary,
+    inputWarningPlaceholder: light.warning, // Readable on warningBackground
 
-    popColor,
-    popOverlayColor: white,
+    popColor: light.accent,
+    popOverlayColor: light.textOnAccent,
 
-    warningColor,
-    warningBackground,
+    warningColor: '#B45309', // Icons & borders. Warning text uses `warning`.
+    warningBackground: '#FEF3C7FF', // Always #RRGGBBAA: the contrast tests read its alpha
 
-    containerBackground: ghostGrey,
-    containerWatermark: mediumGrey,
-    containerBorder: lightGrey,
+    containerBackground: light.canvas,
+    containerWatermark: light.textTertiary,
+    containerBorder: light.borderSubtle,
 
-    // These are the same as the standard defaults
-    linkColor: '#0000EE',
-    visitedLinkColor: '#551A8B',
+    linkColor: light.accent,
+    visitedLinkColor: light.accent,
 
     editorBackground: '#ffffff', // Monaco 'vs' theme default
     hexColorMinContrast: 4.6, // WCAG AA (4.5) + margin for float rounding
@@ -102,8 +177,27 @@ export const lightTheme = {
     monacoThemeBase: 'vs',
     monacoThemeOverrides: globalMonacoOverrides,
 
-    modalGradient: 'radial-gradient(#40404b, #111118)',
-    modalColor: almostWhite,
+    modalGradient: navyBackdrop,
+    modalColor: light.surfaceRaised,
+
+    // Wirepane tokens with no upstream equivalent:
+    accentHover: light.accentHover,
+    focusRing: light.focusRing,
+    rowHover: light.rowHover,
+    selectionBackground: selectionTeal,
+    selectionColor: '#FFFFFF',
+    selectionInactiveBackground: light.selectionInactive,
+    selectionInactiveBar: light.borderControl,
+    floatingShadow: '0 8px 24px rgba(10, 18, 34, 0.18)', // Menus & modals only
+
+    success: light.success,
+    warning: light.warning,
+    error: light.error,
+    info: light.info,
+    ...lightHttpColors,
+
+    gradientWire,
+    gradientTile,
 
     ...fontSizes,
 
@@ -112,60 +206,79 @@ export const lightTheme = {
 
 export const darkTheme = {
     fontFamily: '"DM Sans", Arial, sans-serif',
-    titleTextFamily: 'Saira, "DM Sans", Arial, sans-serif',
+    titleTextFamily: '"DM Sans", Arial, sans-serif',
     monoFontFamily: '"DM Mono", monospace',
 
-    mainBackground: darkGrey,
-    mainLowlightBackground: darkerGrey,
-    mainColor: white,
-    mainLowlightColor: mediumGrey,
+    mainBackground: dark.surface,
+    mainLowlightBackground: dark.surfaceSunken,
+    mainColor: dark.textPrimary,
+    mainLowlightColor: dark.textSecondary,
 
-    highlightBackground: darkishGrey,
-    highlightColor: white,
+    highlightBackground: dark.surfaceRaised,
+    highlightColor: dark.textPrimary,
 
     lowlightTextOpacity: 0.65,
-    boxShadowAlpha: 0.4,
+    boxShadowAlpha: 0.3,
 
     pillContrast: 0.85,
-    pillDefaultColor: lightGrey,
+    pillDefaultColor: pillGrey,
 
-    primaryInputBackground: darkerBlue,
-    primaryInputColor: white,
+    primaryInputBackground: dark.accent,
+    primaryInputColor: dark.textOnAccent,
 
-    secondaryInputBorder: darkerBlue,
-    secondaryInputColor: lighterBlue,
+    secondaryInputBorder: dark.borderControl,
+    secondaryInputColor: dark.textPrimary,
 
-    inputBackground: inkBlack,
-    inputHoverBackground: inkGrey,
-    inputBorder: darkishGrey,
-    inputColor: white,
-    inputPlaceholderColor: mediumGrey,
-    inputWarningPlaceholder: '#e8b978', // Mix of warning + white
+    inputBackground: dark.surfaceSunken,
+    inputHoverBackground: dark.rowHover,
+    inputBorder: dark.borderControl,
+    inputColor: dark.textPrimary,
+    inputPlaceholderColor: dark.textTertiary,
+    inputWarningPlaceholder: dark.warning, // Readable on warningBackground
 
-    popColor,
-    popOverlayColor: white,
+    popColor: dark.accent,
+    popOverlayColor: dark.textOnAccent,
 
-    warningColor,
-    warningBackground,
-    containerBackground: inkGrey,
-    containerWatermark: lightGrey,
-    containerBorder: black,
+    warningColor: dark.warning,
+    warningBackground: '#FBBF2424',
+    containerBackground: dark.canvas,
+    containerWatermark: dark.textTertiary,
+    containerBorder: dark.borderSubtle,
 
-    linkColor: '#8699ff',
-    visitedLinkColor: '#ac7ada',
+    linkColor: dark.accent,
+    visitedLinkColor: dark.accent,
 
-    editorBackground: inkBlack, // Matches editor.background override below
+    editorBackground: dark.surfaceSunken, // Matches editor.background override below
     hexColorMinContrast: 4.6, // WCAG AA (4.5) + margin for float rounding
 
     monacoTheme: 'vs-dark-custom',
     monacoThemeBase: 'vs-dark',
     monacoThemeOverrides: {
         ...globalMonacoOverrides,
-        'editor.background': inkBlack // Same as input background - darker for more contrast vs containerBg
+        'editor.background': dark.surfaceSunken // Same as input background - sunken below the card surface
     },
 
-    modalGradient: `radial-gradient(${white}, ${lightGrey})`,
-    modalColor: darkGrey,
+    modalGradient: navyBackdrop,
+    modalColor: dark.surfaceRaised,
+
+    // Wirepane tokens with no upstream equivalent:
+    accentHover: dark.accentHover,
+    focusRing: dark.focusRing,
+    rowHover: dark.rowHover,
+    selectionBackground: selectionTeal,
+    selectionColor: '#FFFFFF',
+    selectionInactiveBackground: dark.selectionInactive,
+    selectionInactiveBar: dark.borderControl,
+    floatingShadow: '0 8px 24px rgba(0, 0, 0, 0.5)', // Menus & modals only
+
+    success: dark.success,
+    warning: dark.warning,
+    error: dark.error,
+    info: dark.info,
+    ...darkHttpColors,
+
+    gradientWire,
+    gradientTile,
 
     ...fontSizes,
 
@@ -192,9 +305,11 @@ export const darkTheme = {
     `
 } as const;
 
+// Keeps its own black & white surfaces, but takes the dark theme's accent, focus and
+// status colours, which are all at least 7:1 on black.
 export const highContrastTheme = {
     fontFamily: '"DM Sans", Arial, sans-serif',
-    titleTextFamily: 'Saira, "DM Sans", Arial, sans-serif',
+    titleTextFamily: '"DM Sans", Arial, sans-serif',
     monoFontFamily: '"DM Mono", monospace',
 
     mainBackground: '#000000',
@@ -211,8 +326,8 @@ export const highContrastTheme = {
     pillContrast: 0.95,
     pillDefaultColor: mediumGrey,
 
-    primaryInputBackground: darkerBlue,
-    primaryInputColor: '#ffffff',
+    primaryInputBackground: dark.accent,
+    primaryInputColor: dark.textOnAccent,
 
     secondaryInputBorder: '#ffffff',
     secondaryInputColor: '#ffffff',
@@ -222,20 +337,20 @@ export const highContrastTheme = {
     inputBorder: '#aaa',
     inputColor: '#000000',
     inputPlaceholderColor: '#444',
-    inputWarningPlaceholder: '#e1b374', // Mix of warning + white
+    inputWarningPlaceholder: dark.warning, // Invalid inputs show warningBackground over black
 
-    popColor,
-    popOverlayColor: '#ffffff',
+    popColor: dark.accent,
+    popOverlayColor: dark.textOnAccent,
 
-    warningColor,
-    warningBackground,
+    warningColor: dark.warning,
+    warningBackground: '#FBBF2424',
 
     containerBackground: darkGrey,
     containerWatermark: '#a0a0b0',
     containerBorder: '#000000',
 
-    linkColor: '#8699ff',
-    visitedLinkColor: '#ac7ada',
+    linkColor: dark.accent,
+    visitedLinkColor: dark.accent,
 
     editorBackground: '#000000', // Monaco 'hc-black' theme default
     hexColorMinContrast: 7.5, // WCAG AAA (7) + margin for float rounding
@@ -246,6 +361,25 @@ export const highContrastTheme = {
 
     modalGradient: '#f0f0f0',
     modalColor: black,
+
+    // Wirepane tokens with no upstream equivalent:
+    accentHover: dark.accentHover,
+    focusRing: dark.focusRing,
+    rowHover: '#1a1a1a',
+    selectionBackground: '#ffffff',
+    selectionColor: '#000000',
+    selectionInactiveBackground: '#262626',
+    selectionInactiveBar: '#ffffff',
+    floatingShadow: '0 8px 24px rgba(0, 0, 0, 0.5)', // Menus & modals only
+
+    success: dark.success,
+    warning: dark.warning,
+    error: dark.error,
+    info: dark.info,
+    ...darkHttpColors,
+
+    gradientWire,
+    gradientTile,
 
     ...fontSizes,
 
@@ -303,6 +437,7 @@ export const GlobalStyles = createGlobalStyle`
 
     body {
         font-family: ${p => p.theme.fontFamily};
+        font-size: ${p => p.theme.textSize};
         color: ${p => p.theme.mainColor};
         background-color: ${p => p.theme.containerBackground};
     }
@@ -319,8 +454,14 @@ export const GlobalStyles = createGlobalStyle`
         font-weight: bold;
     }
 
-    :active {
+    :active:not(:focus-visible) {
         outline: none;
+    }
+
+    /* Keyboard focus is always visible as a sky ring. Mouse clicks don't show it. */
+    :focus-visible {
+        outline: 2px solid ${p => p.theme.focusRing};
+        outline-offset: 2px;
     }
 
     .slow-spin {

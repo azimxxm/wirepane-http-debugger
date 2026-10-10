@@ -73,7 +73,7 @@ export const Tab = styled((p: {
 
     user-select: none;
     &:hover, &:focus {
-        outline: none;
+        &:not(:focus-visible) { outline: none; }
         color: ${p => p.theme.popColor};
     }
 

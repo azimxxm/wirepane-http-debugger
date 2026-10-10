@@ -119,7 +119,7 @@ const CollapsedStreamRowContainer = styled.div<{ messageDirection: 'left' | 'rig
 
     cursor: pointer;
     &:hover, &:focus {
-        outline: none;
+        &:not(:focus-visible) { outline: none; }
         border-${p => p.messageDirection}-color: ${p => p.theme.popColor};
         background-color: ${p => p.theme.mainBackground};
     }

@@ -31,6 +31,7 @@ import {
     RowPin,
     RowMarker,
     Method,
+    MethodName,
     Status,
     Source,
     Host,
@@ -80,7 +81,9 @@ export const ExchangeRow = inject('uiStore')(observer((p: {
     >
         <RowPin aria-label={pinned ? 'Pinned' : undefined} pinned={pinned}/>
         <RowMarker role='gridcell' category={category} title={describeEventCategory(category)} />
-        <Method role='gridcell' pinned={pinned}>{ request.method }</Method>
+        <Method role='gridcell' pinned={pinned}>
+            <MethodName httpMethod={request.method}>{ request.method }</MethodName>
+        </Method>
         <Status role='gridcell'>
             {
                 response === 'aborted'

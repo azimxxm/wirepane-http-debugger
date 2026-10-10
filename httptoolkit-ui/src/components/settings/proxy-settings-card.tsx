@@ -290,7 +290,7 @@ export class ProxySettingsCard extends React.Component<
                 <CollapsibleCardHeading onCollapseToggled={
                     cardProps.onCollapseToggled
                 }>
-                    Proxy Settings
+                    Proxy settings
                 </CollapsibleCardHeading>
             </header>
             <RestartApp

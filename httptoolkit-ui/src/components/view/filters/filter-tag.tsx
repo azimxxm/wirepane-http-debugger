@@ -70,7 +70,7 @@ const FilterTagContainer = styled.div`
     }
 
     &:focus-within {
-        outline: none;
+        &:not(:focus-visible) { outline: none; }
         border-color: ${p => p.theme.popColor};
     }
 

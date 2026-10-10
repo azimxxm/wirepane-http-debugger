@@ -5,7 +5,7 @@ import { observer } from 'mobx-react-lite';
 import { css, styled } from '../../styles';
 
 import { RequestInput, SendRequest } from '../../model/send/send-request-model';
-import { getMethodColor } from '../../model/events/categorization';
+import { getMethodThemeColor } from '../../model/events/categorization';
 import { ContextMenuItem } from '../../model/ui/context-menu';
 
 import { UnstyledButton } from '../common/inputs';
@@ -66,7 +66,7 @@ const TabContainer = styled.div<{ selected: boolean }>`
 `;
 
 const TabMethodMarker = styled.span<{ method: string }>`
-    color: ${p => getMethodColor(p.method)};
+    color: ${p => getMethodThemeColor(p.method, p.theme)};
     font-size: ${p => p.theme.textInputFontSize};
     margin-right: 5px;
 `;
@@ -104,7 +104,6 @@ const TabButton = styled(UnstyledButton).attrs((p: { selected: boolean }) => ({
     padding: 0 10px;
 
     :focus-visible {
-        outline: none;
         font-weight: bold;
 
         & + ${CloseTabButton} {

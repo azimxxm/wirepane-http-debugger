@@ -24,7 +24,9 @@ import {
     Status,
     Source,
     Host,
-    PathAndQuery
+    PathAndQuery,
+    RowMarker,
+    RowPin
 } from './event-rows/event-row-components';
 import { EventRow, EventRowProps } from './event-rows/event-row';
 
@@ -72,30 +74,36 @@ const ListContainer = styled.div<{ role: 'grid' }>`
 
     font-size: ${p => p.theme.textSize};
 
-    &::after { /* Insert shadow over table contents */
-        content: '';
-        position: absolute;
-        top: ${HEADER_FOOTER_HEIGHT}px;
-        bottom: 0;
-        left: 0;
-        right: 0;
-        box-shadow: rgba(0, 0, 0, 0.1) 0px 0px 30px inset;
-        pointer-events: none;
-    }
-
-    /* Disable default outline */
-    & > div > div[tabindex="0"]:focus {
+    /* The selection fill shows focus, so the list only gets an outline when no row is active */
+    & > div > div[tabindex="0"]:focus:not(:focus-visible),
+    & > div > div[tabindex="0"]:focus-visible:has(.active) {
         outline: none;
     }
 
-    /* When focused via keyboard and no active row is visible, outline the list */
+    /* When focused via keyboard and no active row is visible, ring the list (inside, so it isn't clipped) */
     & > div > div[tabindex="0"]:focus-visible:not(:has(.active)) {
-        outline: thin dotted ${p => p.theme.popColor};
+        outline-offset: -2px;
     }
 
-    /* When the list is focused, outline the active row */
-    & > div > div[tabindex="0"]:focus .active {
-        outline: thin dotted ${p => p.theme.popColor};
+    /* While the list has focus, selected rows take the accent fill with white text, like macOS */
+    &:focus-within .selected {
+        background-color: ${p => p.theme.selectionBackground};
+        box-shadow: none;
+
+        &, *:not(${RowMarker}) {
+            color: ${p => p.theme.selectionColor};
+            fill: ${p => p.theme.selectionColor};
+        }
+
+        ${RowPin} {
+            background-color: transparent;
+        }
+    }
+
+    /* Keyboard focus on an active row that isn't selected (e.g. after a Cmd/Ctrl-click) */
+    & > div > div[tabindex="0"]:focus-visible .active:not(.selected) {
+        outline: 2px solid ${p => p.theme.focusRing};
+        outline-offset: -2px;
     }
 `;
 

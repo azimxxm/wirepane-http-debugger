@@ -658,7 +658,7 @@ export class ConnectionSettingsCard extends React.Component<
                 <CollapsibleCardHeading onCollapseToggled={
                     cardProps.onCollapseToggled
                 }>
-                    Connection Settings
+                    Connection settings
                 </CollapsibleCardHeading>
             </header>
 

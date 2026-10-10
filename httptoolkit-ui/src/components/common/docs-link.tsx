@@ -10,7 +10,7 @@ const ExternalLinkIcon = styled(Icon).attrs(() => ({
     margin-left: 5px;
 
     &:focus {
-        outline: none;
+        &:not(:focus-visible) { outline: none; }
         color: ${p => p.theme.popColor};
     }
 `;

@@ -109,7 +109,7 @@ const RowContainer = styled(LittleCard)<{
     border-left: 5px solid ${(p) => p.borderColor};
 
     &:focus {
-        outline: none;
+        &:not(:focus-visible) { outline: none; }
         box-shadow: 0 0 1px 2px ${p =>
             polished.rgba(p.theme.popColor, 0.5)
         };

@@ -82,6 +82,21 @@ export const Button = styled.button`
 
     &:not([disabled]) {
         background-color: ${p => p.theme.primaryInputBackground};
+
+        /* Keep the label readable on the accent fill in every state */
+        &:hover, &:active, &:focus {
+            color: ${p => p.theme.primaryInputColor};
+        }
+
+        &:hover {
+            background-color: ${p => p.theme.accentHover};
+            background-image: none;
+        }
+
+        /* Ring outside the fill, where the sky colour stands out */
+        &:focus-visible {
+            outline-offset: 2px;
+        }
     }
 `;
 // 'submit' is the default, which makes 'enter' behaviour super wacky:
@@ -162,13 +177,14 @@ export const TextInput = styled.input.attrs((p: { type?: string }) => ({
         color: ${p => p.theme.inputPlaceholderColor};
     }
 
-    &:invalid {
+    /* Only after the user has interacted, so empty required fields don't start out flagged */
+    &:user-invalid {
         ${invalidTextCss}
     }
 
     &:read-only {
         cursor: default;
-        outline: none;
+        &:not(:focus-visible) { outline: none; }
     }
 
     ${(p: TextInputProps) => p.invalid && invalidTextCss}

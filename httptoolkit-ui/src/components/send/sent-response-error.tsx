@@ -43,7 +43,7 @@ export const SentResponseError = (props: {
     >
         <header>
             <h1>
-                Request Failure
+                Request failure
             </h1>
         </header>
         <FailureBlock>

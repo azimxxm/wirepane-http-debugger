@@ -115,7 +115,7 @@ const GroupHeaderContainer = styled.header<{
 
     cursor: pointer;
     &:focus {
-        outline: none;
+        &:not(:focus-visible) { outline: none; }
         > h2 > svg {
             color: ${p => p.theme.popColor};
         }

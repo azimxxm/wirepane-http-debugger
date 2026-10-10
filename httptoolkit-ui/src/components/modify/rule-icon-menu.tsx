@@ -49,7 +49,7 @@ export const IconMenuButton = styled(React.memo((p: {
         color: ${p => p.theme.secondaryInputColor};
 
         &:hover, &:focus {
-            outline: none;
+            &:not(:focus-visible) { outline: none; }
             color: ${p => p.theme.popColor};
         }
     }

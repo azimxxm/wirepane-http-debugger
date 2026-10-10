@@ -89,7 +89,7 @@ export class RTCConnectionCard extends React.Component<RTCConnectionCardProps> {
                 }
 
                 <CollapsibleCardHeading onCollapseToggled={cardProps.onCollapseToggled}>
-                    WebRTC Connection
+                    WebRTC connection
                 </CollapsibleCardHeading>
             </header>
 

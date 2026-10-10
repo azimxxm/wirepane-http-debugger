@@ -20,7 +20,7 @@ const ConnectedSource = styled.div`
 
 export const ConnectedSources = styled((props: { activeSources: ReadonlyArray<TrafficSource>, className?: string }) =>
     <BigCard className={props.className}>
-        <h1>Connected Sources</h1>
+        <h1>Connected sources</h1>
         {
             props.activeSources.length ?
                 props.activeSources.map((source) =>

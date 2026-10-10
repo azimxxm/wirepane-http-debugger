@@ -40,7 +40,7 @@ export const SentResponseHeaderSection = ({
                 />
             </CollapsingButtons>
             <CollapsibleCardHeading onCollapseToggled={cardProps.onCollapseToggled}>
-                Response Headers
+                Response headers
             </CollapsibleCardHeading>
         </header>
         <SendCardScrollableWrapper>
@@ -65,7 +65,7 @@ export const PendingResponseHeaderSection = ({
                 />
             </CollapsingButtons>
             <CollapsibleCardHeading onCollapseToggled={cardProps.onCollapseToggled}>
-                Response Headers
+                Response headers
             </CollapsibleCardHeading>
         </header>
     </SentLoadingCard>;

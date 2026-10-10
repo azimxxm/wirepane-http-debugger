@@ -24,7 +24,7 @@ export const HttpTrailersCard = observer((props: HttpTrailersCardProps) => {
     return <CollapsibleCard {...props} direction='left'>
         <header>
             <CollapsibleCardHeading onCollapseToggled={props.onCollapseToggled}>
-                { type === 'request' ? 'Request' : 'Response' } Trailers
+                { type === 'request' ? 'Request' : 'Response' } trailers
             </CollapsibleCardHeading>
         </header>
 

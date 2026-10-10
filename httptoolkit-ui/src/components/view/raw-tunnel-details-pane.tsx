@@ -51,7 +51,7 @@ export class RawTunnelDetailsPane extends React.Component<{
         return <PaneScrollContainer>
             <MediumCard>
                 <header>
-                    <h1>Raw Tunnel</h1>
+                    <h1>Raw tunnel</h1>
                 </header>
 
                 <ContentLabelBlock>Details</ContentLabelBlock>
@@ -80,7 +80,7 @@ export class RawTunnelDetailsPane extends React.Component<{
                 !tunnel.isOpen() &&
                 <MediumCard>
                     <header>
-                        <h1>Connection Closed</h1>
+                        <h1>Connection closed</h1>
                     </header>
                     <Content>
                         This tunnel was closed {

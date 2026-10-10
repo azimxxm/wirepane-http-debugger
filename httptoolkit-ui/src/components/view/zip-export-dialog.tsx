@@ -20,12 +20,12 @@ import { Button, SecondaryButton, UnstyledButton } from '../common/inputs';
 import { AppModal } from '../common/modal';
 
 const Dialog = styled(AppModal)`
-    background-color: ${p => p.theme.mainBackground};
+    background-color: ${p => p.theme.modalColor};
     color: ${p => p.theme.mainColor};
     border: 1px solid ${p => p.theme.containerBorder};
-    border-radius: 4px;
+    border-radius: 10px;
 
-    box-shadow: 0 2px 30px rgba(0, 0, 0, 0.3);
+    box-shadow: ${p => p.theme.floatingShadow};
 
     width: 90%;
     max-width: 680px;
@@ -58,7 +58,7 @@ const CloseButton = styled(UnstyledButton)`
 
     &:hover, &:focus {
         opacity: 1;
-        outline: none;
+        &:not(:focus-visible) { outline: none; }
     }
 `;
 

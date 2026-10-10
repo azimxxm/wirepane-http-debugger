@@ -7,7 +7,6 @@ import { Icon } from '../../icons';
 import { trackEvent } from '../../metrics';
 import { WithInjected } from '../../types';
 import { ProxyStore } from '../../model/proxy-store';
-import { AccountStore } from '../../model/account/account-store';
 
 import { UnstyledButton } from '../common/inputs';
 import { CopyButtonIcon } from '../common/copy-button';
@@ -98,12 +97,12 @@ const INTEGRATIONS: IntegrationConfig[] = [
 ];
 
 const Dialog = styled(AppModal)`
-    background-color: ${p => p.theme.mainBackground};
+    background-color: ${p => p.theme.modalColor};
     color: ${p => p.theme.mainColor};
     border: 1px solid ${p => p.theme.containerBorder};
-    border-radius: 4px;
+    border-radius: 10px;
 
-    box-shadow: 0 2px 30px rgba(0, 0, 0, 0.3);
+    box-shadow: ${p => p.theme.floatingShadow};
 
     width: 90%;
     max-width: 760px;
@@ -136,7 +135,7 @@ const CloseButton = styled(UnstyledButton)`
 
     &:hover, &:focus {
         opacity: 1;
-        outline: none;
+        &:not(:focus-visible) { outline: none; }
     }
 `;
 
@@ -218,11 +217,9 @@ const FooterNote = styled.p`
 interface McpModalProps {
     onClose: () => void;
     proxyStore: ProxyStore;
-    accountStore: AccountStore;
 }
 
 @inject('proxyStore')
-@inject('accountStore')
 @observer
 class McpModal extends React.Component<McpModalProps> {
 
@@ -257,7 +254,7 @@ class McpModal extends React.Component<McpModalProps> {
                 aria-labelledby='mcp-modal-title'
             >
                 <Header>
-                    <h1 id='mcp-modal-title'>Connect Wirepane to your LLM</h1>
+                    <h1 id='mcp-modal-title'>Connect an AI assistant</h1>
                     <CloseButton title="Close" onClick={onClose}>
                         <Icon icon={['fas', 'times']} />
                     </CloseButton>
@@ -309,13 +306,6 @@ class McpModal extends React.Component<McpModalProps> {
 
                     <FooterNote>
                         Wirepane must be running for the AI client to connect.
-                        { !this.props.accountStore.user.isPaidUser() && <>
-                            {' '}Free accounts have per-session call limits — see{' '}
-                            <a href='https://httptoolkit.com/pricing/' target='_blank' rel='noreferrer'>
-                                Pro
-                            </a>{' '}
-                            for unlimited access.
-                        </> }
                     </FooterNote>
                 </Body>
             </Dialog>
@@ -324,6 +314,6 @@ class McpModal extends React.Component<McpModalProps> {
 }
 
 const McpModalWithStoreInjected = (
-    McpModal as unknown as WithInjected<typeof McpModal, 'proxyStore' | 'accountStore'>
+    McpModal as unknown as WithInjected<typeof McpModal, 'proxyStore'>
 );
 export { McpModalWithStoreInjected as McpModal };

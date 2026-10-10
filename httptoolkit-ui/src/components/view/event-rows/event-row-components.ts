@@ -2,6 +2,7 @@ import { styled } from '../../../styles';
 import { Icon } from '../../../icons';
 import {
     getSummaryColor,
+    getMethodThemeColor,
     EventCategory
 } from '../../../model/events/categorization';
 
@@ -34,6 +35,7 @@ export const RowMarker = styled(Column)`
     color: ${(p: { category: EventCategory }) => getSummaryColor(p.category)};
 
     background-color: currentColor;
+    background-clip: content-box; /* Keep the border gap clear of the marker colour */
 
     flex-basis: 5px;
     flex-shrink: 0;
@@ -55,17 +57,15 @@ export const EventListRow = styled.div<{ role: 'row' }>`
     user-select: none;
     cursor: pointer;
 
-    &.selected {
-        background-color: ${p => p.theme.highlightBackground};
-        font-weight: bold;
+    &:hover:not(.selected) {
+        background-color: ${p => p.theme.rowHover};
+    }
 
-        color: ${p => p.theme.highlightColor};
-        fill: ${p => p.theme.highlightColor};
-        * {
-            /* Override status etc colours to ensure contrast & give row max visibility */
-            color: ${p => p.theme.highlightColor};
-            fill: ${p => p.theme.highlightColor};
-        }
+    /* Selected while the list isn't focused: a grey fill and a leading bar, keeping the
+       method & status colours. The focused look is set by the list (view-event-list). */
+    &.selected {
+        background-color: ${p => p.theme.selectionInactiveBackground};
+        box-shadow: inset 3px 0 0 ${p => p.theme.selectionInactiveBar};
     }
 `;
 
@@ -78,8 +78,13 @@ export const TrafficEventListRow = styled(EventListRow)`
     background-clip: padding-box;
     box-sizing: border-box;
 
-    &:hover ${RowMarker}, &.selected ${RowMarker} {
+    &:hover ${RowMarker} {
         border-color: currentColor;
+    }
+
+    /* Clear the marker's gap, so the selection's leading bar shows through it */
+    &.selected ${RowMarker} {
+        border-color: transparent;
     }
 
     > * {
@@ -103,8 +108,6 @@ export const TlsListRow = styled(EventListRow)`
 
     &.selected {
         opacity: 1;
-        color: ${p => p.theme.mainColor};
-        background-color: ${p => p.theme.mainBackground};
     }
 `;
 
@@ -157,6 +160,14 @@ export const Method = styled(Column)`
 
     flex-shrink: 0;
     flex-grow: 0;
+`;
+
+// The coloured method name inside a row's Method cell:
+export const MethodName = styled.span<{ httpMethod: string }>`
+    color: ${p => getMethodThemeColor(p.httpMethod, p.theme)};
+    font-family: ${p => p.theme.monoFontFamily};
+    font-size: ${p => p.theme.textInputFontSize};
+    font-weight: 500;
 `;
 
 export const Status = styled(Column)`
@@ -250,12 +261,12 @@ export const TableHeaderRow = styled.div<{ role: 'row' }>`
     flex-direction: row;
     align-items: center;
 
-    background-color: ${props => props.theme.mainBackground};
+    background-color: ${props => props.theme.mainLowlightBackground};
     color: ${props => props.theme.mainColor};
-    font-weight: bold;
+    font-size: ${props => props.theme.smallPrintSize};
+    font-weight: 600;
 
     border-bottom: 1px solid ${props => props.theme.containerBorder};
-    box-shadow: 0 0 30px rgba(0,0,0,0.2);
 
     padding-right: 18px;
     box-sizing: border-box;

@@ -38,7 +38,7 @@ export class TlsFailureDetailsPane extends React.Component<{
         return <PaneScrollContainer>
             <MediumCard>
                 <header>
-                    <h1>Failed HTTPS Request</h1>
+                    <h1>Failed HTTPS request</h1>
                 </header>
 
                 <ContentLabelBlock>Details</ContentLabelBlock>

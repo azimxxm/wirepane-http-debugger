@@ -19,7 +19,7 @@ const ModalDialog = styled.dialog<{ 'data-backdrop-opacity'?: number }>`
         /* This must not use CSS variables: ::backdrop can't inherit custom
            properties from the page in Chromium <122 (i.e. old Electron): */
         background: ${p => p.theme.modalGradient};
-        opacity: ${p => p['data-backdrop-opacity'] ?? 0.9};
+        opacity: ${p => p['data-backdrop-opacity'] ?? 0.55};
     }
 `;
 
@@ -31,7 +31,7 @@ export interface AppModalProps {
      * closed by its own explicit controls.
      */
     onClose?: () => void;
-    /** Opacity of the backdrop over the page behind - defaults to 0.9. */
+    /** Opacity of the backdrop over the page behind - defaults to 0.55. */
     backdropOpacity?: number;
     className?: string;
     'aria-labelledby'?: string;

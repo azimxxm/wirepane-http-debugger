@@ -216,21 +216,23 @@ export function getSummaryColor(
 }
 
 export function getStatusColor(status: undefined | 'aborted' | number, theme: Theme): string {
-    if (!status || status === 'aborted' || status < 100 || status >= 600) {
+    if (status === 'aborted') {
+        return theme.error; // Failed without any response, as bad as a 5xx
+    } else if (!status || status < 100 || status >= 600) {
         // All odd undefined/unknown cases
         return theme.mainColor;
     } else if (status >= 500) {
-        return highlights.red;
+        return theme.error;
     } else if (status >= 400) {
-        return highlights.orange;
+        return theme.warning;
     } else if (status >= 300) {
-        return highlights.darkBlue;
+        return theme.info;
     } else if (status >= 200) {
-        return highlights.lightGreen;
+        return theme.success;
     } else if (status === 101) {
-        return highlights.lightBlue; // Almost always a websocket, so special case to match
+        return theme.info; // Almost always a websocket, so special case to match
     } else if (status >= 100) {
-        return highlights.grey;
+        return theme.statusNeutral;
     }
 
     // Anything else weird.
@@ -244,12 +246,12 @@ export function getWebSocketCloseColor(closeCode: undefined | 'aborted' | number
         return theme.mainColor;
     } else if (closeCode === 1000 || closeCode === 1001) {
         // Closed OK or due to clean client/server shutdown
-        return highlights.lightGreen;
+        return theme.success;
     } else if (closeCode >= 1002 && closeCode <= 3000) {
         // Closed due to some protocol errors
-        return highlights.red;
+        return theme.error;
     } else if (closeCode >= 3000) {
-        return highlights.orange;
+        return theme.warning;
     }
 
     // Anything else weird.
@@ -273,5 +275,25 @@ export function getMethodColor(method: string): string {
         return highlights.lightBlue;
     } else {
         return highlights.grey;
+    }
+}
+
+/**
+ * The theme's colour for a request method, readable as text on list rows. The
+ * fixed palette in getMethodColor above still marks Modify's rule rows.
+ */
+export function getMethodThemeColor(method: string, theme: Theme): string {
+    switch (method) {
+        case 'GET':
+            return theme.methodGet;
+        case 'POST':
+            return theme.methodPost;
+        case 'PUT':
+        case 'PATCH':
+            return theme.methodPut;
+        case 'DELETE':
+            return theme.methodDelete;
+        default:
+            return theme.methodOther;
     }
 }

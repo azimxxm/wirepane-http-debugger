@@ -100,7 +100,7 @@ export class ApiSettingsCard extends React.Component<
                 <CollapsibleCardHeading onCollapseToggled={
                     cardProps.onCollapseToggled
                 }>
-                    API Settings
+                    API settings
                 </CollapsibleCardHeading>
             </header>
 

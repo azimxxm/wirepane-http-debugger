@@ -47,7 +47,7 @@ export const IconButton = styled((p: {
 
     &:not([disabled]) {
         &:hover, &:focus {
-            outline: none;
+            &:not(:focus-visible) { outline: none; }
             color: ${p => p.theme.popColor};
         }
     }
@@ -84,7 +84,7 @@ export const IconButtonLink = styled((p: {
     padding: 5px 10px;
 
     &:hover, &:focus {
-        outline: none;
+        &:not(:focus-visible) { outline: none; }
         color: ${p => p.theme.popColor};
     }
 `;

@@ -2,7 +2,6 @@ import * as _ from 'lodash';
 import { UAParser } from 'ua-parser-js';
 import { get } from 'typesafe-get';
 
-import { popColor } from '../../styles';
 import { SourceIcons, IconProps, SourceIconName } from '../../icons';
 
 export interface TrafficSource {
@@ -157,7 +156,9 @@ export const MANUALLY_SENT_SOURCE = {
     description: 'Sent manually from Wirepane',
     icon: {
         icon: 'PaperPlaneTilt',
-        color: popColor
+        // Wirepane's teal, as a fixed brand colour like the other clients' icons
+        // (at least 3:1 on light and dark rows):
+        color: '#0D9488'
     }
 };
 

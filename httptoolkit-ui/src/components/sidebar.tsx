@@ -37,9 +37,8 @@ const SidebarNav = styled.nav`
     color: ${p => p.theme.mainColor};
     z-index: 5;
 
-    border-right: 1px solid rgba(0,0,0,0.12);
+    border-right: 1px solid ${p => p.theme.containerBorder};
     box-sizing: border-box;
-    box-shadow: 0 0 30px rgba(0,0,0,${p => p.theme.boxShadowAlpha});
 
     font-size: ${p => p.theme.textSize};
     letter-spacing: -0.3px;
@@ -87,7 +86,7 @@ const SidebarSelectableItem = styled(Link)`
     cursor: pointer;
     user-select: none;
     &:hover, &:focus {
-        outline: none;
+        &:not(:focus-visible) { outline: none; }
         color: ${p => p.theme.popColor};
         opacity: 1;
     }
@@ -121,7 +120,7 @@ const SidebarLink = styled.a<{ highlight?: true }>`
     `};
 
     &:hover, &:focus {
-        outline: none;
+        &:not(:focus-visible) { outline: none; }
         color: ${p => p.highlight ? p.theme.mainColor : p.theme.popColor};
     }
 
@@ -143,7 +142,7 @@ const SidebarButton = styled(
     opacity: 0.8;
 
     &:hover, &:focus {
-        outline: none;
+        &:not(:focus-visible) { outline: none; }
         color: ${p => p.theme.popColor};
         opacity: 1;
     }

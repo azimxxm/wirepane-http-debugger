@@ -21,7 +21,7 @@ export class TlsTunnelDetailsPane extends React.Component<{
         return <PaneScrollContainer>
             <MediumCard>
                 <header>
-                    <h1>TLS Tunnel</h1>
+                    <h1>TLS tunnel</h1>
                 </header>
 
                 <ContentLabelBlock>Details</ContentLabelBlock>

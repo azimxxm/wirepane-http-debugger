@@ -4,11 +4,11 @@ import * as HarFormat from 'har-format';
 import { parseCurlCommand } from 'curl-as-har-request';
 
 import { styled } from '../../styles';
-import { Icon, ArrowIcon } from '../../icons';
+import { Icon } from '../../icons';
 
-import { getMethodColor } from '../../model/events/categorization';
+import { getMethodThemeColor } from '../../model/events/categorization';
 
-import { Ctrl } from '../../util/ui';
+import { Ctrl, isMac } from '../../util/ui';
 import { Button, Select, TextInput } from '../common/inputs';
 import { IconButton } from '../common/icon-button';
 
@@ -24,7 +24,7 @@ const SendRequestLineContainer = styled.form`
     display: flex;
 
     z-index: 1;
-    box-shadow: 0 2px 3px 0 rgba(0,0,0,${p => p.theme.boxShadowAlpha});
+    border-bottom: 1px solid ${p => p.theme.containerBorder};
 `;
 
 const MethodSelectArrow = styled(Icon).attrs(() => ({
@@ -42,13 +42,13 @@ const MethodSelectArrow = styled(Icon).attrs(() => ({
     pointer-events: none;
 `;
 
-const MethodSelect = styled(Select)`
+const MethodSelect = styled(Select)<{ httpMethod: string }>`
     border-radius: 0;
     border: none;
-    outline: none;
+    &:not(:focus-visible) { outline: none; }
     appearance: none;
 
-    border-left: 5px solid ${(p: { borderColor: string }) => p.borderColor};
+    border-left: 5px solid ${p => getMethodThemeColor(p.httpMethod, p.theme)};
 
     padding: 5px 0 5px 15px;
     font-size: ${p => p.theme.textInputFontSize};
@@ -91,7 +91,7 @@ const UrlInput = styled(TextInput)`
 
     font-size: ${p => p.theme.textSize};
 
-    &:focus {
+    &:focus:not(:focus-visible) {
         outline: none;
     }
 `;
@@ -103,21 +103,33 @@ const CopySnippetButton = styled(IconButton)`
     font-size: ${p => p.theme.textSize};
 `;
 
+// A labelled accent button, inset from the bar's edges so its focus ring has room:
 const SendButton = styled(Button)`
-    padding: 4px 18px 5px;
-    border-radius: 0;
+    flex-shrink: 0;
+    min-width: 88px;
+    margin: 5px 6px 5px 4px;
+    padding: 0 14px;
+    border-radius: 6px;
 
-    font-size: ${p => p.theme.textSize};
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+
+    font-size: ${p => p.theme.textInputFontSize};
+    font-weight: 600;
 
     > svg {
         padding: 0;
     }
-
-    &:focus {
-        outline: none;
-        background-color: ${p => p.theme.popColor};
-    }
 `;
+
+const SendShortcut = styled.kbd`
+    font-family: inherit;
+    font-weight: 400;
+`;
+
+const SEND_SHORTCUT = isMac ? '⌘↵' : 'Ctrl+↵';
 
 export const SendRequestLine = (props: {
     updateFromHar: (harRequest: HarFormat.Request) => void;
@@ -174,8 +186,6 @@ export const SendRequestLine = (props: {
         }
     }, [props.updateFromHar]);
 
-    const borderColor = getMethodColor(props.method);
-
     return <SendRequestLineContainer
         className='ignores-expanded' // This always shows, even if something is expanded
         onSubmit={sendRequest}
@@ -184,7 +194,7 @@ export const SendRequestLine = (props: {
             <MethodSelect
                 value={props.method}
                 onChange={updateMethodFromEvent}
-                borderColor={borderColor}
+                httpMethod={props.method}
             >
                 { validMethods.map((methodOption) =>
                     <option
@@ -200,7 +210,7 @@ export const SendRequestLine = (props: {
         <UrlInput
             type='url'
             spellCheck='false'
-            placeholder='https://example.com/hello?name=world or paste a cURL command'
+            placeholder='Enter a URL or paste a cURL command'
             required={true}
 
             value={props.url}
@@ -218,10 +228,11 @@ export const SendRequestLine = (props: {
             type='submit'
             disabled={props.isSending}
             title={`Send this request (${Ctrl}+Enter)`}
+            aria-keyshortcuts={isMac ? 'Meta+Enter' : 'Control+Enter'}
         >
             { props.isSending
                 ? <Icon spin fixedWidth={true} icon={['fas', 'spinner']} />
-                : <ArrowIcon direction='right' />
+                : <>Send <SendShortcut aria-hidden='true'>{ SEND_SHORTCUT }</SendShortcut></>
             }
         </SendButton>
     </SendRequestLineContainer>;

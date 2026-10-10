@@ -295,7 +295,7 @@ const SummaryRow = styled.button<{
     overflow: hidden;
 
     &:hover { color: ${p => p.theme.popColor}; }
-    &:focus { outline: none; color: ${p => p.theme.popColor}; }
+    &:focus { &:not(:focus-visible) { outline: none; } color: ${p => p.theme.popColor}; }
 `;
 
 const ToggleIcon = styled(Icon)`

@@ -113,7 +113,7 @@ const SearchBox = styled(TextInput)`
     box-shadow: 0 0 5px 2px rgba(0,0,0,${p => p.theme.boxShadowAlpha});
 
     :focus {
-        outline: none;
+        &:not(:focus-visible) { outline: none; }
         border-color: ${p => p.theme.inputBorder};
     }
 `;

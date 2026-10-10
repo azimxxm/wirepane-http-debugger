@@ -39,7 +39,7 @@ interface CardProps extends React.HTMLAttributes<HTMLElement> {
     className?: string;
     disabled?: boolean;
 
-    // The header alignment - defaults to right if not set
+    // The header alignment - defaults to left if not set
     headerAlignment?: 'left' | 'right';
 }
 
@@ -47,7 +47,7 @@ const Card = styled.section.attrs((p: CardProps) => ({
     onClick: !p.disabled ? p.onClick : undefined,
     onKeyDown: !p.disabled ? p.onKeyDown : undefined,
     tabIndex: !p.disabled ? p.tabIndex : undefined,
-    headerAlignment: p.headerAlignment ?? 'right'
+    headerAlignment: p.headerAlignment ?? 'left'
 }))`
     box-sizing: border-box;
 
@@ -59,7 +59,7 @@ const Card = styled.section.attrs((p: CardProps) => ({
         cursor: pointer;
 
         &:hover {
-            box-shadow: 0 2px 20px 0 rgba(0,0,0,${p => p.theme.boxShadowAlpha * 2});
+            box-shadow: 0 0 0 1px ${p => p.theme.inputBorder};
         }
 
         &:active {
@@ -69,13 +69,13 @@ const Card = styled.section.attrs((p: CardProps) => ({
 
     background-color: ${p => p.theme.mainBackground};
     border-radius: 4px;
-    box-shadow: 0 2px 10px 0 rgba(0,0,0,${p => p.theme.boxShadowAlpha});
+    box-shadow: 0 0 0 1px ${p => p.theme.containerBorder};
 
     position: relative;
 
     > header h1, > h1 {
         font-size: ${p => p.theme.headingSize};
-        font-weight: bold;
+        font-weight: 600;
     }
 
     > header {
@@ -106,9 +106,8 @@ export const MediumCard = styled(Card)`
     margin-bottom: 20px;
 
     > header, > h1 {
-        text-transform: uppercase;
         text-align: ${p => p.headerAlignment};
-        color: ${p => p.theme.containerWatermark};
+        color: ${p => p.theme.mainColor};
 
         &:not(:last-child) {
             margin-bottom: 20px;
@@ -137,7 +136,7 @@ export interface CollapsibleCardProps {
     // left or right of the whole card to indicate up/downstream
     direction?: 'left' | 'right';
 
-    // The header alignment - defaults to right if not set
+    // The header alignment - defaults to left if not set
     headerAlignment?: 'left' | 'right';
 
     ariaLabel: string;
@@ -168,7 +167,7 @@ export class CollapsibleCard extends React.Component<
             collapsed={this.props.collapsed}
             expanded={this.props.expanded ?? false}
             direction={this.props.direction}
-            headerAlignment={this.props.headerAlignment ?? 'right'}
+            headerAlignment={this.props.headerAlignment ?? 'left'}
 
             aria-expanded={collapsable
                 ? !this.props.collapsed
@@ -214,7 +213,7 @@ export class CollapsibleCard extends React.Component<
                         key='collapse-icon'
                         collapsed={collapsed}
                         onClick={this.toggleCollapse}
-                        headerAlignment={headerAlignment ?? 'right'}
+                        headerAlignment={headerAlignment ?? 'left'}
                     />
                 )
             );
@@ -315,7 +314,7 @@ const CollapsibleCardContainer = styled(MediumCard)<{
             color: ${p => p.theme.popColor};
         }
 
-        outline: none;
+        &:not(:focus-visible) { outline: none; }
         border-color: ${p => p.theme.popColor};
     }
 `;

@@ -37,7 +37,7 @@ export const SendRequestHeadersCard = observer(({
                 />
             </CollapsingButtons>
             <CollapsibleCardHeading onCollapseToggled={cardProps.onCollapseToggled}>
-                Request Headers
+                Request headers
             </CollapsibleCardHeading>
         </header>
         <SendCardScrollableWrapper>

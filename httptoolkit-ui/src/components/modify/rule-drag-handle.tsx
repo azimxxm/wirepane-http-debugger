@@ -14,7 +14,7 @@ const FloatingDragHandle = styled.div`
     opacity: 0;
 
     :focus, :active {
-        outline: none;
+        &:not(:focus-visible) { outline: none; }
         opacity: 0.5;
         color: ${p => p.theme.popColor};
     }

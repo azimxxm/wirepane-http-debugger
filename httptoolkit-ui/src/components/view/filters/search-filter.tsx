@@ -32,8 +32,10 @@ const CLEAR_BUTTON_WIDTH = '30px';
 const SearchFilterBox = styled.div<{ hasContents: boolean }>`
     position: relative;
 
+    /* The input inside has no outline of its own, so the whole box shows focus */
     &:focus-within {
-        border-color: ${p => p.theme.highlightColor};
+        outline: 2px solid ${p => p.theme.focusRing};
+        outline-offset: -1px;
     }
 
     flex-grow: 1;

@@ -195,7 +195,7 @@ const CollapsibleTrigger = styled((p: {
     cursor: pointer;
     user-select: none;
 
-    outline: none;
+    &:not(:focus-visible) { outline: none; }
     &:focus {
         color: ${p => p.theme.popColor};
     }

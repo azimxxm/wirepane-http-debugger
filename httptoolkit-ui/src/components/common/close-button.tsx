@@ -25,7 +25,6 @@ export const CloseButton = styled(Icon).attrs((props: CloseButtonProps) => ({
     color: ${p => p.theme!.mainColor};
 
     &:focus-visible {
-        outline: none;
         color: ${p => p.theme!.popColor};
     }
 

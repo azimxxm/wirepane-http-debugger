@@ -44,7 +44,7 @@ export const StatusCode = styled((props: {
         box-sizing: content-box;
     }
 
-    font-weight: bold;
+    font-weight: 600;
 
     display: flex;
     align-items: center;
@@ -57,10 +57,13 @@ export const StatusCode = styled((props: {
         padding: 5px;
     }
 
-    color: ${props => getStatusColor(
-        (props.status === 'WS:open' || props.status === 'WS:closed')
-            ? undefined
-            : props.status,
-        props.theme
-    )};
+    color: ${props => props.status === undefined
+        ? props.theme.containerWatermark // Still waiting: a muted spinner
+        : getStatusColor(
+            (props.status === 'WS:open' || props.status === 'WS:closed')
+                ? undefined
+                : props.status,
+            props.theme
+        )
+    };
 `;

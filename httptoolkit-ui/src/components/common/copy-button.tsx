@@ -12,7 +12,7 @@ const CopyIconButton = styled(IconButton)`
 
     &:hover, &:focus {
         color: ${p => p.theme.popColor};
-        outline: none;
+        &:not(:focus-visible) { outline: none; }
     }
 
     &:active {

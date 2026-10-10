@@ -1,7 +1,8 @@
 import React from "react";
 import { inject, observer } from "mobx-react";
+import * as polished from 'polished';
 
-import { styled, popColor } from "../../styles";
+import { styled } from "../../styles";
 import { Icon } from "../../icons";
 
 import { UiStore } from "../../model/ui/ui-store";
@@ -19,8 +20,8 @@ export const ProPill = styled(inject('uiStore')((p: {
 ))`
     font-size: ${p => p.theme.textSize};
 
-    color: ${popColor};
-    background-color: rgba(225,66,31,0.2);
+    color: ${p => p.theme.popColor};
+    background-color: ${p => polished.rgba(p.theme.popColor, 0.2)};
 `;
 
 export const ProHeaderPill = styled(ProPill)`
