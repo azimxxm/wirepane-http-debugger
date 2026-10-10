@@ -46,10 +46,12 @@ Finder'dan ochish: `Start Wirepane.command` faylini ikki marta bosing. Log'lar `
 
 ## Telefon trafigi
 
-Proxy Mac'da `8000`-portda ishlaydi va Wi-Fi tarmog'idan ochiq. Mac IP'sini bilish: `ipconfig getifaddr en0`.
+Eng oson yo'l: app'da **Intercept** → **iPhone or iPad** yoki **Android** kartasini bosing. Ekranda Mac IP'si, port, sertifikat uchun QR va qadamlar chiqadi. Telefon ulangach, "iPhone connected" holati ham ko'rinadi. Port app qayta yuklanganda ham o'zgarmaydi.
+
+Qo'lda sozlash: proxy Mac'da ishlaydi (port status bar'da ko'rinadi) va Wi-Fi tarmog'idan ochiq. Mac IP'sini bilish: `ipconfig getifaddr en0`.
 
 - **iPhone:**
-  1. Wi-Fi → (i) → Configure Proxy → Manual. Server: Mac IP, port: `8000`.
+  1. Wi-Fi → (i) → Configure Proxy → Manual. Server: Mac IP, port: status bar'dagi port.
   2. Safari'da `http://amiusing.httptoolkit.tech/certificate` ni oching va profilni yuklab oling.
   3. Settings → General → VPN & Device Management bo'limida profilni o'rnating.
   4. Settings → General → About → Certificate Trust Settings bo'limida **HTTP Toolkit CA**ni yoqing.
@@ -95,10 +97,12 @@ O'zgartirgan kodingiz saqlanib qoladi. Conflict chiqsa, uni oddiy `git merge`dag
   5. Apple Developer sertifikatisiz tarqatish: Apple Silicon (`arm64`) uchun ad-hoc imzolangan `.app` yoki `.pkg`. Brauzerdan yuklangan imzosiz `.app` yoki `.pkg`ni Gatekeeper to'xtatadi: foydalanuvchi System Settings → Privacy & Security → **Open Anyway** bosishi kerak bo'ladi. `curl` bilan yuklangan faylga esa quarantine belgisi qo'yilmaydi, shuning uchun `curl … | sh` install skripti ogohlantirishsiz o'rnatadi.
 - [x] Barcha Pro feature'lar hamma uchun bepul. Akkaunt, login va to'lov yo'q. Map Local, Map Remote, mock, rewrite, delay, block, Settings (proxy, connection, API, themes), saqlanadigan rules, HAR import/export va MCP/CLI cheklovsiz ishlaydi.
 - [ ] Proxyman'dagi feature'lar:
+  - [x] Telefon ulash ekrani: iPhone va Android uchun IP, port, sertifikat QR'i va jonli holat, port qayta yuklashda o'zgarmaydi.
   - **Qo'shish kerak:**
-    - P1: Access Control (LAN'dan kim ulana olishi), macOS system proxy toggle, iOS Simulator auto-setup, telefon ulash uchun QR.
+    - P1: Access Control (LAN'dan kim ulana olishi), macOS system proxy toggle, iOS Simulator auto-setup.
     - P2: Highlight/Comment, Diff, Network Conditions, DNS Spoofing.
     - P3: Scripting, Reverse Proxy, native Swift + SwiftNIO versiya.
+- [x] Send: Form, Multipart (fayl, rasm, media), Binary, GraphQL (schema, autocomplete, docs) va WebSocket client ([reja](docs/send-v2-plan.md)).
 - [ ] Collections va file orqali ulashish, Bruno package'lari asosida ([reja](docs/collections-plan.md)): API'ni hujjati bilan bitta faylga export qilish (Postman v2.1 JSON yoki Bruno). Secret'lar faylga tushmaydi. Oluvchi faylni import qilsa, hammasi tayyor ochiladi.
 - [ ] Postman'dan olinadigan feature'lar ([tadqiqot](docs/research/postman.md)):
   - P1:

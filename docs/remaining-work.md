@@ -2,7 +2,7 @@
 
 > **Bu fayl keyingi sessiyalar uchun asosiy ish ro'yxati.**
 >
-> **Holat:** branch `feature/rebrand`, 28 commit, hali push qilinmagan. Nima tugagani `PROJECT_LOG.md`da.
+> **Holat:** branch `feature/rebrand`, hali push qilinmagan. Nima tugagani `PROJECT_LOG.md`da.
 >
 > **Har bir ish uchun tartib:**
 >
@@ -16,68 +16,56 @@
 
 | #   | Ish                                                                 | Nega                                                     | Hajm      |
 | --- | ------------------------------------------------------------------- | -------------------------------------------------------- | --------- |
-| 1   | **Send v2:** fayl, rasm va media yuborish, Form, GraphQL, WebSocket | API testing'ning asosiy qismi, egasi so'radi             | L         |
-| 2   | **Connect a phone** ekrani va barqaror port                         | iPhone va Android'ni ulash hozir chalkash, port siljiydi | M         |
+| 1   | ~~**Send v2:** fayl, rasm va media yuborish, Form, GraphQL, WebSocket~~ **tayyor** (2026-10-10) | API testing'ning asosiy qismi, egasi so'radi             | L         |
+| 2   | ~~**Connect a phone** ekrani va barqaror port~~ **tayyor** (2026-10-10) | iPhone va Android'ni ulash hozir chalkash, port siljiydi | M         |
 | 3   | **Dizayn 3-bosqich:** menu bar, ⌘K, ⌘,                              | Desktop konventsiyalari                                  | M         |
 | 4   | Dizaynni qayta tekshirish (`design-critic`)                         | Qabul mezonlari                                          | S         |
 | 5   | **iPhone testi** egasi bilan                                        | Haqiqiy qurilmada tekshiruv                              | S         |
-| 6   | **Maxfiylik:** upstream'ga telemetriya yuborilmasligi               | "Hech narsa sizib chiqmaydi" va'dasi                     | S, **P0** |
+| 6   | **Maxfiylik:** upstream'ga telemetriya yuborilmasligi (asosiy qismi tayyor) | "Hech narsa sizib chiqmaydi" va'dasi                     | S, **P0** |
 | 7   | O'z `.app`imizni yig'ish va tarqatish                               | Oxirgi natija                                            | L         |
 | 8   | Collections davomi: testlar, runner, Keychain                       | Postman bilan teng bo'lish                               | L         |
 | 9   | Postman va Proxyman'dan qolgan feature'lar                          | "Bitta dastur" maqsadi                                   | XL        |
 
 ---
 
-## 1. Send v2
+## 1. Send v2: tayyor (2026-10-10)
 
-**Hozir:** Send body faqat matn turlarini qabul qiladi: Text, JSON, XML, HTML, CSS, JS (`httptoolkit-ui/src/model/events/content-types.ts`, `EditableContentTypes`). View esa ushlangan WebSocket, GraphQL, multipart va rasmlarni allaqachon ko'rsatadi.
+Reja va tafsilotlar: [`docs/send-v2-plan.md`](send-v2-plan.md).
 
-**Qilish kerak:**
+**Bajarildi:**
 
-- **Body rejimlari.**
-  - **Form** (`application/x-www-form-urlencoded`): kalit va qiymat jadvali.
-  - **Multipart** (`multipart/form-data`): matn maydonlari va fayl maydonlari (rasm, video, istalgan fayl). Fayl tanlash va drag & drop bo'lsin. Har bir fayl uchun Content-Type avtomatik aniqlansin.
-  - **Binary:** bitta faylning o'zi body bo'ladi.
-  - Request server orqali yuboriladi, shuning uchun fayl baytlari server'ga to'g'ri yetib borishi kerak (base64 yoki stream). Avval tekshiring: `send-store.ts` → server `send` API.
-- **Collections bilan bog'lash.** Bruno modelida `multipartForm`, `formUrlEncoded` va `file` body rejimlari bor (`bruno/packages/bruno-schema`). Mapping: `src/model/collections/request-mapping.ts`. Postman v2.1'ga export: `formdata` (`type: file`) va `urlencoded`. Fayl yo'llari share faylga tushganda ular oluvchida mavjud bo'lmaydi. Share dialogida shu haqda ogohlantirish chiqsin.
-- **GraphQL rejimi.**
-  - Query muharriri (Monaco va `monaco-graphql`, MIT) va Variables (JSON).
-  - Schema introspection tugmasi, shu schema bo'yicha autocomplete va hujjat paneli. Bruno'da `bruno-graphql-docs` package'i bor.
-  - Collection'ga GraphQL request sifatida saqlansin. Bruno'da `graphql` turi bor.
-- **WebSocket client.**
-  - URL, header'lar va subprotocol bilan ulanish.
-  - Text, JSON va binary xabar yuborish.
-  - Kelgan va ketgan xabarlar logi (vaqt va hajm bilan), ulanishni uzish.
-  - Saqlangan xabarlar collection'da tursin.
-  - Ulanish server tomonida bo'lishi kerak (yangi endpoint), shunda proxy va sertifikat sozlamalari ishlaydi.
-- **Keyinroq:** Socket.IO, jonli SSE oqimi (hozir SSE oxirigacha ko'rinmaydi), gRPC (`bruno/packages/bruno-requests` da tayyor kod bor).
+- **Body rejimlari:** Form, Multipart (matn va fayl maydonlari, fayl tanlash va drag & drop, Content-Type avtomatik aniqlanadi) va Binary. Fayllar IndexedDB'da saqlanadi va body Send bosilganda yig'iladi. Server `/client/send` 256 MB gacha qabul qiladi.
+- **GraphQL rejimi:** query va variables muharrirlari, schema introspection, autocomplete, hover, validation va docs paneli (`graphql-language-service@5.7.0`).
+- **WebSocket client:** ulanishni server ochadi (`/client/ws/*`), shuning uchun proxy va sertifikat sozlamalari ishlaydi. Text, JSON va binary xabarlar, saqlangan xabarlar, xabarlar logi va handshake xatolari bor.
+- **Collections:** barcha rejimlar Bruno item'lariga yo'qotishsiz saqlanadi. Fayllar collection'ning `files/` papkasida turadi va Bruno zip'ga kiradi. Postman export'i form, multipart, file va graphql rejimlarini oladi. WebSocket request'lari Postman v2.1 formatiga sig'maydi, shuning uchun export'da tushib qoladi va bu haqda ogohlantirish chiqadi.
+- **Qabul mezonlari bajarildi:** httpbin multipart (matn va rasm), countries GraphQL schema'si va autocomplete, `wss://echo.websocket.org` echo, collection'ga saqlash va export.
 
-**Qabul mezonlari:**
+**Qolgan kichik ishlar:**
 
-- `httpbin.org/post`ga rasm va matn maydonli multipart yuborilganda javobda fayl ko'rinadi.
-- `https://countries.trevorblades.com` schema'si yuklanadi va query yozganda autocomplete ishlaydi.
-- `wss://echo.websocket.org` ga yuborilgan xabar qaytib keladi.
-- Uchala tur ham collection'ga saqlanadi va Postman'ga export qilinadi.
+- View'dan qayta yuborilgan multipart request raw rejimda ochiladi (to'g'ri yuboriladi, lekin maydonlarga ajratilmaydi).
+- WebSocket sessiyalari View'ga yozilmaydi. View'da ushlangan WebSocket'ni Resend qilib bo'lmaydi.
+- Hech bir request ishlatmaydigan collection fayllari `files/` papkasidan tozalanmaydi.
+- Export redaction'i `code` nomli har qanday kalitni secret deb hisoblaydi: GraphQL'dagi `{"code": "UZ"}` export'da `{{code}}` bo'lib qoladi (`httptoolkit-server/src/collections/redaction.ts`).
+- 100 MB chegarasi aslida 100 MiB, fayl hajmi esa o'nlik MB'da ko'rsatiladi.
+- **Keyinroq:** Socket.IO, jonli SSE oqimi, gRPC (`bruno/packages/bruno-requests`).
 
-## 2. Connect a phone
+## 2. Connect a phone: tayyor (2026-10-10)
 
-**Hozir:**
+**Bajarildi:**
 
-- "iPhone or iPad" kartasi HTTP Toolkit'ning `httptoolkit.com/docs/guides/ios` sahifasini ochadi, app ichida hech narsa ko'rsatmaydi.
-- Android uchun "Android (QR code)" bor. U HTTP Toolkit'ning Android ilovasini ishlatadi.
-- **Port muammosi:** UI har safar qayta yuklanganda yangi proxy sessiya ochiladi va port suriladi (8000 → 8004 → 8000 → 8001 → 8002). Eski sessiyalar portni bir muddat band qilib turadi. Bu dev rejimda HMR tufayli kuchli seziladi, lekin oyna qayta yuklanganda production'da ham bo'lishi mumkin.
+- **iPhone or iPad** kartasi app ichidagi `/intercept/iphone` ekranini ochadi. Unda:
+  - Mac IP'si va port nusxa olish tugmasi bilan;
+  - 6 qadam va sertifikat sahifasi uchun QR;
+  - jonli "iPhone connected" holati (HTTPS o'tyaptimi, shu ham ko'rinadi);
+  - AirDrop uchun `.crt` saqlash va oxirida proxy'ni o'chirish eslatmasi.
+- **Android** kartasi `/intercept/android` ekranini ochadi: HTTP Toolkit ilovasi uchun QR, ADB, qo'lda proxy sozlash va Android 7+ dagi HTTPS cheklovining izohi.
+- **Barqaror port.** Sababi get-port'ning 15–30 soniyalik port qulfi va dev'dagi `module.hot.accept()` edi: u yangi sessiya ochib, eskisini portni band qilgan holda qoldirardi. Endi reload oldingi portni aniq raqami bilan so'raydi (`model/proxy-port-memory.ts`).
 
-**Qilish kerak:**
+**Qolgan kichik ishlar:**
 
-- **App ichida "Connect iPhone or iPad" ekrani:**
-  - Mac'ning Wi-Fi IP'si va proxy port katta, nusxa olinadigan qilib ko'rsatilsin (IP'ni server beradi: `os.networkInterfaces()`).
-  - Sertifikat havolasi `http://amiusing.httptoolkit.tech/certificate` uchun QR kod. QR **proxy sozlangandan keyin** skanerlanishi kerak, shu ham yozilsin.
-  - Qadamlar: Wi-Fi → Configure Proxy → Manual → profil o'rnatish → **Certificate Trust Settings**da "HTTP Toolkit CA"ni yoqish → tekshiruv sahifasi.
-  - Jonli holat: "Waiting for iPhone…" va iOS User-Agent'li birinchi request kelganda "✓ iPhone connected".
-  - Muqobil yo'l: CA faylini `.crt` qilib saqlash (AirDrop uchun).
-  - Ish tugagach proxy'ni o'chirish eslatmasi.
-- **Barqaror port.** Telefon sozlamasi o'zgarmasligi uchun proxy oldingi portni qayta ishlatsin: eski sessiya yopilganda port bo'shatilsin, yoki Settings'da "fixed port" bo'lsin. Upstream koddagi minimal o'zgarish bilan qiling.
-- **Android uchun shunga o'xshash ekran:** QR va ADB. HTTPS cheklovi ham tushuntirilsin: Android 7+ ilovalari foydalanuvchi o'rnatgan CA'ga ishonmaydi, faqat debug build va `network_security_config` bilan ishlaydi.
+- Dark mode'da Apple client ikonkasi qora chiziladi va ko'rinmaydi (upstream `ClientIcon`).
+- Unload bo'lmasdan yopilgan sahifalarning proxy sessiyalari server qayta ishga tushguncha qoladi. Buni tuzatish uchun server tomonida idle sessiyalarni tozalash kerak.
+- Haqiqiy iPhone va Android'da hali tekshirilmagan (5-bo'lim).
 
 ## 3. Dizayn 3-bosqich
 

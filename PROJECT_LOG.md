@@ -41,16 +41,29 @@
   - Commit `79db50b` on branch `worktree-agent-a8cb887ff544861c2`, worktree `.claude/worktrees/agent-a8cb887ff544861c2`.
   - Merge it AFTER the Collections UI is committed: `git cherry-pick 79db50b`, then `scripts/build-bruno.sh`, then `cd httptoolkit-server && npm ci`, then `npm run test:unit`. After that, remove the worktree and branch.
 
+### Send v2, phones and privacy (later the same day)
+
+- **Send v2** (plan: `docs/send-v2-plan.md`), built by 4 parallel agents on a shared foundation (`model/send/send-extras.ts`, `send-files.ts`, `build-request.ts`):
+  - Form, Multipart (files, images, media, drag & drop) and Binary bodies; files kept in IndexedDB; `/client/send` takes up to 256 MB.
+  - GraphQL mode: schema introspection through the server, autocomplete, hover, validation, docs panel (`graphql-language-service@5.7.0`).
+  - WebSocket client: the server opens the connection (`/client/ws/*`), composer, saved messages, message log.
+  - Collections: every mode saved to Bruno items, files in the collection's `files/` folder and in the Bruno zip; Postman export gets file bodies and warns about WebSocket requests.
+  - Re-verified together after merging: UI tests 1251, server tests 91, all four acceptance scripts pass (httpbin multipart, countries GraphQL, wss echo, collections save/export).
+- **Connect a phone:** in-app iPhone and Android screens (IP, port, certificate QR, live connected status). The proxy port now stays the same across reloads (get-port's lock and leaked dev sessions were the cause).
+- **Privacy:** no built-in HTTP Toolkit Sentry DSN in the server or desktop app; the server ignores self-update requests (it used to fetch the official server from HTTP Toolkit's GitHub).
+- **Fixed:** pasting a full URL into the empty Send URL field gave `https://https://...`.
+- **Seen once, not reproduced:** "Startup failed: Syntax compatibility error" in the owner's window while agents were editing and installing packages; a monitor saw no repeat over 32 reloads.
+
 > The full list of remaining work, with details and acceptance criteria, is in `docs/remaining-work.md`.
 
 ### Next, in order
 
 1. (done) Commit the Collections UI and merge B1.
-2. **Send v2:**
+2. (done) **Send v2:**
    - body modes Form, Multipart (files/images/media) and Binary;
    - GraphQL mode (query, variables, schema autocomplete);
    - WebSocket client.
-3. **Connect a phone** screen instead of the upstream docs link:
+3. (done) **Connect a phone** screen instead of the upstream docs link:
    - IP and port shown big, QR for `http://amiusing.httptoolkit.tech/certificate`;
    - steps and a live "iPhone connected" status;
    - a stable port (dev reloads leave old proxy sessions behind and move the port).
