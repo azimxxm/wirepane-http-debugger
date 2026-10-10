@@ -4,6 +4,5 @@
 node_modules/
 .playwright-mcp/
 
-# Own notes stay local, only README.md is tracked at the root
-/*.md
-!/README.md
+# claude-agents: per-developer plugin profile (do not commit)
+.claude/settings.local.json

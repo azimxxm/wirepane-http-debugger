@@ -1,6 +1,6 @@
 # HTTP Toolkit — shaxsiy build
 
-**Maqsad:** [HTTP Toolkit](https://httptoolkit.com) ochiq kodi asosida Proxyman'ga o'xshash, bepul HTTP debugger yasash. Hammasi bitta repoda: UI, server va desktop bitta app bo'lib ishga tushadi. Oxirgi natija — bitta o'rnatiladigan `.app` paket.
+**Maqsad:** developerlar va QA uchun bepul, eng yaxshi HTTP debugger yasash. U Proxyman'ga muqobil bo'ladi va o'z brendimiz bilan chiqadi. Asosi — [HTTP Toolkit](https://httptoolkit.com) ochiq kodi. Hammasi bitta repoda: UI, server va desktop bitta app bo'lib ishga tushadi. Oxirgi natija — o'z nomimiz va bundle ID'miz bilan bitta o'rnatiladigan `.app` paket.
 
 > Bu rasmiy HTTP Toolkit emas. Original loyiha: [httptoolkit.com](https://httptoolkit.com).
 
@@ -64,6 +64,9 @@ O'zgartirgan kodingiz saqlanib qoladi. Conflict chiqsa, uni oddiy `git merge`dag
 ## Yo'l xaritasi: bitta `.app`
 
 - [x] Hamma kod bitta repoda va local source'dan bitta app bo'lib ishlaydi (dev rejim).
+- [ ] O'z brendimiz: yangi nom (hali tanlanmoqda), ikonka, bundle ID (`appId`), `productName`, oyna va menu sarlavhalari hamda UI'dagi "HTTP Toolkit" matnlari.
+  - "HTTP Toolkit" nomi original loyihaga tegishli. AGPL kodni ishlatishga ruxsat beradi, lekin nomni ishlatishga emas. `LICENSE` va "based on HTTP Toolkit" degan attribution saqlanib qoladi.
+  - Faqat foydalanuvchi ko'radigan joylar o'zgaradi. Ichki nomlar (package nomlari, `httptoolkit` config papkasi) o'zgarmaydi. Shunda `sync-upstream.sh` kamroq conflict beradi va telefonlarga o'rnatilgan CA ishlashda davom etadi.
 - [ ] O'zimizning `.app`imizni yig'ish. Buning uchun:
   1. `httptoolkit-server/src/constants.ts` — o'z UI origin'imizga ruxsat berish (hozir faqat `https://app.httptoolkit.tech` ruxsat etilgan).
   2. Auto-update'ni o'chirish: `httptoolkit-server/src/index.ts` (`update-requested`) va `package.json` → `oclif.update`. Aks holda rasmiy server bizning server o'rniga yuklanib qoladi.
