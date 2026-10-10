@@ -118,16 +118,25 @@ Tafsilotlar `docs/design-plan.md` (Phase 3) va `docs/design/critique-2026-10-10.
 
 ## 6. Maxfiylik (P0, release'dan oldin albatta)
 
-- **Server.** `httptoolkit-server/src/error-tracking.ts:22`da HTTP Toolkit'ning Sentry DSN'i qattiq yozilgan va prod build'da yoqiladi. Uni olib tashlash yoki o'chirish kerak.
-- **UI.** `src/metrics.ts` (PostHog, `events.httptoolkit.tech`) va `src/errors.ts` (Sentry) faqat build paytida `POSTHOG_KEY` yoki DSN berilsa yoqiladi. Bizning build'da berilmaydi, lekin kafolat uchun kodda o'chirib qo'ying.
-- **Boshqa tarmoq so'rovlari.** App upstream serverlarga yana qanday so'rov yuborishini tekshiring: update check, `accounts.httptoolkit.tech`, `httptoolkit.com` docs va API spec'lar. Ro'yxat tuzing.
+- [x] **Server va desktop Sentry'si** (2026-10-10). HTTP Toolkit'ning qattiq yozilgan DSN'lari olib tashlandi: `httptoolkit-server/src/error-tracking.ts` va `httptoolkit-desktop/src/errors.ts`. Endi xatolar faqat `SENTRY_DSN` aniq berilsa yuboriladi.
+- [x] **Server o'zini yangilamaydi** (2026-10-10). UI har startda `POST /update` so'raydi. Oldin server `oclif update` bilan HTTP Toolkit'ning GitHub release'laridan rasmiy server'ni yuklardi (`logs/server.log`: "Updating CLI... fetching manifest"). Endi so'rov e'tiborsiz qoldiriladi (`httptoolkit-server/src/index.ts`).
+- [ ] **UI.** `src/metrics.ts` (PostHog, `events.httptoolkit.tech`) va `src/errors.ts` (Sentry) faqat build paytida `POSTHOG_KEY` yoki `SENTRY_DSN` berilsa yoqiladi. Bizning build'da berilmaydi. `.app` build skriptida bu ikkalasi bo'sh qolishini tekshirish kerak.
+- [ ] **Qolgan tarmoq so'rovlari** (2026-10-10 dagi audit):
+  - `app.httptoolkit.tech`: desktop'ning default `APP_URL`i (`httptoolkit-desktop/src/index.ts:35`, `stop-server.ts:48`). `.app`da o'z UI build'imizga almashtirilsin (7-bo'lim, 3-band).
+  - `github.com/httptoolkit/httptoolkit-android/releases/latest`: Android interception'da APK yuklash (`fetch-apk.ts`). Bu funksional so'rov.
+  - `android.httptoolkit.tech/connect`: Android ilovasi uchun deep link, funksional.
+  - `amiusing.httptoolkit.tech`: telefonga sertifikat o'rnatish sahifasi, funksional.
+  - `httptoolkit.com/pricing`: faqat MCP/CLI matnlarida qolgan, hech qachon ko'rinmaydi.
 
 ## 7. O'z `.app`imiz
 
 README'dagi "O'zimizning `.app`imizni yig'ish" bo'limi:
 
 1. `httptoolkit-server/src/constants.ts`: o'z UI origin'imiz uchun ruxsat.
-2. Auto-update'ni o'chirish: `update-requested`, `oclif.update`.
+2. Auto-update'ni o'chirish.
+   - Server tomoni tayyor: `update-requested` e'tiborsiz qoldiriladi.
+   - Qoldi: `package.json`dagi `oclif.update`.
+   - **Muhim.** oclif'ning bin skripti `~/.local/share/httptoolkit-server/client/` ichidagi eng yangi server versiyasini ishga tushiradi (`httptoolkit-desktop/src/index.ts`, `cleanupOldServers`). Bu papka rasmiy HTTP Toolkit app bilan umumiy. Ya'ni Mac'da rasmiy app ham o'rnatilgan bo'lsa, Wirepane.app ularning yangilangan server'ini ishga tushirib yuborishi mumkin. Wirepane'ga o'z papkasini bering (`OCLIF_CLIENT_HOME` yoki oclif `dirname`).
 3. UI build'ini app ichiga qo'shish va `APP_URL`.
 4. `build-setup/setup-server.ts` server'ni GitHub release'dan emas, `../httptoolkit-server` dan yig'sin.
 5. `package.json`dagi `extraMetadata.author` va `maintainer` o'z ma'lumotlarimizga almashtirilsin.
