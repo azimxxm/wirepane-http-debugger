@@ -1,0 +1,68 @@
+{
+  "environments": [
+    {
+      "uid": "FfmX1qYW2EaOpLWeNPLKM",
+      "name": "local",
+      "variables": [
+        {
+          "uid": "rfrIqlfmuyFD4560ciK04",
+          "name": "host",
+          "value": "http://localhost:3000",
+          "type": "text",
+          "enabled": true,
+          "secret": false,
+          "description": "Single-line host desc"
+        },
+        {
+          "uid": "3WEAWueN0Ov99uOX0uuuM",
+          "name": "secretToken",
+          "value": "",
+          "type": "text",
+          "enabled": true,
+          "secret": true,
+          "description": "Secret line one\nSecret line two"
+        }
+      ]
+    },
+    {
+      "uid": "PYtEmbl0WSSE7NQcYeGx7",
+      "name": "prod",
+      "variables": [
+        {
+          "uid": "tdqX6Yln9DYQYNievEJR1",
+          "name": "host",
+          "value": "https://echo.usebruno.com",
+          "type": "text",
+          "enabled": true,
+          "secret": false,
+          "description": "Single-line host desc"
+        },
+        {
+          "uid": "fSxTRpngl8fxkhrl3z7hA",
+          "name": "secretToken",
+          "value": "",
+          "type": "text",
+          "enabled": true,
+          "secret": true,
+          "description": "Secret line one\nSecret line two"
+        }
+      ]
+    },
+    {
+      "uid": "Kq2vDdmTzXaLm4hRpWs8N",
+      "name": "derived",
+      "extends": "local",
+      "variables": [
+        {
+          "uid": "9bMxQnv3RtYWk1cLdEuZ7",
+          "name": "region",
+          "value": "eu-west-1",
+          "type": "text",
+          "enabled": true,
+          "secret": false
+        }
+      ]
+    }
+  ],
+  "activeGlobalEnvironmentUid": "FfmX1qYW2EaOpLWeNPLKM"
+}

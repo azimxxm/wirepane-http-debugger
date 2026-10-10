@@ -1,0 +1,201 @@
+import styled from 'styled-components';
+
+const StyledWrapper = styled.div`
+  width: 40rem;
+  max-width: 100%;
+
+  .content {
+    .title {
+      font-size: ${(props) => props.theme.font.size.base};
+      color: ${(props) => props.theme.text};
+    }
+
+    .description {
+      font-size: ${(props) => props.theme.font.size.sm};
+      color: ${(props) => props.theme.colors.text.muted};
+      line-height: 1.6;
+    }
+
+    .config-card {
+      border: 1px solid ${(props) => props.theme.table.border};
+      border-radius: ${(props) => props.theme.border.radius.md};
+      overflow: hidden;
+      width: 100%;
+
+      .version-info {
+        padding: 0.75rem;
+        background-color: ${(props) => props.theme.background.mantle};
+
+        .version-line {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 0.5rem;
+        }
+
+        .collection-name {
+          font-weight: 500;
+          font-size: ${(props) => props.theme.font.size.base};
+          color: ${(props) => props.theme.text};
+          min-width: 0;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+
+        .version-value {
+          font-weight: 400;
+          font-size: ${(props) => props.theme.font.size.sm};
+          color: ${(props) => props.theme.colors.text.subtext2};
+          white-space: nowrap;
+          flex-shrink: 0;
+        }
+
+        .version-value.unset {
+          font-style: italic;
+        }
+
+        .version-summary {
+          display: flex;
+          align-items: center;
+          gap: 0.375rem;
+          margin: 0.25rem 0 0;
+          font-size: ${(props) => props.theme.font.size.sm};
+          color: ${(props) => props.theme.colors.text.subtext2};
+        }
+
+        .version-dot {
+          width: 5px;
+          height: 5px;
+          border-radius: 50%;
+          background-color: ${(props) => props.theme.colors.text.subtext0};
+          flex-shrink: 0;
+        }
+      }
+
+      .card-divider {
+        height: 1px;
+        background-color: ${(props) => props.theme.table.border};
+      }
+
+      .env-section {
+        padding: 0.75rem;
+
+        .env-checkbox {
+          width: 0.875rem;
+          height: 0.875rem;
+          margin: 0.1875rem;
+          flex-shrink: 0;
+          cursor: pointer;
+          accent-color: ${(props) => props.theme.primary.solid};
+        }
+
+        .env-checkbox:indeterminate {
+          appearance: none;
+          -webkit-appearance: none;
+          background-color: ${(props) => props.theme.primary.solid};
+          border: 1px solid ${(props) => props.theme.primary.solid};
+          border-radius: 0.15rem;
+          background-image: linear-gradient(
+            ${(props) => props.theme.bg},
+            ${(props) => props.theme.bg}
+          );
+          background-size: 0.55rem 2px;
+          background-position: center;
+          background-repeat: no-repeat;
+        }
+
+        .env-section-header {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 0.5rem;
+          margin-bottom: 0.5rem;
+        }
+
+        .env-section-heading {
+          display: flex;
+          align-items: center;
+          gap: 0.5rem;
+          min-width: 0;
+        }
+
+        .env-section-count {
+          font-size: ${(props) => props.theme.font.size.sm};
+          color: ${(props) => props.theme.colors.text.subtext2};
+          white-space: nowrap;
+        }
+
+        .env-section-title {
+          display: inline-flex;
+          align-items: center;
+          gap: 0.25rem;
+          margin: 0;
+          font-size: ${(props) => props.theme.font.size.sm};
+          font-weight: 600;
+          color: ${(props) => props.theme.text};
+        }
+
+        .env-section-icon {
+          margin-left: -2px;
+          color: ${(props) => props.theme.colors.text.subtext0};
+          flex-shrink: 0;
+        }
+
+        .env-select-all {
+          display: flex;
+          align-items: center;
+          gap: 0.375rem;
+          margin: 0;
+          cursor: pointer;
+          user-select: none;
+
+          .env-select-all-label {
+            font-size: ${(props) => props.theme.font.size.sm};
+            color: ${(props) => props.theme.colors.text.subtext2};
+            white-space: nowrap;
+          }
+        }
+
+        .env-row {
+          display: flex;
+          align-items: center;
+          height: 28px;
+          gap: 0.5rem;
+          cursor: pointer;
+          margin: 0;
+
+          .env-name {
+            font-size: ${(props) => props.theme.font.size.base};
+            color: ${(props) => props.theme.text};
+            min-width: 0;
+          }
+        }
+      }
+    }
+
+    .features {
+      li {
+        font-size: ${(props) => props.theme.font.size.sm};
+        color: ${(props) => props.theme.text};
+      }
+
+      .check-icon {
+        color: ${(props) => props.theme.colors.text.green};
+      }
+    }
+
+    .note {
+      font-size: ${(props) => props.theme.font.size.xs};
+      color: ${(props) => props.theme.colors.text.muted};
+      line-height: 1.5;
+    }
+  }
+
+  .text-warning {
+    font-size: ${(props) => props.theme.font.size.sm};
+    color: ${(props) => props.theme.colors.text.warning};
+  }
+`;
+
+export default StyledWrapper;

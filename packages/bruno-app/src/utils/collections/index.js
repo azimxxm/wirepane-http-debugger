@@ -1,0 +1,2642 @@
+import { cloneDeep, isEqual, sortBy, filter, map, isString, find, each, get } from 'lodash';
+import { uuid } from 'utils/common';
+import { sortByNameThenSequence } from 'utils/common/index';
+import path, { normalizePath } from 'utils/common/path';
+import { isWindowsOS } from 'utils/common/platform';
+import {
+  isRequestTagsIncluded,
+  getEffectiveTags,
+  getFolderTags,
+  getOwnTags,
+  getInheritedTagsFromTreePath,
+  getInheritedTagSourcesFromTreePath
+} from '@usebruno/common';
+import { VARIABLE_ADD_SCOPES } from 'utils/common/constants';
+import {
+  doesRequestMatchSearchText,
+  doesFolderHaveItemsMatchSearchText,
+  doesCollectionHaveItemsMatchingSearchText
+} from 'utils/collections/search';
+import { resolveEnvironmentInheritance, toVariablesMap } from '@usebruno/common/utils';
+
+const replaceTabsWithSpaces = (str, numSpaces = 2) => {
+  if (!str || !str.length || !isString(str)) {
+    return '';
+  }
+
+  return str.replaceAll('\t', ' '.repeat(numSpaces));
+};
+
+const setCollapsedRecursively = (items, collapsed) => {
+  each(items, (i) => {
+    i.collapsed = collapsed;
+
+    if (i.items && i.items.length) {
+      setCollapsedRecursively(i.items, collapsed);
+    }
+  });
+};
+
+export const collapseAllItemsInCollection = (collection) => {
+  collection.collapsed = true;
+  setCollapsedRecursively(collection.items, true);
+};
+
+export const sortItems = (collection) => {
+  const sort = (obj) => {
+    if (obj.items && obj.items.length) {
+      obj.items = sortBy(obj.items, 'type');
+    }
+
+    each(obj.items, (i) => sort(i));
+  };
+
+  sort(collection);
+};
+
+export const flattenItems = (items = []) => {
+  const flattenedItems = [];
+
+  const flatten = (itms, flattened) => {
+    each(itms, (i) => {
+      flattened.push(i);
+
+      if (i.items && i.items.length) {
+        flatten(i.items, flattened);
+      }
+    });
+  };
+
+  flatten(items, flattenedItems);
+
+  return flattenedItems;
+};
+
+export const findItem = (items = [], itemUid) => {
+  return find(items, (i) => i.uid === itemUid);
+};
+
+export const findCollectionByUid = (collections, collectionUid) => {
+  return find(collections, (c) => c.uid === collectionUid);
+};
+
+export const findCollectionByPathname = (collections, pathname) => {
+  return find(collections, (c) => c.pathname === pathname);
+};
+
+export const findCollectionByItemUid = (collections, itemUid) => {
+  return find(collections, (c) => {
+    return findItemInCollection(c, itemUid);
+  });
+};
+
+export const findItemByPathname = (items = [], pathname) => {
+  return find(items, (i) => i.pathname === pathname);
+};
+
+export const findItemInCollectionByPathname = (collection, pathname) => {
+  let flattenedItems = flattenItems(collection.items);
+
+  return findItemByPathname(flattenedItems, pathname);
+};
+
+export const findItemInCollectionByItemUid = (collection, itemUid) => {
+  let flattenedItems = flattenItems(collection.items);
+  return findItem(flattenedItems, itemUid);
+};
+
+export const findParentItemInCollectionByPathname = (collection, pathname) => {
+  let flattenedItems = flattenItems(collection.items);
+
+  return find(flattenedItems, (item) => {
+    return item.items && find(item.items, (i) => i.pathname === pathname);
+  });
+};
+
+export const findItemInCollection = (collection, itemUid) => {
+  if (!collection || !collection.items) {
+    return null;
+  }
+  let flattenedItems = flattenItems(collection.items);
+
+  return findItem(flattenedItems, itemUid);
+};
+
+export const findParentItemInCollection = (collection, itemUid) => {
+  let flattenedItems = flattenItems(collection.items);
+
+  return find(flattenedItems, (item) => {
+    return item.items && find(item.items, (i) => i.uid === itemUid);
+  });
+};
+
+export const recursivelyGetAllItemUids = (items = []) => {
+  let flattenedItems = flattenItems(items);
+
+  return map(flattenedItems, (i) => i.uid);
+};
+
+export const findEnvironmentInCollection = (collection, envUid) => {
+  return find(collection.environments, (e) => e.uid === envUid);
+};
+
+export const findEnvironmentInCollectionByName = (collection, name) => {
+  return find(collection.environments, (e) => e.name === name);
+};
+
+export const areItemsLoading = (folder) => {
+  if (!folder || folder.isLoading) {
+    return true;
+  }
+
+  let flattenedItems = flattenItems(folder.items);
+  return flattenedItems?.reduce((isLoading, i) => {
+    if (i?.loading) {
+      isLoading = true;
+    }
+    return isLoading;
+  }, false);
+};
+
+export const getItemsLoadStats = (folder) => {
+  let loadingCount = 0;
+  let flattenedItems = flattenItems(folder.items);
+  flattenedItems?.forEach((i) => {
+    if (i?.loading) {
+      loadingCount += 1;
+    }
+  });
+  return {
+    loading: loadingCount,
+    total: flattenedItems?.length
+  };
+};
+
+export const transformCollectionToSaveToExportAsFile = (collection, options = {}) => {
+  const copyHeaders = (headers) => {
+    return map(headers, (header) => {
+      return {
+        uid: header.uid,
+        name: header.name,
+        value: header.value,
+        description: header.description,
+        annotations: header.annotations,
+        enabled: header.enabled
+      };
+    });
+  };
+
+  const copyParams = (params) => {
+    return map(params, (param) => {
+      return {
+        uid: param.uid,
+        name: param.name,
+        value: param.value,
+        description: param.description,
+        annotations: param.annotations,
+        type: param.type,
+        enabled: param.enabled
+      };
+    });
+  };
+
+  const copyFormUrlEncodedParams = (params = []) => {
+    return map(params, (param) => {
+      return {
+        uid: param.uid,
+        name: param.name,
+        value: param.value,
+        description: param.description,
+        enabled: param.enabled
+      };
+    });
+  };
+
+  const copyMultipartFormParams = (params = []) => {
+    return map(params, (param) => {
+      return {
+        uid: param.uid,
+        type: param.type,
+        name: param.name,
+        value: param.value,
+        contentType: param.contentType,
+        description: param.description,
+        enabled: param.enabled
+      };
+    });
+  };
+
+  const copyFileParams = (params = []) => {
+    return map(params, (param) => {
+      return {
+        uid: param.uid,
+        filePath: param.filePath,
+        contentType: param.contentType,
+        description: param.description,
+        selected: param.selected
+      };
+    });
+  };
+
+  const copyExamples = (examples = []) => {
+    return map(examples, (example) => {
+      const copiedExample = {
+        uid: example.uid,
+        itemUid: example.itemUid,
+        name: example.name,
+        description: example.description,
+        type: example.type,
+        request: {
+          url: example.request.url,
+          method: example.request.method,
+          headers: copyHeaders(example.request.headers),
+          params: copyParams(example.request.params),
+          body: {
+            mode: example.request.body.mode,
+            json: example.request.body.json,
+            text: example.request.body.text,
+            xml: example.request.body.xml,
+            graphql: example.request.body.graphql,
+            sparql: example.request.body.sparql,
+            formUrlEncoded: copyFormUrlEncodedParams(example.request.body.formUrlEncoded),
+            multipartForm: copyMultipartFormParams(example.request.body.multipartForm),
+            file: copyFileParams(example.request.body.file),
+            grpc: example.request.body.grpc,
+            ws: example.request.body.ws
+          },
+          auth: example.request.auth
+        },
+        response: {
+          status: example.response.status,
+          statusText: example.response.statusText,
+          headers: copyHeaders(example.response.headers),
+          body: example.response.body
+        }
+      };
+
+      // Handle gRPC-specific fields if present
+      if (example.request.methodType) {
+        copiedExample.request.methodType = example.request.methodType;
+      }
+      if (example.request.protoPath) {
+        copiedExample.request.protoPath = example.request.protoPath;
+      }
+
+      return copiedExample;
+    });
+  };
+
+  const normalizeFilenameToBru = (filename) => {
+    if (!filename) return filename;
+    return filename.replace(/\.(yml|yaml)$/i, '.bru');
+  };
+
+  const copyItems = (sourceItems, destItems) => {
+    each(sourceItems, (si) => {
+      if (!isItemAFolder(si) && !isItemARequest(si) && si.type !== 'js') {
+        return;
+      }
+
+      // Skip transient requests
+      if (si.isTransient) {
+        return;
+      }
+
+      const isGrpcRequest = si.type === 'grpc-request';
+
+      const di = {
+        uid: si.uid,
+        type: si.type,
+        name: si.name,
+        filename: isItemARequest(si) ? normalizeFilenameToBru(si.filename) : si.filename,
+        seq: si.seq,
+        settings: si.settings,
+        tags: si.tags,
+        examples: copyExamples(si.examples || [])
+      };
+
+      if (si.request) {
+        di.request = {
+          url: si.request.url,
+          method: si.request.method,
+          headers: copyHeaders(si.request.headers),
+          params: copyParams(si.request.params),
+          body: {
+            mode: si.request.body.mode,
+            json: si.request.body.json,
+            text: si.request.body.text,
+            xml: si.request.body.xml,
+            graphql: si.request.body.graphql,
+            sparql: si.request.body.sparql,
+            formUrlEncoded: copyFormUrlEncodedParams(si.request.body.formUrlEncoded),
+            multipartForm: copyMultipartFormParams(si.request.body.multipartForm),
+            file: copyFileParams(si.request.body.file),
+            grpc: si.request.body.grpc,
+            ws: si.request.body.ws
+          },
+          script: si.request.script,
+          vars: si.request.vars,
+          assertions: si.request.assertions,
+          tests: si.request.tests,
+          docs: si.request.docs
+        };
+
+        if (isGrpcRequest) {
+          di.request.methodType = si.request.methodType;
+          di.request.protoPath = si.request.protoPath;
+          delete di.request.params;
+        }
+
+        // Handle auth object dynamically
+        di.request.auth = {
+          mode: get(si.request, 'auth.mode', 'none')
+        };
+
+        switch (di.request.auth.mode) {
+          case 'awsv4':
+            di.request.auth.awsv4 = {
+              accessKeyId: get(si.request, 'auth.awsv4.accessKeyId', ''),
+              secretAccessKey: get(si.request, 'auth.awsv4.secretAccessKey', ''),
+              sessionToken: get(si.request, 'auth.awsv4.sessionToken', ''),
+              service: get(si.request, 'auth.awsv4.service', ''),
+              region: get(si.request, 'auth.awsv4.region', ''),
+              profileName: get(si.request, 'auth.awsv4.profileName', '')
+            };
+            break;
+          case 'basic':
+            di.request.auth.basic = {
+              username: get(si.request, 'auth.basic.username', ''),
+              password: get(si.request, 'auth.basic.password', '')
+            };
+            break;
+          case 'bearer':
+            di.request.auth.bearer = {
+              token: get(si.request, 'auth.bearer.token', '')
+            };
+            break;
+          case 'digest':
+            di.request.auth.digest = {
+              username: get(si.request, 'auth.digest.username', ''),
+              password: get(si.request, 'auth.digest.password', '')
+            };
+            break;
+          case 'ntlm':
+            di.request.auth.ntlm = {
+              username: get(si.request, 'auth.ntlm.username', ''),
+              password: get(si.request, 'auth.ntlm.password', ''),
+              domain: get(si.request, 'auth.ntlm.domain', '')
+            };
+            break;
+          case 'oauth1':
+            di.request.auth.oauth1 = {
+              consumerKey: get(si.request, 'auth.oauth1.consumerKey', ''),
+              consumerSecret: get(si.request, 'auth.oauth1.consumerSecret', ''),
+              accessToken: get(si.request, 'auth.oauth1.accessToken', ''),
+              accessTokenSecret: get(si.request, 'auth.oauth1.accessTokenSecret', ''),
+              callbackUrl: get(si.request, 'auth.oauth1.callbackUrl', ''),
+              verifier: get(si.request, 'auth.oauth1.verifier', ''),
+              signatureMethod: get(si.request, 'auth.oauth1.signatureMethod', 'HMAC-SHA1'),
+              privateKey: get(si.request, 'auth.oauth1.privateKey', ''),
+              privateKeyType: get(si.request, 'auth.oauth1.privateKeyType', 'text'),
+              timestamp: get(si.request, 'auth.oauth1.timestamp', ''),
+              nonce: get(si.request, 'auth.oauth1.nonce', ''),
+              version: get(si.request, 'auth.oauth1.version', '1.0'),
+              realm: get(si.request, 'auth.oauth1.realm', ''),
+              placement: get(si.request, 'auth.oauth1.placement', 'header'),
+              includeBodyHash: get(si.request, 'auth.oauth1.includeBodyHash', false)
+            };
+            break;
+          case 'oauth2':
+            let grantType = get(si.request, 'auth.oauth2.grantType', '');
+            switch (grantType) {
+              case 'password':
+                di.request.auth.oauth2 = {
+                  grantType: grantType,
+                  accessTokenUrl: get(si.request, 'auth.oauth2.accessTokenUrl', ''),
+                  refreshTokenUrl: get(si.request, 'auth.oauth2.refreshTokenUrl', ''),
+                  username: get(si.request, 'auth.oauth2.username', ''),
+                  password: get(si.request, 'auth.oauth2.password', ''),
+                  clientId: get(si.request, 'auth.oauth2.clientId', ''),
+                  clientSecret: get(si.request, 'auth.oauth2.clientSecret', ''),
+                  scope: get(si.request, 'auth.oauth2.scope', ''),
+                  credentialsPlacement: get(si.request, 'auth.oauth2.credentialsPlacement', 'body'),
+                  credentialsId: get(si.request, 'auth.oauth2.credentialsId', 'credentials'),
+                  tokenPlacement: get(si.request, 'auth.oauth2.tokenPlacement', 'header'),
+                  tokenHeaderPrefix: get(si.request, 'auth.oauth2.tokenHeaderPrefix', ''),
+                  tokenQueryKey: get(si.request, 'auth.oauth2.tokenQueryKey', ''),
+                  autoFetchToken: get(si.request, 'auth.oauth2.autoFetchToken', true),
+                  autoRefreshToken: get(si.request, 'auth.oauth2.autoRefreshToken', true),
+                  additionalParameters: get(si.request, 'auth.oauth2.additionalParameters', {})
+                };
+                break;
+              case 'authorization_code':
+                di.request.auth.oauth2 = {
+                  grantType: grantType,
+                  callbackUrl: get(si.request, 'auth.oauth2.callbackUrl', ''),
+                  authorizationUrl: get(si.request, 'auth.oauth2.authorizationUrl', ''),
+                  accessTokenUrl: get(si.request, 'auth.oauth2.accessTokenUrl', ''),
+                  refreshTokenUrl: get(si.request, 'auth.oauth2.refreshTokenUrl', ''),
+                  clientId: get(si.request, 'auth.oauth2.clientId', ''),
+                  clientSecret: get(si.request, 'auth.oauth2.clientSecret', ''),
+                  scope: get(si.request, 'auth.oauth2.scope', ''),
+                  credentialsPlacement: get(si.request, 'auth.oauth2.credentialsPlacement', 'body'),
+                  pkce: get(si.request, 'auth.oauth2.pkce', false),
+                  credentialsId: get(si.request, 'auth.oauth2.credentialsId', 'credentials'),
+                  tokenPlacement: get(si.request, 'auth.oauth2.tokenPlacement', 'header'),
+                  tokenHeaderPrefix: get(si.request, 'auth.oauth2.tokenHeaderPrefix', ''),
+                  tokenQueryKey: get(si.request, 'auth.oauth2.tokenQueryKey', ''),
+                  autoFetchToken: get(si.request, 'auth.oauth2.autoFetchToken', true),
+                  autoRefreshToken: get(si.request, 'auth.oauth2.autoRefreshToken', true),
+                  additionalParameters: get(si.request, 'auth.oauth2.additionalParameters', {})
+                };
+                break;
+              case 'implicit':
+                di.request.auth.oauth2 = {
+                  grantType: grantType,
+                  callbackUrl: get(si.request, 'auth.oauth2.callbackUrl', ''),
+                  authorizationUrl: get(si.request, 'auth.oauth2.authorizationUrl', ''),
+                  clientId: get(si.request, 'auth.oauth2.clientId', ''),
+                  scope: get(si.request, 'auth.oauth2.scope', ''),
+                  state: get(si.request, 'auth.oauth2.state', ''),
+                  credentialsId: get(si.request, 'auth.oauth2.credentialsId', 'credentials'),
+                  tokenPlacement: get(si.request, 'auth.oauth2.tokenPlacement', 'header'),
+                  tokenHeaderPrefix: get(si.request, 'auth.oauth2.tokenHeaderPrefix', 'Bearer'),
+                  tokenQueryKey: get(si.request, 'auth.oauth2.tokenQueryKey', ''),
+                  autoFetchToken: get(si.request, 'auth.oauth2.autoFetchToken', true),
+                  additionalParameters: get(si.request, 'auth.oauth2.additionalParameters', {})
+                };
+                break;
+              case 'client_credentials':
+                di.request.auth.oauth2 = {
+                  grantType: grantType,
+                  accessTokenUrl: get(si.request, 'auth.oauth2.accessTokenUrl', ''),
+                  refreshTokenUrl: get(si.request, 'auth.oauth2.refreshTokenUrl', ''),
+                  clientId: get(si.request, 'auth.oauth2.clientId', ''),
+                  clientSecret: get(si.request, 'auth.oauth2.clientSecret', ''),
+                  scope: get(si.request, 'auth.oauth2.scope', ''),
+                  credentialsPlacement: get(si.request, 'auth.oauth2.credentialsPlacement', 'body'),
+                  credentialsId: get(si.request, 'auth.oauth2.credentialsId', 'credentials'),
+                  tokenPlacement: get(si.request, 'auth.oauth2.tokenPlacement', 'header'),
+                  tokenHeaderPrefix: get(si.request, 'auth.oauth2.tokenHeaderPrefix', ''),
+                  tokenQueryKey: get(si.request, 'auth.oauth2.tokenQueryKey', ''),
+                  autoFetchToken: get(si.request, 'auth.oauth2.autoFetchToken', true),
+                  autoRefreshToken: get(si.request, 'auth.oauth2.autoRefreshToken', true),
+                  additionalParameters: get(si.request, 'auth.oauth2.additionalParameters', {})
+                };
+                break;
+            }
+            break;
+          case 'apikey':
+            di.request.auth.apikey = {
+              key: get(si.request, 'auth.apikey.key', ''),
+              value: get(si.request, 'auth.apikey.value', ''),
+              placement: get(si.request, 'auth.apikey.placement', 'header')
+            };
+            break;
+          case 'wsse':
+            di.request.auth.wsse = {
+              username: get(si.request, 'auth.wsse.username', ''),
+              password: get(si.request, 'auth.wsse.password', '')
+            };
+            break;
+          case 'akamai-edgegrid':
+            di.request.auth.akamaiEdgegrid = {
+              accessToken: get(si.request, 'auth.akamaiEdgegrid.accessToken', ''),
+              clientToken: get(si.request, 'auth.akamaiEdgegrid.clientToken', ''),
+              clientSecret: get(si.request, 'auth.akamaiEdgegrid.clientSecret', ''),
+              nonce: get(si.request, 'auth.akamaiEdgegrid.nonce', ''),
+              timestamp: get(si.request, 'auth.akamaiEdgegrid.timestamp', ''),
+              baseURL: get(si.request, 'auth.akamaiEdgegrid.baseURL', ''),
+              headersToSign: get(si.request, 'auth.akamaiEdgegrid.headersToSign', ''),
+              maxBodySize: get(si.request, 'auth.akamaiEdgegrid.maxBodySize', null)
+            };
+            break;
+          default:
+            break;
+        }
+
+        if (di.request.body.mode === 'json') {
+          di.request.body.json = replaceTabsWithSpaces(di.request.body.json);
+        }
+
+        if (di.request.body.mode === 'grpc') {
+          di.request.body.grpc = di.request.body.grpc.map(({ name, content }, index) => ({
+            name: name ? name : `message ${index + 1}`,
+            content: replaceTabsWithSpaces(content)
+          }));
+        }
+
+        if (di.request.body.mode === 'ws') {
+          di.request.body.ws = di.request.body.ws.map(({ name, content, type }, index) => ({
+            name: name ? name : `message ${index + 1}`,
+            type: type ?? 'json',
+            content: replaceTabsWithSpaces(content)
+          }));
+        }
+      }
+
+      if (si.type == 'folder' && si?.root) {
+        di.root = {
+          request: {}
+        };
+
+        let { request, meta, docs } = si?.root || {};
+        let { auth, headers, script = {}, vars = {}, tests } = request || {};
+
+        // folder level auth
+        if (auth?.mode) {
+          di.root.request.auth = auth;
+        }
+
+        // folder level headers
+        if (headers?.length) {
+          di.root.request.headers = headers;
+        }
+        // folder level script
+        if (Object.keys(script)?.length) {
+          di.root.request.script = {};
+          if (script?.req?.length) {
+            di.root.request.script.req = script?.req;
+          }
+          if (script?.res?.length) {
+            di.root.request.script.res = script?.res;
+          }
+        }
+        // folder level vars
+        if (Object.keys(vars)?.length) {
+          di.root.request.vars = {};
+          if (vars?.req?.length) {
+            di.root.request.vars.req = vars?.req;
+          }
+          if (vars?.res?.length) {
+            di.root.request.vars.res = vars?.res;
+          }
+        }
+        // folder level tests
+        if (tests?.length) {
+          di.root.request.tests = tests;
+        }
+
+        // folder level docs
+        if (docs?.length) {
+          di.root.docs = docs;
+        }
+
+        if (meta?.name) {
+          di.root.meta = {};
+          di.root.meta.name = meta?.name;
+          di.root.meta.seq = meta?.seq;
+          if (meta?.tags?.length) {
+            di.root.meta.tags = meta.tags;
+          }
+        }
+        if (!Object.keys(di.root.request)?.length) {
+          delete di.root.request;
+        }
+        if (!Object.keys(di.root)?.length) {
+          delete di.root;
+        }
+      }
+
+      if (si.type === 'js') {
+        di.fileContent = si.raw;
+      }
+
+      destItems.push(di);
+
+      if (si.items && si.items.length) {
+        di.items = [];
+        copyItems(si.items, di.items);
+      }
+    });
+  };
+
+  const collectionToSave = {};
+  collectionToSave.name = collection.name;
+  collectionToSave.uid = collection.uid;
+
+  // todo: move this to the place where collection gets created
+  collectionToSave.version = '1';
+  collectionToSave.items = [];
+  collectionToSave.activeEnvironmentUid = collection.activeEnvironmentUid;
+  collectionToSave.environments = collection.environments || [];
+
+  collectionToSave.root = {
+    request: {}
+  };
+
+  let { request, docs, meta } = collection?.root || {};
+  let { auth, headers, script = {}, vars = {}, tests } = request || {};
+
+  // collection level auth
+  if (auth?.mode) {
+    collectionToSave.root.request.auth = auth;
+  }
+  // collection level headers
+  if (headers?.length) {
+    collectionToSave.root.request.headers = headers;
+  }
+  // collection level script
+  if (Object.keys(script)?.length) {
+    collectionToSave.root.request.script = {};
+    if (script?.req?.length) {
+      collectionToSave.root.request.script.req = script?.req;
+    }
+    if (script?.res?.length) {
+      collectionToSave.root.request.script.res = script?.res;
+    }
+  }
+  // collection level vars
+  if (Object.keys(vars)?.length) {
+    collectionToSave.root.request.vars = {};
+    if (vars?.req?.length) {
+      collectionToSave.root.request.vars.req = vars?.req;
+    }
+    if (vars?.res?.length) {
+      collectionToSave.root.request.vars.res = vars?.res;
+    }
+  }
+  // collection level tests
+  if (tests?.length) {
+    collectionToSave.root.request.tests = tests;
+  }
+  // collection level docs
+  if (docs?.length) {
+    collectionToSave.root.docs = docs;
+  }
+  if (meta?.name) {
+    collectionToSave.root.meta = {};
+    collectionToSave.root.meta.name = meta?.name;
+  }
+  if (!Object.keys(collectionToSave.root.request)?.length) {
+    delete collectionToSave.root.request;
+  }
+  if (!Object.keys(collectionToSave.root)?.length) {
+    delete collectionToSave.root;
+  }
+
+  collectionToSave.brunoConfig = cloneDeep(collection?.brunoConfig);
+
+  // delete proxy password if present
+  if (collectionToSave?.brunoConfig?.proxy?.auth?.password) {
+    delete collectionToSave.brunoConfig.proxy.auth.password;
+  }
+
+  if (collectionToSave?.brunoConfig?.protobuf?.importPaths) {
+    collectionToSave.brunoConfig.protobuf.importPaths = collectionToSave.brunoConfig.protobuf.importPaths.map((importPath) => {
+      delete importPath.exists;
+      return importPath;
+    });
+  }
+
+  if (collectionToSave?.brunoConfig?.protobuf?.protoFiles) {
+    collectionToSave.brunoConfig.protobuf.protoFiles = collectionToSave.brunoConfig.protobuf.protoFiles.map((protoFile) => {
+      delete protoFile.exists;
+      return protoFile;
+    });
+  }
+
+  copyItems(collection.items, collectionToSave.items);
+  return collectionToSave;
+};
+
+export const transformRequestToSaveToFilesystem = (item) => {
+  const _item = item.draft ? item.draft : item;
+
+  // Standalone app items have no request, emit only what the filestore needs.
+  if (_item.type === 'app') {
+    return {
+      uid: _item.uid,
+      type: 'app',
+      name: _item.name,
+      seq: _item.seq,
+      tags: _item.tags,
+      settings: _item.settings,
+      app: { code: _item.app?.code || '' }
+    };
+  }
+
+  // Transform examples to ensure status is a number
+  const transformExamples = (examples = []) => {
+    return map(examples, (example) => ({
+      ...example,
+      response: example.response ? {
+        ...example.response,
+        status: example.response.status !== undefined && example.response.status !== null
+          ? Number(example.response.status)
+          : null
+      } : example.response
+    }));
+  };
+
+  const appToSave = _item.app && (_item.app.enabled === true || (_item.app.code && _item.app.code.length))
+    ? { code: _item.app.code || null, enabled: _item.app.enabled === true }
+    : null;
+
+  const itemToSave = {
+    uid: _item.uid,
+    type: _item.type,
+    name: _item.name,
+    description: _item.description,
+    seq: _item.seq,
+    settings: _item.settings,
+    tags: _item.tags,
+    app: appToSave,
+    examples: transformExamples(_item.examples || []),
+    request: {
+      method: _item.request.method,
+      url: _item.request.url,
+      params: [],
+      headers: [],
+      auth: _item.request.auth,
+      body: _item.request.body,
+      script: _item.request.script,
+      vars: _item.request.vars,
+      assertions: _item.request.assertions,
+      tests: _item.request.tests,
+      docs: _item.request.docs
+    }
+  };
+
+  if (_item.type === 'grpc-request') {
+    itemToSave.request.methodType = _item.request.methodType;
+    itemToSave.request.protoPath = _item.request.protoPath;
+    delete itemToSave.request.params;
+  }
+
+  if (_item.type === 'ws-request') {
+    delete itemToSave.request.method;
+    delete itemToSave.request.methodType;
+    delete itemToSave.request.params;
+  }
+
+  // Only process params for non-gRPC requests
+  if (!['grpc-request', 'ws-request'].includes(_item.type)) {
+    each(_item.request.params, (param) => {
+      itemToSave.request.params.push({
+        uid: param.uid,
+        name: param.name,
+        value: param.value,
+        description: param.description,
+        annotations: param.annotations,
+        type: param.type,
+        enabled: param.enabled
+      });
+    });
+  }
+
+  each(_item.request.headers, (header) => {
+    itemToSave.request.headers.push({
+      uid: header.uid,
+      name: header.name,
+      value: header.value,
+      description: header.description,
+      annotations: header.annotations,
+      enabled: header.enabled
+    });
+  });
+
+  if (itemToSave.request.body.mode === 'json') {
+    itemToSave.request.body = {
+      ...itemToSave.request.body,
+      json: replaceTabsWithSpaces(itemToSave.request.body.json)
+    };
+  }
+
+  if (itemToSave.request.body.mode === 'grpc') {
+    itemToSave.request.body = {
+      ...itemToSave.request.body,
+      grpc: itemToSave.request.body.grpc.map(({ name, content }, index) => ({
+        name: name ? name : `message ${index + 1}`,
+        content: replaceTabsWithSpaces(content)
+      }))
+    };
+  }
+
+  if (itemToSave.request.body.mode === 'ws') {
+    itemToSave.request.body = {
+      ...itemToSave.request.body,
+      ws: itemToSave.request.body.ws.map(({ name, content, type, selected }, index) => ({
+        name: name ? name : `message ${index + 1}`,
+        type,
+        content: replaceTabsWithSpaces(content),
+        selected: selected || false
+      }))
+    };
+  }
+
+  return itemToSave;
+};
+
+export const transformCollectionRootToSave = (collection) => {
+  const _collection = collection.draft?.root ? collection.draft.root : collection.root;
+
+  const collectionRootToSave = {
+    docs: _collection?.docs,
+    meta: _collection?.meta,
+    request: {
+      auth: _collection?.request?.auth,
+      headers: [],
+      script: _collection?.request?.script,
+      vars: _collection?.request?.vars,
+      tests: _collection?.request?.tests
+    }
+  };
+
+  each(_collection?.request?.headers, (header) => {
+    collectionRootToSave.request.headers.push({
+      uid: header.uid,
+      name: header.name,
+      value: header.value,
+      description: header.description,
+      annotations: header.annotations,
+      enabled: header.enabled
+    });
+  });
+
+  return collectionRootToSave;
+};
+
+export const transformFolderRootToSave = (folder) => {
+  const _folder = folder.draft ? folder.draft : folder.root;
+  const tags = getFolderTags(folder);
+  const folderRootToSave = {
+    meta: {
+      name: folder.name,
+      seq: folder.seq,
+      ...(tags.length ? { tags } : {})
+    },
+    docs: _folder.docs,
+    request: {
+      auth: _folder?.request?.auth,
+      headers: [],
+      script: _folder?.request?.script,
+      vars: _folder?.request?.vars,
+      tests: _folder?.request?.tests
+    }
+  };
+
+  each(_folder?.request?.headers, (header) => {
+    folderRootToSave.request.headers.push({
+      uid: header.uid,
+      name: header.name,
+      value: header.value,
+      description: header.description,
+      annotations: header.annotations,
+      enabled: header.enabled
+    });
+  });
+
+  return folderRootToSave;
+};
+
+// todo: optimize this
+export const deleteItemInCollection = (itemUid, collection) => {
+  collection.items = filter(collection.items, (i) => i.uid !== itemUid);
+
+  let flattenedItems = flattenItems(collection.items);
+  each(flattenedItems, (i) => {
+    if (i.items && i.items.length) {
+      i.items = filter(i.items, (i) => i.uid !== itemUid);
+    }
+  });
+};
+
+export const deleteItemInCollectionByPathname = (pathname, collection) => {
+  collection.items = filter(collection.items, (i) => i.pathname !== pathname);
+
+  let flattenedItems = flattenItems(collection.items);
+  each(flattenedItems, (i) => {
+    if (i.items && i.items.length) {
+      i.items = filter(i.items, (i) => i.pathname !== pathname);
+    }
+  });
+};
+
+export const isItemARequest = (item) => {
+  return item.hasOwnProperty('request') && ['http-request', 'graphql-request', 'grpc-request', 'ws-request'].includes(item.type) && !item.items;
+};
+
+export const isItemAFolder = (item) => {
+  return !item.hasOwnProperty('request') && item.type === 'folder';
+};
+
+export const getItemTypeLabel = (item) => {
+  if (isItemAFolder(item)) {
+    return 'Folder';
+  }
+  return item?.type === 'app' ? 'App' : 'Request';
+};
+
+/**
+ * Counts the folders and requests in a collection's item tree, recursively at every
+ * depth. Used to summarise a collection (e.g. in the Generate Documentation modal).
+ *
+ * @param {Array} items - The collection's `items` tree.
+ * @returns {{ folderCount: number, requestCount: number }}
+ */
+export const getCollectionItemCounts = (items = []) => {
+  const flattened = flattenItems(items);
+  return {
+    folderCount: flattened.filter(isItemAFolder).length,
+    requestCount: flattened.filter(isItemARequest).length
+  };
+};
+
+/**
+ * Orders a list of collection items exactly the way the Sidebar tree renders them:
+ * folders first (via `sortByNameThenSequence`), then standalone apps by `seq`, then
+ * requests by `seq`. The same ordering is applied recursively to every nested folder
+ * so an exported/serialized tree matches the sidebar at all depths.
+ *
+ * Items that are none of folder/app/request (e.g. `js` script files) are excluded,
+ * mirroring the sidebar. Transient items are excluded too.
+ */
+export const sortItemsBySidebarOrder = (items = []) => {
+  const folderItems = sortByNameThenSequence(filter(items, (i) => isItemAFolder(i) && !i.isTransient));
+  const appItems = filter(items, (i) => i.type === 'app' && !i.isTransient).sort((a, b) => a.seq - b.seq);
+  const requestItems = filter(items, (i) => isItemARequest(i) && !i.isTransient).sort((a, b) => a.seq - b.seq);
+
+  return [...folderItems, ...appItems, ...requestItems].map((item) =>
+    Array.isArray(item.items) ? { ...item, items: sortItemsBySidebarOrder(item.items) } : item
+  );
+};
+
+export const humanizeRequestBodyMode = (mode) => {
+  let label = 'No Body';
+  switch (mode) {
+    case 'json': {
+      label = 'JSON';
+      break;
+    }
+    case 'text': {
+      label = 'TEXT';
+      break;
+    }
+    case 'xml': {
+      label = 'XML';
+      break;
+    }
+    case 'sparql': {
+      label = 'SPARQL';
+      break;
+    }
+    case 'file': {
+      label = 'File / Binary';
+      break;
+    }
+    case 'formUrlEncoded': {
+      label = 'Form URL Encoded';
+      break;
+    }
+    case 'multipartForm': {
+      label = 'Multipart Form';
+      break;
+    }
+  }
+
+  return label;
+};
+
+export const humanizeRequestAuthMode = (mode) => {
+  let label = 'No Auth';
+  switch (mode) {
+    case 'inherit': {
+      label = 'Inherit';
+      break;
+    }
+    case 'awsv4': {
+      label = 'AWS Sig V4';
+      break;
+    }
+    case 'basic': {
+      label = 'Basic Auth';
+      break;
+    }
+    case 'bearer': {
+      label = 'Bearer Token';
+      break;
+    }
+    case 'digest': {
+      label = 'Digest Auth';
+      break;
+    }
+    case 'ntlm': {
+      label = 'NTLM';
+      break;
+    }
+    case 'oauth1': {
+      label = 'OAuth 1.0';
+      break;
+    }
+    case 'oauth2': {
+      label = 'OAuth 2.0';
+      break;
+    }
+    case 'wsse': {
+      label = 'WSSE Auth';
+      break;
+    }
+    case 'apikey': {
+      label = 'API Key';
+      break;
+    }
+    case 'akamai-edgegrid': {
+      label = 'Akamai EdgeGrid';
+      break;
+    }
+  }
+
+  return label;
+};
+
+export const humanizeRequestAPIKeyPlacement = (placement) => {
+  let label = 'Header';
+  switch (placement) {
+    case 'header': {
+      label = 'Header';
+      break;
+    }
+    case 'queryparams': {
+      label = 'Query Params';
+      break;
+    }
+  }
+
+  return label;
+};
+
+export const humanizeGrantType = (mode) => {
+  if (!mode || typeof mode !== 'string') {
+    return '';
+  }
+
+  switch (mode) {
+    case 'password':
+      return 'Password Credentials';
+    case 'authorization_code':
+      return 'Authorization Code';
+    case 'client_credentials':
+      return 'Client Credentials';
+    case 'implicit':
+      return 'Implicit';
+    default:
+      return mode;
+  }
+};
+
+export const refreshUidsInItem = (item) => {
+  item.uid = uuid();
+
+  each(get(item, 'request.headers'), (header) => (header.uid = uuid()));
+  each(get(item, 'request.params'), (param) => (param.uid = uuid()));
+  each(get(item, 'request.body.multipartForm'), (param) => (param.uid = uuid()));
+  each(get(item, 'request.body.formUrlEncoded'), (param) => (param.uid = uuid()));
+  each(get(item, 'request.body.file'), (param) => (param.uid = uuid()));
+  each(get(item, 'request.body.ws'), (msg) => (msg.uid = uuid()));
+  each(get(item, 'request.assertions'), (assertion) => (assertion.uid = uuid()));
+
+  return item;
+};
+
+export const deleteUidsInItem = (item) => {
+  delete item.uid;
+  const params = get(item, 'request.params', []);
+  const headers = get(item, 'request.headers', []);
+  const bodyFormUrlEncoded = get(item, 'request.body.formUrlEncoded', []);
+  const bodyMultipartForm = get(item, 'request.body.multipartForm', []);
+  const file = get(item, 'request.body.file', []);
+  const assertions = get(item, 'request.assertions', []);
+
+  params.forEach((param) => delete param.uid);
+  headers.forEach((header) => delete header.uid);
+  bodyFormUrlEncoded.forEach((param) => delete param.uid);
+  bodyMultipartForm.forEach((param) => delete param.uid);
+  file.forEach((param) => delete param.uid);
+  assertions.forEach((assertion) => delete assertion.uid);
+
+  return item;
+};
+
+export const areItemsTheSameExceptSeqUpdate = (_item1, _item2) => {
+  let item1 = cloneDeep(_item1);
+  let item2 = cloneDeep(_item2);
+
+  // remove seq from both items
+  delete item1.seq;
+  delete item2.seq;
+
+  // remove draft from both items
+  delete item1.draft;
+  delete item2.draft;
+
+  // get projection of both items
+  // a partial/unparseable item has no comparable request projection; treat it as
+  // changed so callers fall back to a full update instead of throwing
+  try {
+    item1 = transformRequestToSaveToFilesystem(item1);
+    item2 = transformRequestToSaveToFilesystem(item2);
+  } catch (err) {
+    return false;
+  }
+
+  // delete uids from both items
+  deleteUidsInItem(item1);
+  deleteUidsInItem(item2);
+
+  return isEqual(item1, item2);
+};
+
+/**
+ * Check if a request has actual changes (excluding examples)
+ * This function compares the request data between the original item and its draft,
+ * but excludes examples from the comparison to determine if the save dot should be shown
+ */
+export const hasRequestChanges = (item) => {
+  if (!item || !item.draft) {
+    return false;
+  }
+
+  // Create copies of the item and draft without examples for comparison
+  const originalItem = cloneDeep(item);
+  const draftItem = cloneDeep(item.draft);
+
+  delete originalItem.examples;
+  delete originalItem.draft;
+  delete originalItem.unresolvedVariables;
+  delete draftItem.examples;
+  delete draftItem.draft;
+  delete draftItem.unresolvedVariables;
+
+  return !isEqual(originalItem, draftItem);
+};
+
+/**
+ * Check if a specific example has unsaved changes
+ * This function compares the example data between the original item and its draft
+ */
+export const hasExampleChanges = (_item, exampleUid) => {
+  if (!_item || !_item.draft || !exampleUid) {
+    return false;
+  }
+
+  const item = cloneDeep(_item);
+  deleteUidsInItem(item);
+
+  // Get the original example from the saved item
+  const originalExample = item.examples?.find((ex) => ex.uid === exampleUid);
+  if (!originalExample) {
+    return false;
+  }
+
+  // Get the draft example from the draft item
+  const draftExample = item.draft.examples?.find((ex) => ex.uid === exampleUid);
+  if (!draftExample) {
+    return false;
+  }
+
+  // Compare the examples (excluding any internal metadata)
+  return !isEqual(originalExample, draftExample);
+};
+
+export const getDefaultRequestPaneTab = (item) => {
+  if (item.type === 'http-request') {
+    // If no params are enabled and body mode is set, default to 'body' tab
+    // This provides better UX for POST/PUT requests with a body
+    const request = item.draft?.request || item.request;
+    const params = request?.params || [];
+    const bodyMode = request?.body?.mode;
+    const hasEnabledParams = params.some((p) => p.enabled);
+
+    if (!hasEnabledParams && bodyMode && bodyMode !== 'none') {
+      return 'body';
+    }
+    return 'params';
+  }
+
+  if (item.type === 'graphql-request') {
+    return 'query';
+  }
+
+  if (['ws-request', 'grpc-request'].includes(item.type)) {
+    return 'body';
+  }
+};
+
+export const getGlobalEnvironmentVariables = ({ globalEnvironments, activeGlobalEnvironmentUid }) => {
+  const environment = resolveEnvironmentInheritance({
+    environments: globalEnvironments,
+    targetEnvironment: globalEnvironments?.find((env) => env?.uid === activeGlobalEnvironmentUid),
+    merge: true
+  });
+  return toVariablesMap(environment?.variables);
+};
+
+export const getGlobalEnvironmentVariablesMasked = ({ globalEnvironments, activeGlobalEnvironmentUid }) => {
+  const environment = resolveEnvironmentInheritance({
+    environments: globalEnvironments,
+    targetEnvironment: globalEnvironments?.find((env) => env?.uid === activeGlobalEnvironmentUid),
+    merge: true
+  });
+  if (environment && Array.isArray(environment.variables)) {
+    return environment.variables
+      .filter((variable) => variable.name && variable.enabled && variable.secret)
+      .map((variable) => variable.name);
+  }
+
+  return [];
+};
+
+export const getEnvironmentVariables = (collection) => {
+  if (!collection) {
+    return {};
+  }
+
+  const environment = resolveEnvironmentInheritance({
+    environments: collection.environments,
+    targetEnvironment: findEnvironmentInCollection(collection, collection.activeEnvironmentUid),
+    merge: true
+  });
+
+  return toVariablesMap(environment?.variables);
+};
+
+export const getEnvironmentVariablesMasked = (collection) => {
+  // Return an empty array if the collection is invalid or not provided
+  if (!collection || !collection.activeEnvironmentUid) {
+    return [];
+  }
+
+  // Inherited variables are merged in so a secret defined on a parent is masked too.
+  const environment = resolveEnvironmentInheritance({
+    environments: collection.environments,
+    targetEnvironment: findEnvironmentInCollection(collection, collection.activeEnvironmentUid),
+    merge: true
+  });
+  if (!environment || !environment.variables) {
+    return [];
+  }
+
+  // Filter the environment variables to get only the masked (secret) ones
+  return environment.variables
+    .filter((variable) => variable.name && variable.enabled && variable.secret)
+    .map((variable) => variable.name);
+};
+
+const getPathParams = (item) => {
+  let pathParams = {};
+  if (item && item.request && item.request.params) {
+    item.request.params.forEach((param) => {
+      if (param.type === 'path' && param.name && param.value) {
+        pathParams[param.name] = param.value;
+      }
+    });
+  }
+  return pathParams;
+};
+
+export const isOpenCollectionFormat = (collection) => Boolean(collection?.brunoConfig?.opencollection);
+
+export const getCollectionVersion = (collection) => collection?.brunoConfig?.version || '';
+
+export const getTotalRequestCountInCollection = (collection) => {
+  let count = 0;
+  each(collection.items, (item) => {
+    if (isItemARequest(item) && !item.isTransient) {
+      count++;
+    } else if (isItemAFolder(item)) {
+      count += getTotalRequestCountInCollection(item);
+    }
+  });
+
+  return count;
+};
+
+export const getAllVariables = (collection, item) => {
+  if (!collection) return {};
+  const envVariables = getEnvironmentVariables(collection);
+  const requestTreePath = getTreePathFromCollectionToItem(collection, item);
+  let { collectionVariables, folderVariables, requestVariables } = mergeVars(collection, requestTreePath);
+  const pathParams = getPathParams(item);
+  const { globalEnvironmentVariables = {} } = collection;
+
+  const { processEnvVariables = {}, runtimeVariables = {}, promptVariables = {}, workspaceProcessEnvVariables = {} } = collection;
+
+  // Merge workspace and collection processEnvVariables (collection takes priority)
+  const mergedProcessEnvVariables = {
+    ...workspaceProcessEnvVariables,
+    ...processEnvVariables
+  };
+
+  const mergedVariables = {
+    ...folderVariables,
+    ...requestVariables,
+    ...runtimeVariables,
+    ...promptVariables
+  };
+
+  const mergedVariablesGlobal = {
+    ...collectionVariables,
+    ...envVariables,
+    ...folderVariables,
+    ...requestVariables,
+    ...runtimeVariables,
+    ...promptVariables
+  };
+
+  const maskedEnvVariables = getEnvironmentVariablesMasked(collection) || [];
+  const maskedGlobalEnvVariables = collection?.globalEnvSecrets || [];
+
+  const filteredMaskedEnvVariables = maskedEnvVariables.filter((key) => !(key in mergedVariables));
+  const filteredMaskedGlobalEnvVariables = maskedGlobalEnvVariables.filter((key) => !(key in mergedVariablesGlobal));
+
+  const uniqueMaskedVariables = [...new Set([...filteredMaskedEnvVariables, ...filteredMaskedGlobalEnvVariables])];
+
+  const oauth2CredentialVariables = getFormattedCollectionOauth2Credentials({ oauth2Credentials: collection?.oauth2Credentials });
+
+  return {
+    ...globalEnvironmentVariables,
+    ...collectionVariables,
+    ...envVariables,
+    ...folderVariables,
+    ...requestVariables,
+    ...oauth2CredentialVariables,
+    ...runtimeVariables,
+    ...promptVariables,
+    pathParams: {
+      ...pathParams
+    },
+    maskedEnvVariables: uniqueMaskedVariables,
+    process: {
+      env: {
+        ...mergedProcessEnvVariables
+      }
+    }
+  };
+};
+
+// Merge headers from collection, folders, and request
+export const mergeHeaders = (collection, request, requestTreePath, options = {}) => {
+  const { includeDisabledHeaders = false } = options;
+  let headers = new Map();
+  let disabledHeaders = new Map();
+
+  // Add collection headers first
+  const collectionHeaders = collection?.draft?.root ? get(collection, 'draft.root.request.headers', []) : get(collection, 'root.request.headers', []);
+  collectionHeaders.forEach((header) => {
+    if (header.enabled) {
+      headers.set(header.name, header);
+    } else if (header.name?.length > 0) {
+      disabledHeaders.set(header.name, header);
+    }
+  });
+
+  // Add folder headers next, traversing from root to leaf
+  if (requestTreePath && requestTreePath.length > 0) {
+    for (let i of requestTreePath) {
+      if (i.type === 'folder') {
+        const folderHeaders = i?.draft ? get(i, 'draft.request.headers', []) : get(i, 'root.request.headers', []);
+        folderHeaders.forEach((header) => {
+          if (header.enabled) {
+            headers.set(header.name, header);
+          } else if (header.name?.length > 0) {
+            disabledHeaders.set(header.name, header);
+          }
+        });
+      }
+    }
+  }
+
+  // Add request headers last (they take precedence)
+  const requestHeaders = request.headers || [];
+  requestHeaders.forEach((header) => {
+    if (header.enabled) {
+      headers.set(header.name, header);
+    } else if (header.name?.length > 0) {
+      disabledHeaders.set(header.name, header);
+    }
+  });
+
+  // Convert Map back to array
+  return [
+    ...Array.from(headers.values()),
+    ...(includeDisabledHeaders ? Array.from(disabledHeaders.values()) : [])
+  ];
+};
+
+export const maskInputValue = (value) => {
+  if (!value || typeof value !== 'string') {
+    return '';
+  }
+
+  return value
+    .split('')
+    .map(() => '*')
+    .join('');
+};
+
+export const getTreePathFromCollectionToItem = (collection, _item) => {
+  if (!_item?.uid) return [];
+
+  let path = [];
+  let item = findItemInCollection(collection, _item?.uid);
+  while (item) {
+    path.unshift(item);
+    item = findParentItemInCollection(collection, item?.uid);
+  }
+  return path;
+};
+
+const mergeVars = (collection, requestTreePath = []) => {
+  let collectionVariables = {};
+  let folderVariables = {};
+  let requestVariables = {};
+  const collectionRoot = collection?.draft?.root || collection?.root || {};
+  let collectionRequestVars = get(collectionRoot, 'request.vars.req', []);
+  collectionRequestVars.forEach((_var) => {
+    if (_var.enabled) {
+      collectionVariables[_var.name] = _var.value;
+    }
+  });
+  for (let i of requestTreePath) {
+    if (!i) {
+      continue;
+    }
+
+    if (i.type === 'folder') {
+      // Check draft first, then fall back to root
+      const folderRoot = i.draft || i.root;
+      let vars = get(folderRoot, 'request.vars.req', []);
+      vars.forEach((_var) => {
+        if (_var.enabled) {
+          folderVariables[_var.name] = _var.value;
+        }
+      });
+    } else {
+      let vars = i.draft ? get(i, 'draft.request.vars.req', []) : get(i, 'request.vars.req', []);
+      vars.forEach((_var) => {
+        if (_var.enabled) {
+          requestVariables[_var.name] = _var.value;
+        }
+      });
+    }
+  }
+  return {
+    collectionVariables,
+    folderVariables,
+    requestVariables
+  };
+};
+
+export const getFormattedCollectionOauth2Credentials = ({ oauth2Credentials = [] }) => {
+  let credentialsVariables = {};
+  oauth2Credentials.forEach(({ credentialsId, credentials }) => {
+    if (credentials) {
+      Object.entries(credentials).forEach(([key, value]) => {
+        credentialsVariables[`$oauth2.${credentialsId}.${key}`] = value;
+      });
+    }
+  });
+  return credentialsVariables;
+};
+
+// item sequence utils - START
+
+export const resetSequencesInFolder = (folderItems) => {
+  const items = folderItems;
+  const sortedItems = sortByNameThenSequence(items);
+  return sortedItems.map((item, index) => {
+    item.seq = index + 1;
+    return item;
+  });
+};
+
+export const isItemBetweenSequences = (itemSequence, sourceItemSequence, targetItemSequence) => {
+  if (targetItemSequence > sourceItemSequence) {
+    return itemSequence > sourceItemSequence && itemSequence < targetItemSequence;
+  }
+  return itemSequence < sourceItemSequence && itemSequence >= targetItemSequence;
+};
+
+export const calculateNewSequence = (isDraggedItem, targetSequence, draggedSequence) => {
+  if (!isDraggedItem) {
+    return null;
+  }
+  return targetSequence > draggedSequence ? targetSequence - 1 : targetSequence;
+};
+
+export const getReorderedItemsInTargetDirectory = ({ items, targetItemUid, draggedItemUid, dropType = 'above' }) => {
+  const itemsWithFixedSequences = resetSequencesInFolder(cloneDeep(items));
+  const sortedItems = [...itemsWithFixedSequences].sort((a, b) => a.seq - b.seq);
+
+  const targetIndex = sortedItems.findIndex((i) => i.uid === targetItemUid);
+  const draggedIndex = sortedItems.findIndex((i) => i.uid === draggedItemUid);
+
+  if (targetIndex === -1 || draggedIndex === -1) return [];
+
+  let newIndex = dropType === 'below' ? targetIndex + 1 : targetIndex;
+  if (draggedIndex < newIndex) {
+    newIndex -= 1;
+  }
+
+  const [draggedItem] = sortedItems.splice(draggedIndex, 1);
+  sortedItems.splice(newIndex, 0, draggedItem);
+
+  sortedItems.forEach((item, index) => {
+    item.seq = index + 1;
+  });
+
+  return itemsWithFixedSequences.filter((item) =>
+    items?.find((originalItem) => originalItem?.uid === item?.uid)?.seq !== item?.seq
+  );
+};
+
+export const getReorderedItemsInSourceDirectory = ({ items }) => {
+  const itemsWithFixedSequences = resetSequencesInFolder(cloneDeep(items));
+  return itemsWithFixedSequences.filter((item) =>
+    items?.find((originalItem) => originalItem?.uid === item?.uid)?.seq !== item?.seq
+  );
+};
+
+export const calculateDraggedItemNewPathname = ({ draggedItem, targetItem, dropType, collectionPathname }) => {
+  const { pathname: targetItemPathname } = targetItem;
+  const { filename: draggedItemFilename } = draggedItem;
+  const targetItemDirname = path.dirname(targetItemPathname);
+  const isTargetTheCollection = targetItemPathname === collectionPathname;
+  const isTargetItemAFolder = isItemAFolder(targetItem);
+
+  if (dropType === 'inside' && (isTargetItemAFolder || isTargetTheCollection)) {
+    return path.join(targetItemPathname, draggedItemFilename);
+  } else if (dropType === 'above' || dropType === 'below') {
+    return path.join(targetItemDirname, draggedItemFilename);
+  }
+  return null;
+};
+
+export const determineCollectionItemDrop = ({ item, hoverBoundingRect, clientOffset }) => {
+  if (!hoverBoundingRect || !clientOffset) return null;
+
+  const clientY = clientOffset.y - hoverBoundingRect.top;
+
+  if (isItemAFolder(item)) {
+    const folderUpperThreshold = hoverBoundingRect.height * 0.3;
+    const folderLowerThreshold = hoverBoundingRect.height * 0.7;
+
+    if (clientY < folderUpperThreshold) return 'above';
+    if (clientY > folderLowerThreshold) return 'below';
+    return 'inside';
+  }
+
+  const midpoint = hoverBoundingRect.height * 0.5;
+  return clientY < midpoint ? 'above' : 'below';
+};
+
+/**
+ * Separator-aware ancestry check between two filesystem pathnames.
+ *
+ * Returns true when `childPathname` is the same as, or a descendant of, `ancestorPathname`.
+ * Uses path-segment boundaries so siblings like "/users-archive" are NOT treated as
+ * descendants of "/users". Normalizes separators and trailing slashes for cross-platform safety.
+ */
+export const isPathOrDescendant = (childPathname, ancestorPathname) => {
+  if (!childPathname || !ancestorPathname) return false;
+  const child = normalizePath(childPathname);
+  const ancestor = normalizePath(ancestorPathname);
+  return child === ancestor || child.startsWith(`${ancestor}/`);
+};
+
+export const canCollectionItemBeDropped = ({
+  draggedItem,
+  targetItem,
+  dropType,
+  collectionUid,
+  collectionPathname
+}) => {
+  const { uid: targetItemUid, pathname: targetItemPathname } = targetItem;
+  const { uid: draggedItemUid, pathname: draggedItemPathname, sourceCollectionUid } = draggedItem;
+
+  if (draggedItemUid === targetItemUid) return false;
+
+  if (sourceCollectionUid !== collectionUid) {
+    return true;
+  }
+
+  const newPathname = calculateDraggedItemNewPathname({ draggedItem, targetItem, dropType, collectionPathname });
+  if (!newPathname) return false;
+
+  if (isPathOrDescendant(targetItemPathname, draggedItemPathname)) return false;
+
+  return true;
+};
+
+// item sequence utils - END
+
+export const getUniqueTagsFromItems = (items = [], { includeDrafts = true } = {}) => {
+  const allTags = new Set();
+  const getTags = (items) => {
+    items.forEach((item) => {
+      if (isItemARequest(item)) {
+        const tags = includeDrafts && item.draft ? get(item, 'draft.tags', []) : get(item, 'tags', []);
+        tags.forEach((tag) => allTags.add(tag));
+      }
+      if (isItemAFolder(item)) {
+        const tags = includeDrafts ? getFolderTags(item) : get(item, 'root.meta.tags', []);
+        tags.forEach((tag) => allTags.add(tag));
+      }
+      if (item.items) {
+        getTags(item.items);
+      }
+    });
+  };
+  getTags(items);
+  return Array.from(allTags).sort();
+};
+
+/** Tags an item inherits from the folders above it, each paired with the folder it came from. */
+export const getInheritedTagSourcesForItem = (collection, item) =>
+  getInheritedTagSourcesFromTreePath(getTreePathFromCollectionToItem(collection, item));
+
+export const getInheritedTagsForItem = (collection, item) =>
+  getInheritedTagsFromTreePath(getTreePathFromCollectionToItem(collection, item));
+
+/** The tag set an item is filtered and reported by: its own tags plus its parent folders'. */
+export const getEffectiveTagsForItem = (collection, item) =>
+  getEffectiveTags(getOwnTags(item), getInheritedTagsForItem(collection, item));
+
+/**
+ * Pairs every request with the tags it inherits from the folders it sits in.
+ * `inheritedTags` is the effective tags of the folder the run starts at.
+ */
+const collectRequestsWithInheritedTags = ({ recursive, items, inheritedTags }) => {
+  const collected = [];
+
+  each(items, (item) => {
+    if (!isItemAFolder(item)) {
+      collected.push({ item, inheritedTags });
+      return;
+    }
+    if (recursive) {
+      collected.push(
+        ...collectRequestsWithInheritedTags({
+          recursive,
+          items: item.items,
+          inheritedTags: getEffectiveTags(getFolderTags(item), inheritedTags)
+        })
+      );
+    }
+  });
+
+  return collected;
+};
+
+/**
+ * Effective tags for every request in the tree, keyed by uid, resolved in a single walk — for
+ * callers that need them for a whole list at once rather than one item at a time.
+ */
+export const getEffectiveTagsByItemUid = (items = [], inheritedTags = []) =>
+  Object.fromEntries(
+    collectRequestsWithInheritedTags({ recursive: true, items, inheritedTags }).map(({ item, inheritedTags: inherited }) => [
+      item.uid,
+      getEffectiveTags(getOwnTags(item), inherited)
+    ])
+  );
+
+export const getRequestItemsForCollectionRun = ({ recursive, items = [], tags, inheritedTags = [] }) => {
+  let requestItems = collectRequestsWithInheritedTags({ recursive, items, inheritedTags });
+
+  const requestTypes = ['http-request', 'graphql-request'];
+  requestItems = requestItems.filter(({ item }) => requestTypes.includes(item.type) && !item.isTransient);
+
+  if (tags && tags.include && tags.exclude) {
+    const includeTags = tags.include ? tags.include : [];
+    const excludeTags = tags.exclude ? tags.exclude : [];
+    requestItems = requestItems.filter(({ item, inheritedTags: inherited }) => {
+      const effectiveTags = getEffectiveTags(getOwnTags(item), inherited);
+      return isRequestTagsIncluded(effectiveTags, includeTags, excludeTags);
+    });
+  }
+
+  return requestItems.map(({ item }) => item);
+};
+
+export const getPropertyFromDraftOrRequest = (item, propertyKey, defaultValue = null) => {
+  return item.draft ? get(item, `draft.${propertyKey}`, defaultValue) : get(item, propertyKey, defaultValue);
+};
+
+export const transformExampleToDraft = (example, newExample) => {
+  const exampleToDraft = cloneDeep(example);
+
+  if (newExample.name) {
+    exampleToDraft.name = newExample.name;
+  }
+  if (newExample.description) {
+    exampleToDraft.description = newExample.description;
+  }
+  if (newExample.status) {
+    exampleToDraft.response.status = Number(newExample.status);
+  }
+  if (newExample.statusText) {
+    exampleToDraft.response.statusText = newExample.statusText;
+  }
+  if (newExample.headers && newExample.headers.length) {
+    exampleToDraft.response.headers = newExample.headers.map((header) => ({
+      uid: uuid(),
+      name: String(header.name),
+      value: String(header.value),
+      description: String(header.description),
+      enabled: header.enabled
+    }));
+  }
+  if (newExample.body) {
+    exampleToDraft.response.body = newExample.body;
+  }
+
+  return exampleToDraft;
+};
+
+/**
+ * Generate an initial name for a new response example
+ * @param {Object} item - The request item that will contain the example
+ * @returns {string} - The suggested name for the new example
+ */
+export const getInitialExampleName = (item) => {
+  const baseName = 'example';
+  const existingExamples = item.draft?.examples || item.examples || [];
+  const existingNames = new Set(existingExamples.map((example) => example.name || '').filter(Boolean));
+
+  if (!existingNames.has(baseName)) {
+    return baseName;
+  }
+
+  let counter = 1;
+  while (true) {
+    const candidateName = `${baseName} (${counter})`;
+    if (!existingNames.has(candidateName)) {
+      return candidateName;
+    }
+    counter++;
+  }
+};
+
+/**
+ * Resolves the last enabled variable matching the given name.
+ * Secret variables take precedence over plain variables, regardless of their
+ * position in the array.
+ *
+ * @param {Array} variables - `environment.variables`
+ * @param {string} variableName - Name of the variable to resolve
+ * @returns {Object|undefined} The last matching enabled variable, preferring secrets
+ */
+export const resolveEnabledVariable = (variables, variableName) => {
+  const matches = (variables || []).filter((v) => v.name === variableName && v.enabled);
+  const matchingSecrets = matches.filter((v) => v.secret);
+  if (matchingSecrets.length > 0) {
+    return matchingSecrets[matchingSecrets.length - 1];
+  }
+  return matches[matches.length - 1];
+};
+
+const readItemRequestVars = (treeItem) => get(treeItem?.draft || treeItem?.root || treeItem, 'request.vars.req', []);
+
+const buildTreePathsByItemUid = (items, prefix, treePathsByItemUid) => {
+  for (const item of items || []) {
+    const pathToItem = [...prefix, item];
+    treePathsByItemUid.set(item.uid, pathToItem);
+    if (item.items?.length) {
+      buildTreePathsByItemUid(item.items, pathToItem, treePathsByItemUid);
+    }
+  }
+};
+
+/** Precomputed paths and merged env rows for repeated scope lookups during one collection scan. */
+export const createVariableScopeScanContext = (collection) => {
+  if (!collection) {
+    return null;
+  }
+
+  const treePathsByItemUid = new Map();
+  buildTreePathsByItemUid(collection.items, [], treePathsByItemUid);
+
+  const collectionRoot = (collection.draft && collection.draft.root) || collection.root || {};
+
+  let environment = null;
+  let environmentVariables = null;
+  const activeEnvironmentUidForScope = collection.realActiveEnvironmentUid ?? collection.activeEnvironmentUid;
+  if (activeEnvironmentUidForScope) {
+    environment = findEnvironmentInCollection(collection, activeEnvironmentUidForScope);
+    if (environment) {
+      environmentVariables = resolveEnvironmentInheritance({
+        environments: collection.environments,
+        targetEnvironment: environment,
+        merge: true
+      }).variables;
+    }
+  }
+
+  let globalEnvironment = null;
+  let globalVariables = null;
+  const { globalEnvironments, activeGlobalEnvironmentUid } = collection;
+  globalEnvironment = find(globalEnvironments, (e) => e.uid === activeGlobalEnvironmentUid);
+  if (globalEnvironment) {
+    globalVariables = resolveEnvironmentInheritance({
+      environments: globalEnvironments,
+      targetEnvironment: globalEnvironment,
+      merge: true
+    }).variables;
+  }
+
+  return {
+    treePathsByItemUid,
+    collectionRoot,
+    environment,
+    environmentVariables,
+    globalEnvironment,
+    globalVariables,
+    resolutionCache: new Map(),
+    inheritedAuthByItemUid: new Map()
+  };
+};
+
+const getRequestTreePathForScope = (collection, item, scanContext) => {
+  if (!item?.uid) {
+    return [];
+  }
+  if (scanContext?.treePathsByItemUid?.has(item.uid)) {
+    return scanContext.treePathsByItemUid.get(item.uid);
+  }
+  return getTreePathFromCollectionToItem(collection, item);
+};
+
+const variableScopeCacheKey = (variableName, item) => (
+  `${item?.uid ?? ''}|${variableName}`
+);
+
+// Get the scope and raw value of a variable by checking all scopes in priority order
+export const getVariableScope = (variableName, collection, item, options = {}) => {
+  if (!variableName || !collection) {
+    return null;
+  }
+
+  const { skipRequestScope = false, scanContext = null } = options;
+
+  if (scanContext?.resolutionCache) {
+    const cacheKey = variableScopeCacheKey(variableName, item);
+    if (scanContext.resolutionCache.has(cacheKey)) {
+      return scanContext.resolutionCache.get(cacheKey);
+    }
+  }
+
+  const storeScopeResult = (result) => {
+    if (scanContext?.resolutionCache) {
+      scanContext.resolutionCache.set(variableScopeCacheKey(variableName, item), result);
+    }
+    return result;
+  };
+
+  // 1. Check Request Variables (highest priority)
+  if (item && !skipRequestScope) {
+    const requestVar = resolveEnabledVariable(readItemRequestVars(item), variableName);
+    if (requestVar) {
+      return storeScopeResult({
+        type: 'request',
+        value: requestVar.value,
+        data: { item, variable: requestVar }
+      });
+    }
+  }
+
+  // 2. Check Folder Variables
+  const requestTreePath = getRequestTreePathForScope(collection, item, scanContext);
+  for (let i = requestTreePath.length - 1; i >= 0; i--) {
+    const pathItem = requestTreePath[i];
+    if (!pathItem) {
+      continue;
+    }
+
+    if (pathItem.type === 'folder') {
+      const folderVar = resolveEnabledVariable(readItemRequestVars(pathItem), variableName);
+      if (folderVar) {
+        return storeScopeResult({
+          type: 'folder',
+          value: folderVar.value,
+          data: { folder: pathItem, variable: folderVar }
+        });
+      }
+    }
+  }
+
+  // 3. Check Environment Variables
+  const environment = scanContext?.environment
+    ?? (() => {
+      const activeEnvironmentUidForScope = collection.realActiveEnvironmentUid ?? collection.activeEnvironmentUid;
+      return activeEnvironmentUidForScope
+        ? findEnvironmentInCollection(collection, activeEnvironmentUidForScope)
+        : null;
+    })();
+  const environmentVariables = scanContext
+    ? scanContext.environmentVariables
+    : (environment ? resolveEnvironmentInheritance({
+        environments: collection.environments,
+        targetEnvironment: environment,
+        merge: true
+      }).variables : null);
+
+  if (environment && environmentVariables) {
+    const envVar = resolveEnabledVariable(environmentVariables, variableName);
+    if (envVar) {
+      return storeScopeResult({
+        type: 'environment',
+        value: envVar.value,
+        data: { environment, variable: envVar },
+        inheritedFrom: envVar.inheritedFrom
+      });
+    }
+  }
+
+  // 4. Check Collection Variables
+  const collectionRoot = scanContext?.collectionRoot
+    ?? ((collection.draft && collection.draft.root) || collection.root || {});
+  const collectionVar = resolveEnabledVariable(readItemRequestVars(collectionRoot), variableName);
+  if (collectionVar) {
+    return storeScopeResult({
+      type: 'collection',
+      value: collectionVar.value,
+      data: { collection, variable: collectionVar }
+    });
+  }
+
+  // 5. Check Global Environment Variables
+  const globalEnvironment = scanContext?.globalEnvironment
+    ?? find(collection.globalEnvironments, (e) => e.uid === collection.activeGlobalEnvironmentUid);
+  const globalVariables = scanContext
+    ? scanContext.globalVariables
+    : (globalEnvironment ? resolveEnvironmentInheritance({
+        environments: collection.globalEnvironments,
+        targetEnvironment: globalEnvironment,
+        merge: true
+      }).variables : null);
+
+  if (globalEnvironment && globalVariables) {
+    const globalVar = resolveEnabledVariable(globalVariables, variableName);
+    if (globalVar) {
+      return storeScopeResult({
+        type: 'global',
+        value: globalVar.value,
+        data: { variableName, value: globalVar.value, variable: globalVar },
+        inheritedFrom: globalVar.inheritedFrom
+      });
+    }
+  }
+
+  // 6. Check Runtime Variables (set during request execution via scripts)
+  const { runtimeVariables = {} } = collection;
+  if (variableName in runtimeVariables) {
+    return storeScopeResult({
+      type: 'runtime',
+      value: runtimeVariables[variableName],
+      data: { variableName, value: runtimeVariables[variableName], readonly: true }
+    });
+  }
+
+  // Process.env variables are not checked here
+
+  return storeScopeResult(null);
+};
+
+// Check if a variable is marked as secret
+export const isVariableSecret = (scopeInfo) => {
+  if (!scopeInfo) {
+    return false;
+  }
+
+  // Environment and global environment variables can be marked as secret
+  if (scopeInfo.type === 'environment' || scopeInfo.type === 'global') {
+    return !!scopeInfo.data.variable?.secret;
+  }
+
+  return false;
+};
+
+const sidebarEntryCollator = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' });
+
+const getSidebarEntryName = (entry) => {
+  if (entry.kind === 'loaded') {
+    return entry.collection?.name || '';
+  }
+
+  return entry.entry?.name || path.basename(entry.entry?.path || '');
+};
+
+/**
+ * The sidebar list in workspace.yml order: each entry is either a fully loaded collection or,
+ * for non-default workspaces, a "ghost" git-backed entry whose local folder is missing. Shared
+ * between Collections/index.js's render and the shift-select range thunk so both agree on
+ * ordering — see Collections/index.js for the rendering this mirrors.
+ */
+export const buildSidebarEntries = ({ collections = [], workspaces = [], activeWorkspace, collectionSortOrder }) => {
+  if (!activeWorkspace?.collections?.length) return [];
+
+  const isDefaultWorkspace = activeWorkspace?.type === 'default';
+
+  const loadedByPath = new Map();
+  for (const c of collections) {
+    if (isScratchCollection(c, workspaces)) continue;
+    if (c.pathname) {
+      let key = normalizePath(c.pathname);
+      if (isWindowsOS()) key = key.toLowerCase();
+      loadedByPath.set(key, c);
+    }
+  }
+
+  const entries = [];
+  for (const wc of activeWorkspace.collections) {
+    if (!wc.path) continue;
+    let key = normalizePath(wc.path);
+    if (isWindowsOS()) key = key.toLowerCase();
+
+    const loaded = loadedByPath.get(key);
+    if (loaded) {
+      entries.push({ kind: 'loaded', collection: loaded, key: loaded.uid });
+    } else if (wc.remote && !isDefaultWorkspace) {
+      entries.push({ kind: 'ghost', entry: wc, key: `ghost:${wc.path}` });
+    }
+  }
+
+  if (collectionSortOrder === 'alphabetical') {
+    return [...entries].sort((a, b) => sidebarEntryCollator.compare(getSidebarEntryName(a), getSidebarEntryName(b)));
+  }
+
+  if (collectionSortOrder === 'reverseAlphabetical') {
+    return [...entries].sort((a, b) => -sidebarEntryCollator.compare(getSidebarEntryName(a), getSidebarEntryName(b)));
+  }
+
+  return entries;
+};
+
+/**
+ * Returns an ordered list of all currently visible sidebar item UIDs, reflecting collapse state and search filters.
+ *
+ * @param {Object} options
+ * @param {Array} options.sidebarEntries
+ * @param {string} options.searchText
+ * @returns {string[]}
+ */
+export const getVisibleSidebarUidsInOrder = ({ sidebarEntries = [], searchText = '' }) => {
+  const hasSearchText = Boolean(searchText && searchText.trim().length);
+  const uids = [];
+
+  const visitItems = (items = []) => {
+    const folderItems = sortByNameThenSequence(filter(items, (i) => isItemAFolder(i) && !i.isTransient));
+    const appItems = [...filter(items, (i) => i.type === 'app' && !i.isTransient)].sort((a, b) => a.seq - b.seq);
+    const requestItems = [...filter(items, (i) => isItemARequest(i) && !i.isTransient)].sort((a, b) => a.seq - b.seq);
+
+    folderItems.forEach((folder) => {
+      if (hasSearchText && !doesFolderHaveItemsMatchSearchText(folder, searchText)) return;
+      uids.push(folder.uid);
+      if (hasSearchText || !folder.collapsed) {
+        visitItems(folder.items);
+      }
+    });
+
+    if (!hasSearchText) {
+      appItems.forEach((app) => uids.push(app.uid));
+    }
+
+    requestItems.forEach((request) => {
+      if (hasSearchText && !doesRequestMatchSearchText(request, searchText)) return;
+      uids.push(request.uid);
+
+      const examplesVisible = request.type === 'http-request' && (hasSearchText || !isCollectionItemCollapsed(request));
+      if (examplesVisible && request.examples?.length) {
+        request.examples.forEach((example) => uids.push(example.uid));
+      }
+    });
+  };
+
+  sidebarEntries.forEach((entry) => {
+    if (entry.kind !== 'loaded') return;
+    const { collection } = entry;
+    if (hasSearchText && !doesCollectionHaveItemsMatchingSearchText(collection, searchText)) return;
+    uids.push(collection.uid);
+    if (hasSearchText || !collection.collapsed) {
+      visitItems(collection.items);
+    }
+  });
+
+  return uids;
+};
+
+const isPathnameDescendantOf = (pathname, ancestorPathname) => {
+  if (!pathname || !ancestorPathname || pathname === ancestorPathname) return false;
+
+  let normalizedPathname = normalizePath(pathname);
+  let normalizedAncestor = normalizePath(ancestorPathname);
+
+  if (isWindowsOS()) {
+    normalizedPathname = normalizedPathname.toLowerCase();
+    normalizedAncestor = normalizedAncestor.toLowerCase();
+  }
+
+  if (normalizedPathname === normalizedAncestor) return false;
+  return normalizedPathname.startsWith(`${normalizedAncestor}/`);
+};
+
+/**
+ * Resolves raw selected UIDs into a "parent wins" effective selection for bulk actions.
+ *
+ * @param {Object} options
+ * @param {Array} options.collections
+ * @param {string[]} options.selectedUids
+ * @returns {{ effectiveSelection: Array, hasCollection: boolean, hasFolder: boolean, hasRequest: boolean }}
+ */
+const getSelectionEntryType = (item) => {
+  if (isItemAFolder(item)) return 'folder';
+  if (isItemARequest(item)) return 'request';
+  if (item.type === 'app') return 'app';
+  return 'file';
+};
+
+// Returns whether a folder or request (with examples) is collapsed. Folders default to expanded; requests default to collapsed.
+export const isCollectionItemCollapsed = (item) => (isItemARequest(item) ? item.collapsed ?? true : !!item.collapsed);
+
+// Indexes every example by uid in a single pass over all collections, since examples are nested
+// within requests and lack their own pathnames. Built lazily (once per getSelectionInfo call) so
+// callers whose selection contains no examples never pay for it.
+const buildExampleOwnerIndex = (collections) => {
+  const index = new Map();
+  for (const collection of collections) {
+    for (const item of flattenItems(collection.items)) {
+      if (!item.examples) continue;
+      for (const example of item.examples) {
+        index.set(example.uid, { collection, item, example });
+      }
+    }
+  }
+  return index;
+};
+
+export const getSelectionInfo = ({ collections = [], selectedUids = [] }) => {
+  let exampleOwnerIndex = null;
+
+  const resolved = selectedUids
+    .map((uid) => {
+      const collection = findCollectionByUid(collections, uid);
+      if (collection) {
+        return { uid, type: 'collection', collectionUid: uid, pathname: collection.pathname, collection };
+      }
+
+      const owningCollection = findCollectionByItemUid(collections, uid);
+      const item = owningCollection && findItemInCollection(owningCollection, uid);
+      if (item) {
+        return {
+          uid,
+          type: getSelectionEntryType(item),
+          collectionUid: owningCollection.uid,
+          pathname: item.pathname,
+          item
+        };
+      }
+
+      exampleOwnerIndex = exampleOwnerIndex || buildExampleOwnerIndex(collections);
+      const exampleOwner = exampleOwnerIndex.get(uid);
+      if (exampleOwner) {
+        return {
+          uid,
+          type: 'example',
+          collectionUid: exampleOwner.collection.uid,
+          pathname: null,
+          item: exampleOwner.item,
+          example: exampleOwner.example
+        };
+      }
+
+      return null;
+    })
+    .filter(Boolean);
+
+  const selectedCollectionPathnames = resolved.filter((r) => r.type === 'collection').map((r) => r.pathname);
+  const selectedFolderPathnames = resolved.filter((r) => r.type === 'folder').map((r) => r.pathname);
+  const selectedRequestPathnames = resolved.filter((r) => r.type === 'request').map((r) => r.pathname);
+
+  // Since examples lack pathnames, they are considered absorbed if their parent request is selected
+  // (either directly or via an ancestor folder/collection).
+  const isExampleAbsorbed = (entry) => {
+    const parentPathname = entry.item.pathname;
+    return (
+      selectedRequestPathnames.includes(parentPathname)
+      || selectedCollectionPathnames.some((p) => isPathnameDescendantOf(parentPathname, p))
+      || selectedFolderPathnames.some((p) => isPathnameDescendantOf(parentPathname, p))
+    );
+  };
+
+  const effectiveSelection = resolved.filter((entry) => {
+    if (entry.type === 'collection') return true;
+    if (entry.type === 'example') return !isExampleAbsorbed(entry);
+    if (selectedCollectionPathnames.some((p) => isPathnameDescendantOf(entry.pathname, p))) return false;
+    return !selectedFolderPathnames.some(
+      (p) => p !== entry.pathname && isPathnameDescendantOf(entry.pathname, p)
+    );
+  });
+
+  return {
+    effectiveSelection,
+    hasCollection: effectiveSelection.some((e) => e.type === 'collection'),
+    hasFolder: effectiveSelection.some((e) => e.type === 'folder'),
+    hasRequest: effectiveSelection.some((e) => e.type === 'request'),
+    hasApp: effectiveSelection.some((e) => e.type === 'app'),
+    hasExample: effectiveSelection.some((e) => e.type === 'example')
+  };
+};
+
+/**
+ * Extracts and categorizes all drafts (collections, folders, requests, transient) from a list of collections.
+ *
+ * @param {Array} collections - Array of collection objects to inspect
+ * @returns {{ requestDrafts: Array, transientDrafts: Array, folderDrafts: Array, collectionDrafts: Array }}
+ */
+export const getCollectionDrafts = (collections = []) => {
+  const requestDrafts = [];
+  const transientDrafts = [];
+  const folderDrafts = [];
+  const collectionDrafts = [];
+
+  collections.forEach((c) => {
+    if (c.draft) {
+      collectionDrafts.push({ ...c, name: c.name, collectionUid: c.uid });
+    }
+
+    const items = flattenItems(c.items);
+
+    const requests = items?.filter((item) => isItemARequest(item) && (item.isTransient || hasRequestChanges(item))) || [];
+    requests.forEach((req) => {
+      const enhancedReq = { ...req, collectionUid: c.uid };
+      if (req.isTransient) {
+        transientDrafts.push(enhancedReq);
+      } else {
+        requestDrafts.push(enhancedReq);
+      }
+    });
+
+    const folders = items?.filter((item) => isItemAFolder(item) && item.draft) || [];
+    folders.forEach((folder) => {
+      folderDrafts.push({ ...folder, name: folder.name, folderUid: folder.uid, collectionUid: c.uid });
+    });
+  });
+
+  return { requestDrafts, transientDrafts, folderDrafts, collectionDrafts };
+};
+
+/**
+ * Generate a unique request name by checking existing filenames in the collection and filesystem
+ * @param {Object} collection - The collection object
+ * @param {string} baseName - The base name (default: 'Untitled')
+ * @param {string} itemUid - The parent item UID (null for root level, folder UID for folder level)
+ * @returns {Promise<string>} - A unique request name (Untitled, Untitled1, Untitled2, etc.)
+ */
+export const generateUniqueRequestName = async (collection, baseName = 'Untitled', itemUid = null) => {
+  if (!collection) {
+    return baseName;
+  }
+
+  const trim = require('lodash/trim');
+  const parentItem = itemUid ? findItemInCollection(collection, itemUid) : null;
+  const parentItems = parentItem ? (parentItem.items || []) : (collection.items || []);
+  const baseNamePattern = new RegExp(`^${baseName}(\\d+)?$`);
+  // Support .bru, .yml, and .yaml file extensions
+  const requestExtensions = /\.(bru|yml|yaml)$/i;
+  const matchingItems = parentItems
+    .filter((item) => {
+      if (item.type === 'folder') return false;
+
+      const filename = trim(item.filename);
+      if (!requestExtensions.test(filename)) return false;
+
+      const filenameWithoutExt = filename.replace(requestExtensions, '');
+      return baseNamePattern.test(filenameWithoutExt);
+    })
+    .map((item) => {
+      const filenameWithoutExt = trim(item.filename).replace(requestExtensions, '');
+      const match = filenameWithoutExt.match(baseNamePattern);
+
+      if (!match) return null;
+
+      const number = match[1] ? parseInt(match[1], 10) : 0;
+      return { name: filenameWithoutExt, number: isNaN(number) ? null : number };
+    })
+    .filter((item) => item !== null && item.number !== null);
+
+  if (matchingItems.length === 0) {
+    return baseName;
+  }
+
+  const sortedMatches = matchingItems.sort((a, b) => a.number - b.number);
+  const lastElement = sortedMatches[sortedMatches.length - 1];
+  const nextNumber = lastElement.number + 1;
+
+  return `${baseName}${nextNumber}`;
+};
+
+export const isItemTransientRequest = (item) => {
+  return isItemARequest(item) && item?.isTransient;
+};
+
+/**
+ * Generate a request name for transient requests in the pattern "Untitled {Count}"
+ * @param {Object} collection - The collection object
+ * @returns {string} A request name like "Untitled 1", "Untitled 2", etc.
+ */
+export const generateTransientRequestName = (collection) => {
+  if (!collection || !collection.items) {
+    return 'Untitled 1';
+  }
+  const allItems = flattenItems(collection.items);
+  const transientRequests = filter(allItems, (item) => {
+    return isItemTransientRequest(item);
+  });
+
+  // Find the highest "Untitled X" number among transient requests
+  let maxNumber = 0;
+  transientRequests.forEach((item) => {
+    const match = item.name?.match(/^Untitled (\d+)$/);
+    if (match) {
+      const number = parseInt(match[1], 10);
+      if (number > maxNumber) {
+        maxNumber = number;
+      }
+    }
+  });
+
+  // Increment from the highest number found, or start at 1 if none found
+  const count = maxNumber + 1;
+
+  return `Untitled ${count}`;
+};
+
+/**
+ * Maps a collection's "Presets" request type (used to default new requests created from
+ * the sidebar) to the request item type used elsewhere in the app.
+ * @param {Object} collection - The collection object
+ * @returns {string} One of 'http-request' | 'graphql-request' | 'grpc-request' | 'ws-request'
+ */
+export const getRequestTypeFromCollectionPresets = (collection) => {
+  const presets = collection?.draft?.brunoConfig?.presets ?? collection?.brunoConfig?.presets;
+
+  switch (presets?.requestType) {
+    case 'graphql':
+      return 'graphql-request';
+    case 'grpc':
+      return 'grpc-request';
+    case 'ws':
+      return 'ws-request';
+    default:
+      return 'http-request';
+  }
+};
+
+/**
+ * S3 (and compatible) presigned "PutObject" URLs are meant to be uploaded to, not fetched.
+ * A request linked from such a URL should default to PUT instead of GET.
+ */
+export const isPutObjectPresignedUrl = (url) => {
+  try {
+    return new URL(url).searchParams.get('x-id')?.toLowerCase() === 'putobject';
+  } catch (e) {
+    return false;
+  }
+};
+
+/**
+ * Recursively filter out transient items from a collection's items array.
+ * Used for collection runner, exports, and other operations that shouldn't include transient requests.
+ * @param {Array} items - The items array to filter
+ * @returns {Array} A new array with transient items removed
+ */
+export const filterTransientItems = (items) => {
+  if (!items || !Array.isArray(items)) {
+    return [];
+  }
+
+  return items
+    .filter((item) => !item?.isTransient)
+    .map((item) => {
+      if (item.items && item.items.length > 0) {
+        return {
+          ...item,
+          items: filterTransientItems(item.items)
+        };
+      }
+      return item;
+    });
+};
+
+/**
+ * Checks if a collection is a scratch collection for any workspace
+ * @param {Object} collection - The collection to check
+ * @param {Array} workspaces - Array of workspace objects
+ * @returns {boolean} True if the collection is a scratch collection
+ */
+export const isScratchCollection = (collection, workspaces) => {
+  if (!collection || !workspaces) return false;
+  return workspaces.some((w) => w.scratchCollectionUid === collection.uid);
+};
+
+export const getWorkspaceCollections = ({ collections = [], workspaces = [], activeWorkspace = null }) => {
+  if (!activeWorkspace) {
+    return [];
+  }
+
+  const toPathKey = (pathname) => {
+    const key = normalizePath(pathname);
+    return isWindowsOS() ? key.toLowerCase() : key;
+  };
+
+  return collections.filter((collection) => {
+    if (isScratchCollection(collection, workspaces)) {
+      return false;
+    }
+
+    return activeWorkspace.collections?.some(
+      (workspaceCollection) => toPathKey(workspaceCollection.path) === toPathKey(collection.pathname)
+    );
+  });
+};
+
+export const isSelectionEntryCollapsed = (entry) =>
+  entry.type === 'collection' ? entry.collection.collapsed : isCollectionItemCollapsed(entry.item);
+
+export const isSelectionEntryCollapsible = (entry) =>
+  entry.type === 'collection' || entry.type === 'folder' || (entry.type === 'request' && entry.item.examples?.length > 0);
+
+/**
+ * Derives bulk-actions menu state from Redux collections/workspaces and the current sidebar selection.
+ * Filters out scratch collections, then resolves selection via getSelectionInfo.
+ */
+export const getBulkActionsSelection = ({ collections = [], workspaces = [], selectedUids = [] }) => {
+  const visibleCollections = collections.filter((c) => !isScratchCollection(c, workspaces));
+  const selectionInfo = getSelectionInfo({ collections: visibleCollections, selectedUids });
+  const { effectiveSelection, hasCollection, hasFolder, hasRequest, hasApp, hasExample } = selectionInfo;
+
+  const collapsibleEntries = effectiveSelection.filter(isSelectionEntryCollapsible);
+  const canCollapse = collapsibleEntries.length > 0;
+
+  return {
+    ...selectionInfo,
+    isPureCollectionSelection: hasCollection && !hasFolder && !hasRequest && !hasApp && !hasExample,
+    canDelete: !hasCollection && (hasFolder || hasRequest || hasApp || hasExample),
+    collapsibleEntries,
+    canCollapse,
+    allCollapsed: canCollapse && collapsibleEntries.every(isSelectionEntryCollapsed)
+  };
+};
+
+const SCOPE_CONFIG = [
+  {
+    type: VARIABLE_ADD_SCOPES.GLOBAL,
+    label: ({ activeGlobalEnvironmentName }) => (
+      activeGlobalEnvironmentName ? `Global Environment (${activeGlobalEnvironmentName})` : 'Global Environment'
+    ),
+    supportsSecret: true,
+    enabled: ({ activeGlobalEnvironmentUid }) => !!activeGlobalEnvironmentUid
+  },
+  {
+    type: VARIABLE_ADD_SCOPES.ENVIRONMENT,
+    label: ({ activeEnvironmentName }) => (
+      activeEnvironmentName ? `Collection Environment (${activeEnvironmentName})` : 'Collection Environment'
+    ),
+    supportsSecret: true,
+    isAvailable: ({ hasCollection }) => hasCollection,
+    enabled: ({ activeEnvironmentUid }) => !!activeEnvironmentUid
+  },
+  {
+    type: VARIABLE_ADD_SCOPES.COLLECTION,
+    label: 'Collection Variable',
+    supportsSecret: false,
+    isAvailable: ({ hasCollection }) => hasCollection,
+    enabled: () => true
+  },
+  {
+    type: VARIABLE_ADD_SCOPES.REQUEST,
+    label: 'Request Variable',
+    supportsSecret: false,
+    isAvailable: ({ item }) => item && isItemARequest(item),
+    enabled: () => true
+  },
+  {
+    type: VARIABLE_ADD_SCOPES.FOLDER,
+    label: ({ parentFolder, isSelfFolder }) => (isSelfFolder ? 'Folder' : `Parent Folder (${parentFolder?.name || ''})`),
+    supportsSecret: false,
+    // Only the request/folder's direct containing folder is added. unless we're already in
+    // that folder's own settings, in which case the folder itself is the target.
+    isAvailable: ({ parentFolder }) => !!parentFolder,
+    enabled: () => true
+  }
+];
+
+/**
+ * Resolves which scopes an undefined `{{variable}}` can be added to.
+ * @param {Object} options
+ * @param {string} [options.activeEnvironmentUid] - The collection's active environment uid, if any.
+ * @param {string} [options.activeEnvironmentName] - The collection's active environment name, if any.
+ * @param {string} [options.activeGlobalEnvironmentUid] - The active global environment uid, if any.
+ * @param {string} [options.activeGlobalEnvironmentName] - The active global environment name, if any.
+ * @param {Object} [options.item] - The request/folder item the tooltip was opened from, if any.
+ *   Request Variable is only added when this is a request (see isItemARequest).
+ * @param {Object} [options.parentFolder] - The folder variables should be added to, if any: either
+ *   the immediate containing folder of `item`, or `item` itself when already in folder settings.
+ *   Folder Variable is only added when this is present.
+ * @param {boolean} [options.isSelfFolder] - True when `parentFolder` is the folder currently being
+ *   edited (tooltip opened from within that folder's own settings), rather than an actual parent.
+ *   Only affects the Folder scope's label ("Folder" vs "Parent Folder (...)").
+ * @param {boolean} [options.hasCollection] - when we are in Global Environment table, there is no collection context,
+ * so we don't show collection/environment scopes
+ * @returns {Array<{type: string, label: string, enabled: boolean, supportsSecret: boolean}>}
+ */
+export const getAvailableAddToScopes = ({
+  activeEnvironmentUid,
+  activeEnvironmentName,
+  activeGlobalEnvironmentUid,
+  activeGlobalEnvironmentName,
+  item,
+  parentFolder,
+  isSelfFolder = false,
+  hasCollection = true
+} = {}) => {
+  const context = {
+    activeEnvironmentUid,
+    activeEnvironmentName,
+    activeGlobalEnvironmentUid,
+    activeGlobalEnvironmentName,
+    item,
+    parentFolder,
+    isSelfFolder,
+    hasCollection
+  };
+
+  const filteredScopes = SCOPE_CONFIG.filter((scope) => !scope.isAvailable || scope.isAvailable(context));
+
+  return filteredScopes
+    .map(({ enabled, isAvailable, label, ...scope }) => ({
+      ...scope,
+      label: typeof label === 'function' ? label(context) : label,
+      enabled: enabled(context)
+    }));
+};
+
+/**
+ * Gets the other collections (excluding the provided uids)
+ * @param {Array} allCollections - Array of all collections
+ * @param {Array} uids - Array of uids to exclude
+ * @returns {Array} Array of other collections
+ */
+export const getOtherCollections = (allCollections, uids) => {
+  const uidsSet = new Set(uids);
+  return allCollections.filter((collection) => !uidsSet.has(collection.uid));
+};
+
+/**
+ * Gets the sorted dragged items based on the visual order
+ * @param {Object} draggedItem - The dragged item
+ * @param {Array} allCollections - Array of all collections
+ * @param {Array} workspaces - Array of workspaces
+ * @param {Object} activeWorkspace - The active workspace
+ * @param {string} collectionSortOrder - The collection sort order
+ * @param {string} searchText - The search text
+ * @returns {Array} Array of sorted dragged items
+ */
+export const getSortedDraggedItems = ({
+  draggedItem,
+  allCollections,
+  workspaces,
+  activeWorkspace,
+  collectionSortOrder,
+  searchText
+}) => {
+  let draggedItems = [];
+  if (draggedItem.multiSelectedItems && draggedItem.multiSelectedItems.length > 0) {
+    // multiSelectedItems is already the parent-wins effective selection (see getSelectionInfo).
+    // The dragged item's own uid can legitimately be absent from it when a selected ancestor
+    // of the dragged item took over the selection — trust it as-is rather than re-adding the
+    // dragged item, which would move it a second time independently of its selected ancestor.
+    draggedItems = [...draggedItem.multiSelectedItems];
+  } else {
+    draggedItems = [{ ...draggedItem, sourceCollectionUid: draggedItem.sourceCollectionUid }];
+  }
+
+  const sidebarEntries = buildSidebarEntries({
+    collections: allCollections,
+    workspaces,
+    activeWorkspace,
+    collectionSortOrder
+  });
+
+  const visibleUids = getVisibleSidebarUidsInOrder({ sidebarEntries, searchText });
+  const visibleUidsIndex = new Map(visibleUids.map((uid, idx) => [uid, idx]));
+
+  draggedItems.sort((a, b) => {
+    const idxA = visibleUidsIndex.has(a.uid) ? visibleUidsIndex.get(a.uid) : Number.MAX_SAFE_INTEGER;
+    const idxB = visibleUidsIndex.has(b.uid) ? visibleUidsIndex.get(b.uid) : Number.MAX_SAFE_INTEGER;
+    return idxA - idxB;
+  });
+
+  return draggedItems;
+};

@@ -1,0 +1,214 @@
+import styled from 'styled-components';
+import codemirrorTokenStyles from './tokenStyles';
+
+const StyledWrapper = styled.div`
+  &.read-only {
+    div.CodeMirror .CodeMirror-cursor {
+      display: none !important;
+    }
+  }
+
+  /* Ensure the search bar (position: absolute; top: 8px; ~66px tall with replace open)
+     never clips in a short editor that can grow freely (e.g. flex parent).
+     Fixed-height parents like SingleWSMessage handle this via onSearchBarVisibilityChange. */
+  &.search-bar-visible .editor-shell {
+    min-height: 90px;
+  }
+
+  .editor-shell {
+    flex: 1 1 0;
+    min-height: 0;
+    width: 100%;
+    border: 1px solid ${(props) => props.theme.codemirror.border};
+    border-radius: ${(props) => props.theme.border.radius.sm};
+    overflow: hidden;
+  }
+
+  .editor-container {
+    flex: 1 1 0;
+    min-height: 0;
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+  }
+
+  div.CodeMirror {
+    background: ${(props) => props.theme.codemirror.bg};
+    border: none;
+    font-family: ${(props) => (props.font ? props.font : 'default')};
+    font-size: ${(props) => (props.fontSize ? `${props.fontSize}px` : 'inherit')};
+    line-break: anywhere;
+    flex: 1 1 0;
+    min-height: 0;
+    height: auto !important;
+    display: flex;
+    flex-direction: column-reverse;
+  }
+
+  .editor-container > div.CodeMirror {
+    height: 100% !important;
+  }
+
+  .CodeMirror-placeholder {
+    color: ${(props) => props.theme.codemirror.placeholder.color} !important;
+    opacity: ${(props) => props.theme.codemirror.placeholder.opacity} !important;
+  }
+
+  .CodeMirror-linenumber {
+    text-align: left !important;
+    padding-left: 3px !important;
+  }
+
+  /* Override default lint highlight background when emphasizing the gutter */
+  .CodeMirror-lint-line-error,
+  .CodeMirror-lint-line-warning {
+    background: none !important;
+  }
+
+  /* Style line numbers when there's a lint issue */
+  .CodeMirror-lint-line-error .CodeMirror-linenumber {
+    color: ${(props) => props.theme.colors.text.danger} !important;
+    text-decoration: underline;
+  }
+
+  .CodeMirror-lint-line-warning .CodeMirror-linenumber {
+    color: ${(props) => props.theme.colors.text.warning} !important;
+    text-decoration: underline;
+  }
+
+  .cm-ghost-text-ai {
+    opacity: 0.45;
+    color: ${(props) => props.theme.colors.text.muted};
+    font-style: italic;
+    pointer-events: none;
+    user-select: none;
+    white-space: pre;
+  }
+
+  /* Removes the glow outline around the folded json */
+  .CodeMirror-foldmarker {
+    text-shadow: none;
+    color: ${(props) => props.theme.textLink};
+    background: none;
+    padding: 0;
+    margin: 0;
+  }
+
+  .CodeMirror-overlayscroll-horizontal div,
+  .CodeMirror-overlayscroll-vertical div {
+    background: #d2d7db;
+  }
+
+  .CodeMirror-dialog {
+    overflow: visible;
+    position: relative;
+    top: unset;
+    left: unset;
+
+    input {
+      background: transparent;
+      border: 1px solid #d3d6db;
+      outline: none;
+      border-radius: 0px;
+    }
+  }
+
+  #search-results-count {
+    display: inline-block;
+    position: absolute;
+    top: calc(100% + 1px);
+    right: 0;
+    border-width: 0 0 1px 1px;
+    border-style: solid;
+    border-color: ${(props) => props.theme.codemirror.border};
+    padding: 0.1em 0.8em;
+    background-color: ${(props) => props.theme.codemirror.bg};
+    color: rgb(102, 102, 102);
+    white-space: nowrap;
+  }
+
+  textarea.cm-editor {
+    position: relative;
+  }
+
+  // Todo: dark mode temporary fix
+  // Clean this
+  .CodeMirror.cm-s-monokai {
+    .CodeMirror-overlayscroll-horizontal div,
+    .CodeMirror-overlayscroll-vertical div {
+      background: #444444;
+    }
+  }
+
+  ${codemirrorTokenStyles}
+
+  .CodeMirror-search-hint {
+    display: inline;
+  }
+  
+  
+  //matching bracket fix
+  .CodeMirror-matchingbracket {
+    background: ${(props) => props.theme.status.success.background} !important;
+    text-decoration: unset;
+  }
+
+  .CodeMirror-nonmatchingbracket {
+    color: ${(props) => props.theme.colors.text.danger} !important;
+    background: ${(props) => props.theme.status.danger.background} !important;
+    text-decoration: unset;
+  }
+
+  @keyframes cm-error-line-flash {
+    0%, 60% {
+      background-color: ${(props) => props.theme.status.danger.background};
+    }
+    100% {
+      background-color: transparent;
+    }
+  }
+
+  .CodeMirror .cm-error-line-flash {
+    background-color: transparent;
+    animation: cm-error-line-flash 3s ease-in-out;
+  }
+
+  .CodeMirror .cm-error-line-flash-gutter {
+    color: ${(props) => props.theme.colors.text.danger} !important;
+    font-weight: 600;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .CodeMirror .cm-error-line-flash {
+      animation: none;
+      background-color: ${(props) => props.theme.status.danger.background};
+    }
+  }
+
+  .lint-error-tooltip {
+    position: fixed;
+    z-index: 10000;
+    background: ${(props) => props.theme.codemirror.bg};
+    border-radius: ${(props) => props.theme.border.radius.base};
+    padding: 8px 12px;
+    max-width: 400px;
+    box-shadow: ${(props) => props.theme.shadow.sm};
+    font-size: ${(props) => props.theme.font.size.xs};
+    line-height: 1.5;
+    pointer-events: none;
+
+    .lint-tooltip-message {
+      padding: 2px 0;
+    }
+
+    .lint-tooltip-message.error {
+      color: ${(props) => props.theme.colors.text.danger};
+    }
+
+    .lint-tooltip-message.warning {
+      color: ${(props) => props.theme.colors.text.warning};
+    }
+  }
+`;
+
+export default StyledWrapper;
