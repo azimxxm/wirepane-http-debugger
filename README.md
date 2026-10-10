@@ -69,7 +69,12 @@ O'zgartirgan kodingiz saqlanib qoladi. Conflict chiqsa, uni oddiy `git merge`dag
   2. Auto-update'ni o'chirish: `httptoolkit-server/src/index.ts` (`update-requested`) va `package.json` → `oclif.update`. Aks holda rasmiy server bizning server o'rniga yuklanib qoladi.
   3. UI build'ini (`httptoolkit-ui` → `npm run build`) app ichiga qo'shish va `APP_URL`ni unga yo'naltirish.
   4. `httptoolkit-desktop/package.json` faylida `appId`, `productName`, signing va notarize sozlamalarini o'zgartirish. `build-setup/setup-server.ts` server'ni GitHub release'dan yuklamasin, `../httptoolkit-server`dan yig'sin.
-- [ ] Proxyman'ga o'xshash interfeys.
+- [ ] Proxyman'dagi feature'lar:
+  - **Bizda bor, lekin Pro bilan yopilgan** (`httptoolkit-ui/src/model/rules/rules.ts` → `NonPaidStepClasses`): Map Local (`file`), Map Remote (`forward-to-host`), mock, rewrite, delay, block. Breakpoint esa bepul.
+  - **Qo'shish kerak:**
+    - P1: Access Control (LAN'dan kim ulana olishi), macOS system proxy toggle, iOS Simulator auto-setup, telefon ulash uchun QR.
+    - P2: Highlight/Comment, Diff, Network Conditions, DNS Spoofing.
+    - P3: Scripting, Reverse Proxy, native Swift + SwiftNIO versiya.
 
 ## Eslatmalar
 
