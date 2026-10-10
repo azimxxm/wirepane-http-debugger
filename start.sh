@@ -105,4 +105,6 @@ echo "Opening the app..."
 cd "$ROOT/httptoolkit-desktop" || fail "httptoolkit-desktop folder is missing"
 ./node_modules/.bin/tsx ./build-setup/skip-server.ts || fail "could not create the desktop dev server stub"
 npm run --silent build:src || fail "desktop TypeScript build failed"
+# The Dock and app menu show the bundle's name and icon: make the dev Electron.app say Wirepane
+"$ROOT/scripts/brand-dev-electron.sh" || echo "Could not brand the dev Electron app, it will show as Electron"
 HTK_DEV=true APP_URL="$UI_URL" ./node_modules/.bin/electron . "$@"
