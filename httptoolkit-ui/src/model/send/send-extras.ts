@@ -115,17 +115,19 @@ export class SendExtras implements SendExtrasData {
         this.websocket = { ...defaultData().websocket, ...filled.websocket };
     }
 
-    // A plain deep copy, for persisting, snapshots and building copies of a request
+    // A plain deep copy, for persisting, snapshots and building copies of a request.
+    // Each value goes through toJS on its own: toJS returns a plain object as it is, so
+    // wrapping them all in one would hand out (and only track) the live observables.
     toData(): SendExtrasData {
-        return toJS({
+        return {
             requestType: this.requestType,
             bodyMode: this.bodyMode,
-            formFields: this.formFields,
-            multipartFields: this.multipartFields,
-            binaryFile: this.binaryFile,
-            graphql: this.graphql,
-            websocket: this.websocket
-        });
+            formFields: toJS(this.formFields),
+            multipartFields: toJS(this.multipartFields),
+            binaryFile: toJS(this.binaryFile),
+            graphql: toJS(this.graphql),
+            websocket: toJS(this.websocket)
+        };
     }
 
     static from(source: SendExtras | Partial<SendExtrasData> | undefined): SendExtras {

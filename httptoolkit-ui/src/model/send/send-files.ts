@@ -107,7 +107,8 @@ export class SendFileStore {
         try {
             const storedIds = await this.withStore('readonly', (store) => store.getAllKeys()) ?? [];
             for (const fileId of storedIds) {
-                if (!fileIds.has(String(fileId))) {
+                // A file put while this runs is in memory again: it's new, so it stays
+                if (!fileIds.has(String(fileId)) && !this.memory.has(String(fileId))) {
                     await this.withStore('readwrite', (store) => store.delete(fileId));
                 }
             }

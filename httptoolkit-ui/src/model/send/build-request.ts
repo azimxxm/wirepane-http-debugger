@@ -1,3 +1,5 @@
+import { runInAction } from 'mobx';
+
 import { RawHeaders } from '../../types';
 import { getHeaderValue, removeHeader, setHeaderValue } from '../http/headers';
 
@@ -41,7 +43,7 @@ export function encodeFormBody(fields: FormField[]): string {
 }
 
 // As browsers do it (HTML spec, multipart/form-data encoding): quotes and newlines are escaped
-const quoteMultipartValue = (value: string) =>
+export const quoteMultipartValue = (value: string) =>
     value.replace(/"/g, '%22').replace(/\r/g, '%0D').replace(/\n/g, '%0A');
 
 async function readFile(file: FileRef): Promise<Buffer> {
@@ -103,7 +105,12 @@ export function graphqlPayload(graphql: GraphqlBody): { query: string, variables
 // GraphQL over GET sends the query in the URL (GraphQL over HTTP spec)
 function withGraphqlQueryParams(url: string, graphql: GraphqlBody): string {
     const payload = graphqlPayload(graphql);
-    const parsed = new URL(url);
+    let parsed: URL;
+    try {
+        parsed = new URL(url);
+    } catch {
+        throw new SendBuildError('Enter a full URL, like https://example.com/graphql, to send a GraphQL query with GET.');
+    }
     parsed.searchParams.set('query', payload.query);
     if (payload.variables !== undefined) parsed.searchParams.set('variables', JSON.stringify(payload.variables));
     if (payload.operationName) parsed.searchParams.set('operationName', payload.operationName);
@@ -177,10 +184,12 @@ export async function buildRequestForSend(input: RequestInput): Promise<RequestI
 
     // Content-Length follows the body as sent, after any Content-Encoding
     const encoded = await request.rawBody.encodingBestEffortPromise;
-    if (!getHeaderValue(request.headers, 'transfer-encoding')) {
+    // The request's own reactions observe its headers, so they only change in an action
+    runInAction(() => {
+        if (getHeaderValue(request.headers, 'transfer-encoding')) return;
         if (encoded.byteLength) setHeaderValue(request.headers, 'content-length', encoded.byteLength.toString());
         else removeHeader(request.headers, 'content-length');
-    }
+    });
 
     return request;
 }

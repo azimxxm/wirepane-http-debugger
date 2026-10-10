@@ -37,6 +37,7 @@ import {
     RequestOptions
 } from './send-request-model';
 import { buildRequestForSend } from './build-request';
+import { dropUnusedSendFiles } from './body-modes/file-cleanup';
 
 export class SendStore {
 
@@ -102,6 +103,9 @@ export class SendStore {
 
         if (this.sendRequests.length === 0) this.addRequestInput();
         this.selectedRequest = this.sendRequests[this.sendRequests.length - 1];
+
+        // wirepane: attached files that no tab refers to any more are dropped, in the background
+        dropUnusedSendFiles(this.sendRequests);
 
         console.log('Send store initialized');
     });
