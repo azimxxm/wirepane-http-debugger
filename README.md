@@ -8,15 +8,18 @@ Developerlar va QA uchun bepul, ochiq kodli HTTP(S) debugger. U brauzer, iPhone,
 
 ## Asosiy source'lar
 
-| Papka                  | Upstream                                                                              | Vazifasi                             |
-| ---------------------- | ------------------------------------------------------------------------------------- | ------------------------------------ |
-| `httptoolkit-ui/`      | [httptoolkit/httptoolkit-ui](https://github.com/httptoolkit/httptoolkit-ui)           | Interfeys (React, MobX, webpack)     |
-| `httptoolkit-server/`  | [httptoolkit/httptoolkit-server](https://github.com/httptoolkit/httptoolkit-server)   | Proxy'ni boshqarish, interceptor'lar |
-| `httptoolkit-desktop/` | [httptoolkit/httptoolkit-desktop](https://github.com/httptoolkit/httptoolkit-desktop) | Electron oyna                        |
-| npm dependency         | [httptoolkit/mockttp](https://github.com/httptoolkit/mockttp)                         | Proxy engine (HTTP/HTTPS MITM)       |
+| Papka                  | Upstream                                                                              | Vazifasi                                                                                                                                            |
+| ---------------------- | ------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `httptoolkit-ui/`      | [httptoolkit/httptoolkit-ui](https://github.com/httptoolkit/httptoolkit-ui)           | Interfeys (React, MobX, webpack)                                                                                                                    |
+| `httptoolkit-server/`  | [httptoolkit/httptoolkit-server](https://github.com/httptoolkit/httptoolkit-server)   | Proxy'ni boshqarish, interceptor'lar                                                                                                                |
+| `httptoolkit-desktop/` | [httptoolkit/httptoolkit-desktop](https://github.com/httptoolkit/httptoolkit-desktop) | Electron oyna                                                                                                                                       |
+| npm dependency         | [httptoolkit/mockttp](https://github.com/httptoolkit/mockttp)                         | Proxy engine (HTTP/HTTPS MITM)                                                                                                                      |
+| `bruno/`               | [usebruno/bruno](https://github.com/usebruno/bruno) (MIT)                             | Collections va file orqali ulashish: package'lari (`bruno-converters`, `bruno-lang`, `bruno-js`, `bruno-cli`) ishlatiladi. App sifatida yig'ilmaydi |
 
 Asosiy loyiha va issue'lar: [httptoolkit/httptoolkit](https://github.com/httptoolkit/httptoolkit).
 Upstream kod `git subtree --squash` orqali qo'shilgan. Ya'ni kodning hammasi shu repoda, upstream commit tarixi esa olinmagan.
+
+Bruno — open-core loyiha. GitHub'dagi kod to'liq MIT litsenziyasida, shuning uchun uni AGPL ilovamizda ishlatish mumkin; faqat ularning `license.md` copyright'i saqlanadi. Pullik Pro va Ultimate feature'lari (Git UI, secret manager, test hisobotlari, SSO) ochiq repo'da yo'q. Kerak bo'lganlarini o'zimiz yozamiz.
 
 ## Ishga tushirish
 

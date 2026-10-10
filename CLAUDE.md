@@ -27,8 +27,9 @@ Three upstream HTTP Toolkit projects, imported with `git subtree --squash` (no u
 - `httptoolkit-ui/`: React + MobX app bundled with webpack.
 - `httptoolkit-desktop/`: Electron shell that starts the server and loads the UI.
 - The proxy engine `mockttp` is an npm dependency, not part of this repo.
+- `bruno/`: Bruno (MIT, usebruno/bruno), tracked for its packages: `bruno-converters` (Postman/Insomnia/OpenAPI import), `bruno-lang` (`.bru` files), `bruno-js` (scripts/tests runtime), `bruno-cli`. It is not built or run as an app. Its UI is Redux-based, so Wirepane screens are written in our own React + MobX stack and use Bruno's packages for the logic. Keep its `license.md` notices.
 
-`./sync-upstream.sh` runs `git subtree pull --squash` for each folder (needs a clean tree). Every line we change in upstream files can conflict on the next sync, so keep fork changes small and contained, and prefer adding new files over rewriting upstream ones.
+`./sync-upstream.sh` runs `git subtree pull --squash` for each folder, Bruno included (needs a clean tree). Every line we change in upstream files can conflict on the next sync, so keep fork changes small and contained, and prefer adding new files over rewriting upstream ones.
 
 ## Commands
 
