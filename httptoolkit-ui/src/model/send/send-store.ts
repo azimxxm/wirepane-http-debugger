@@ -46,6 +46,10 @@ export class SendStore {
         private proxyStore: ProxyStore
     ) {}
 
+    // Collections fill in {{variables}} and collection auth here, just before sending.
+    // No result cancels the send: the hook shows why, inline, instead of an error dialog.
+    prepareRequestInput: (sendRequest: SendRequest) => RequestInput | undefined = (sendRequest) => sendRequest.request;
+
     readonly initialized = lazyObservablePromise(async () => {
         await Promise.all([
             this.accountStore.initialized,
@@ -137,7 +141,8 @@ export class SendStore {
     readonly sendRequest = async (sendRequest: SendRequest) => {
         trackEvent({ category: 'Send', action: 'Sent request' });
 
-        const requestInput = sendRequest.request;
+        const requestInput = this.prepareRequestInput(sendRequest);
+        if (!requestInput) return;
         const pendingRequestDeferred = getObservableDeferred();
         const abortController = new AbortController();
 

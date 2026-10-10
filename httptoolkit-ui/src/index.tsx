@@ -34,6 +34,7 @@ import { RulesStore } from './model/rules/rules-store';
 import { InterceptorStore } from './model/interception/interceptor-store';
 import { ApiStore } from './model/api/api-store';
 import { SendStore } from './model/send/send-store';
+import { CollectionsStore } from './model/collections/collections-store';
 
 import { serverVersion, desktopVersion, lastServerVersion, UI_VERSION } from './services/service-versions';
 import {
@@ -86,6 +87,7 @@ const rulesStore = new RulesStore(accountStore, proxyStore,
 );
 const eventsStore = new EventsStore(proxyStore, apiStore, rulesStore);
 const sendStore = new SendStore(accountStore, eventsStore, rulesStore, proxyStore);
+const collectionsStore = new CollectionsStore(sendStore);
 
 const stores = {
     accountStore,
@@ -95,7 +97,8 @@ const stores = {
     eventsStore,
     interceptorStore,
     rulesStore,
-    sendStore
+    sendStore,
+    collectionsStore
 };
 
 const appStartupPromise = Promise.all(

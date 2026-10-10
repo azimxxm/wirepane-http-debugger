@@ -26,6 +26,7 @@ import { EventsStore } from '../../model/events/events-store';
 import { RulesStore } from '../../model/rules/rules-store';
 import { AccountStore } from '../../model/account/account-store';
 import { SendStore } from '../../model/send/send-store';
+import { CollectionsStore } from '../../model/collections/collections-store';
 import { HttpExchange } from '../../model/http/http-exchange';
 import { Filter, FilterSet } from '../../model/filters/search-filters';
 import { buildRuleFromExchange } from '../../model/rules/rule-creation';
@@ -56,6 +57,7 @@ interface ViewPageProps {
     accountStore: AccountStore;
     rulesStore: RulesStore;
     sendStore: SendStore;
+    collectionsStore: CollectionsStore;
     navigate: (path: string) => void;
     eventId?: string;
 }
@@ -72,9 +74,17 @@ const ViewPageKeyboardShortcuts = (props: {
     onBuildRule: () => void,
     onDelete: () => void,
     onClear: () => void,
-    onStartSearch: () => void
+    onStartSearch: () => void,
+    onSaveToCollection: () => void
 }) => {
     const selectedEvent = props.selectedEvent;
+
+    useHotkeys('Ctrl+Shift+s, Cmd+Shift+s', (event) => {
+        if (selectedEvent?.isHttp() || props.isMultiSelection) {
+            props.onSaveToCollection();
+            event.preventDefault();
+        }
+    }, [selectedEvent, props.isMultiSelection, props.onSaveToCollection]);
 
     useHotkeys('Ctrl+[, Cmd+[', (event) => {
         event.preventDefault();
@@ -163,6 +173,7 @@ const paneExpansionRequirements: { [key in ExpandableViewCardKey]: (event: Colle
 @inject('accountStore')
 @inject('rulesStore')
 @inject('sendStore')
+@inject('collectionsStore')
 @observer
 class ViewPage extends React.Component<ViewPageProps> {
 
@@ -293,7 +304,8 @@ class ViewPage extends React.Component<ViewPageProps> {
             onBuildRuleFromExchange: this.onBuildRuleFromExchange,
             onBuildRuleFromSelectedExchanges: this.onBuildRuleFromSelectedExchanges,
             onPrepareToResendRequest: this.onPrepareToResendRequest,
-            onAddFilter: this.onAddSearchFilter
+            onAddFilter: this.onAddSearchFilter,
+            onSaveToCollection: this.onSaveToCollection
         }
     );
 
@@ -404,6 +416,7 @@ class ViewPage extends React.Component<ViewPageProps> {
                 onPin={this.onPin}
                 onDelete={this.onDeleteSelection}
                 onBuildRule={this.onBuildRuleFromSelectedExchanges}
+                onSaveToCollection={this.onSaveSelectionToCollection}
             />;
         } else if (!this.selectedEvent) {
             // With no traffic at all, the list's empty state stands alone
@@ -430,6 +443,7 @@ class ViewPage extends React.Component<ViewPageProps> {
                     ? this.onPrepareToResendRequest
                     : undefined
                 }
+                onSaveToCollection={this.onSaveToCollection}
             />;
         } else if (this.selectedEvent.isTlsFailure()) {
             rightPane = <TlsFailureDetailsPane
@@ -486,6 +500,7 @@ class ViewPage extends React.Component<ViewPageProps> {
                 onDelete={this.onDeleteSelection}
                 onClear={this.onForceClear}
                 onStartSearch={this.onStartSearch}
+                onSaveToCollection={this.onSaveSelectionToCollection}
             />
 
             <PageHeader
@@ -776,6 +791,20 @@ class ViewPage extends React.Component<ViewPageProps> {
     }
 
     @action.bound
+    onSaveToCollection(exchanges: HttpExchangeView[]) {
+        this.props.collectionsStore.startSavingExchanges(exchanges);
+    }
+
+    // The selected requests, or the selected one as it's shown (client/server view)
+    @action.bound
+    onSaveSelectionToCollection() {
+        this.onSaveToCollection(this.isMultiSelection
+            ? this.selectedEvents.filter((e): e is HttpExchange => e.isHttp() && !e.isWebSocket())
+            : this.selectedExchange ? [this.selectedExchange] : []
+        );
+    }
+
+    @action.bound
     onDelete(event: CollectedEvent) {
         const { filteredEvents } = this.filteredEventState;
 
@@ -894,6 +923,7 @@ const StyledViewPage = styled(
         | 'accountStore'
         | 'rulesStore'
         | 'sendStore'
+        | 'collectionsStore'
         | 'navigate'
     >
 )`

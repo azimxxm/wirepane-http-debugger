@@ -208,7 +208,8 @@ export const SendRequestLine = (props: {
             <MethodSelectArrow />
         </MethodSelectContainer>
         <UrlInput
-            type='url'
+            // {{variables}} aren't URL syntax until they're filled in when sending
+            type={/\{\{.*\}\}/.test(props.url) ? 'text' : 'url'}
             spellCheck='false'
             placeholder='Enter a URL or paste a cURL command'
             required={true}

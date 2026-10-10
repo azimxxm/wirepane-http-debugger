@@ -34,6 +34,7 @@ import { SettingsPage } from './settings/settings-page';
 import { HtmlContextMenu } from './html-context-menu';
 import { DisconnectedWarning } from './disconnected-warning';
 import { McpModal } from './mcp/mcp-modal';
+import { CollectionsDialogs } from './collections/collections-dialogs';
 import { ZipExportDialog } from './view/zip-export-dialog';
 
 const AppContainer = styled.div`
@@ -253,6 +254,8 @@ class App extends React.Component<{
             { this.props.uiStore.mcpModalOpen && this.canUseMcp &&
                 <McpModal onClose={this.props.uiStore.closeMcpModal} />
             }
+
+            <CollectionsDialogs />
 
             { this.props.uiStore.zipExportRequest &&
                 <ZipExportDialog

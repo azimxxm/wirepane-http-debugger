@@ -114,6 +114,7 @@ const TabButton = styled(UnstyledButton).attrs((p: { selected: boolean }) => ({
 
 const SendTab = observer((props: {
     sendRequest: SendRequest,
+    getTabTitle?: (sendRequest: SendRequest) => string | undefined,
     isSelectedTab: boolean,
     onSelectTab: (request: SendRequest) => void,
     onCloseTab: (request: SendRequest) => void,
@@ -155,7 +156,8 @@ const SendTab = observer((props: {
             </TabMethodMarker>
 
             <TabName>{
-                request.url.replace(/^https?:\/\//, '') || ''
+                props.getTabTitle?.(props.sendRequest) ??
+                (request.url.replace(/^https?:\/\//, '') || '')
             }</TabName>
         </TabButton>
 
@@ -178,6 +180,7 @@ export const SendTabs = observer((props: {
     onCloseTab: (sendRequest: SendRequest) => void;
     onAddTab: (requestInput?: RequestInput) => void;
     onContextMenu: (event: React.MouseEvent, items: readonly ContextMenuItem<void>[]) => void;
+    getTabTitle?: (sendRequest: SendRequest) => string | undefined;
 }) => {
     const containerRef = React.useRef<HTMLDivElement>(null);
 
@@ -250,6 +253,7 @@ export const SendTabs = observer((props: {
                 return <SendTab
                     key={sendRequest.id}
                     sendRequest={sendRequest}
+                    getTabTitle={props.getTabTitle}
                     isSelectedTab={isSelectedTab}
                     onSelectTab={props.onSelectTab}
                     onCloseTab={props.onCloseTab}

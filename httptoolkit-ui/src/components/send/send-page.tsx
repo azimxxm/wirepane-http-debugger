@@ -12,7 +12,8 @@ import { WithInjected } from '../../types';
 import { ApiError } from '../../services/server-api-types';
 import { SendStore } from '../../model/send/send-store';
 import { UiStore } from '../../model/ui/ui-store';
-import { buildRequestInputFromHarRequest } from '../../model/send/send-request-model';
+import { buildRequestInputFromHarRequest, SendRequest } from '../../model/send/send-request-model';
+import { CollectionsStore } from '../../model/collections/collections-store';
 
 import { ContainerSizedEditor } from '../editor/base-editor';
 
@@ -21,6 +22,9 @@ import { PageHeader } from '../common/page-header';
 import { SendTabs } from './send-tabs';
 import { RequestPane } from './request-pane';
 import { ResponsePane } from './response-pane';
+import { CollectionsHeaderActions, CollectionsWorkspace, collectionTabTitle } from '../collections/send-workspace';
+import { CollectionRequestColumn } from '../collections/request-docs-card';
+import { SendProblemMessage } from '../collections/send-problem';
 
 const SendPageContainer = styled.div`
     height: 100%;
@@ -63,10 +67,12 @@ const SendPageKeyboardShortcuts = (props: {
 
 @inject('sendStore')
 @inject('uiStore')
+@inject('collectionsStore')
 @observer
 class SendPage extends React.Component<{
     sendStore: SendStore,
     uiStore: UiStore,
+    collectionsStore: CollectionsStore,
     navigate: (path: string) => void
 }> {
 
@@ -124,8 +130,8 @@ class SendPage extends React.Component<{
             <PageHeader
                 title='Send'
                 purpose={`Build a request or paste a cURL command. Resend captured requests from View with ${formatShortcut('Cmd+R')}.`}
-            />
-            <SendTabs
+            ><CollectionsHeaderActions /></PageHeader>
+            <CollectionsWorkspace><SendTabs
                 sendRequests={sendRequests}
                 selectedTab={selectedRequest}
                 onSelectTab={selectRequest}
@@ -133,6 +139,7 @@ class SendPage extends React.Component<{
                 onCloseTab={deleteRequest}
                 onAddTab={addRequestInput}
                 onContextMenu={handleContextMenuEvent}
+                getTabTitle={this.getTabTitle}
             />
 
             <SendPageKeyboardShortcuts
@@ -152,7 +159,7 @@ class SendPage extends React.Component<{
                     minSize={300}
                     maxSize={-300}
                 >
-                    <RequestPane
+                    <CollectionRequestColumn sendRequest={selectedRequest}><RequestPane
                         requestInput={selectedRequest.request}
                         sendRequest={this.sendRequest}
                         isSending={
@@ -160,7 +167,8 @@ class SendPage extends React.Component<{
                         }
                         editorNode={this.requestEditorNode}
                         updateFromHar={this.updateFromHar}
-                    />
+                        belowRequestLine={<SendProblemMessage sendRequest={selectedRequest} />}
+                    /></CollectionRequestColumn>
                     <ResponsePane
                         requestInput={selectedRequest.request}
                         exchange={selectedRequest.sentExchange}
@@ -172,7 +180,7 @@ class SendPage extends React.Component<{
                         editorNode={this.responseEditorNode}
                     />
                 </SplitPane>
-            </TabContentContainer>
+            </TabContentContainer></CollectionsWorkspace>
 
             <portals.InPortal node={this.requestEditorNode}>
                 <ContainerSizedEditor contentId={null} />
@@ -182,6 +190,9 @@ class SendPage extends React.Component<{
             </portals.InPortal>
         </SendPageContainer>;
     }
+
+    private getTabTitle = (sendRequest: SendRequest) =>
+        collectionTabTitle(this.props.collectionsStore, sendRequest);
 
     @action.bound
     updateFromHar(harRequest: HarFormat.Request) {
@@ -194,6 +205,6 @@ class SendPage extends React.Component<{
 // Annoying cast required to handle the store prop nicely in our types
 const InjectedSendPage = SendPage as unknown as WithInjected<
     typeof SendPage,
-    'sendStore' | 'uiStore' | 'navigate'
+    'sendStore' | 'uiStore' | 'collectionsStore' | 'navigate'
 >;
 export { InjectedSendPage as SendPage };

@@ -71,7 +71,9 @@ export class RequestPane extends React.Component<{
     requestInput: RequestInput,
     sendRequest: () => void,
     isSending: boolean,
-    updateFromHar: (harRequest: HarFormat.Request) => void
+    updateFromHar: (harRequest: HarFormat.Request) => void,
+    // Shown right under the URL, e.g. why the last Send didn't go out
+    belowRequestLine?: React.ReactNode
 }> {
 
     get cardProps() {
@@ -120,6 +122,7 @@ export class RequestPane extends React.Component<{
                 updateFromHar={this.props.updateFromHar}
                 showCopyAsSnippetMenu={this.showCopyAsSnippetMenu}
             />
+            { this.props.belowRequestLine }
             <SendRequestHeadersCard
                 {...this.cardProps.requestHeaders}
                 headers={requestInput.headers}

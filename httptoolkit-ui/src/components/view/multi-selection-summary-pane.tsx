@@ -169,7 +169,8 @@ export const MultiSelectionSummaryPane = inject('accountStore', 'uiStore')(obser
     selectedEvents: ReadonlyArray<CollectedEvent>,
     onPin: () => void,
     onDelete: () => void,
-    onBuildRule: () => void
+    onBuildRule: () => void,
+    onSaveToCollection?: () => void
 }) => {
     const { selectedEvents } = props;
     const count = selectedEvents.length;
@@ -227,6 +228,14 @@ export const MultiSelectionSummaryPane = inject('accountStore', 'uiStore')(obser
             <Icon icon={['fas', 'file-archive']} fixedWidth />
             Export code snippet ZIP
         </ActionButton>
+        { props.onSaveToCollection && <ActionButton
+            title={`Save the selected requests, with their responses as examples (${Ctrl}+Shift+S)`}
+            disabled={httpCount === 0}
+            onClick={props.onSaveToCollection}
+        >
+            <Icon icon={['fas', 'folder-open']} fixedWidth />
+            Save {httpCount} Request{httpCount !== 1 ? 's' : ''} to Collection
+        </ActionButton> }
     </>;
 
     return <SummaryContainer>

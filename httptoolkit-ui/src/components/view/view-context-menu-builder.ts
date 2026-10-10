@@ -32,7 +32,8 @@ export class ViewEventContextMenuBuilder {
             onBuildRuleFromExchange: (exchange: HttpExchangeView) => void,
             onBuildRuleFromSelectedExchanges: () => void,
             onPrepareToResendRequest: (exchange: HttpExchangeView) => void,
-            onAddFilter: (filter: Filter) => void
+            onAddFilter: (filter: Filter) => void,
+            onSaveToCollection?: (exchanges: HttpExchangeView[]) => void
         }
     ) {}
 
@@ -68,6 +69,14 @@ export class ViewEventContextMenuBuilder {
                 enabled: isPaidUser,
                 label: `Create ${httpCount} Matching Rule${httpCount !== 1 ? 's' : ''}`,
                 callback: () => this.callbacks.onBuildRuleFromSelectedExchanges()
+            }] : []),
+            ...(httpCount > 0 && this.callbacks.onSaveToCollection ? [{
+                type: 'option' as const,
+                label: `Save ${httpCount} Request${httpCount !== 1 ? 's' : ''} to Collection…`,
+                accelerator: 'CmdOrCtrl+Shift+S',
+                callback: () => this.callbacks.onSaveToCollection!(
+                    selectedEvents.filter((e): e is HttpExchange => e.isHttp() && !e.isWebSocket())
+                )
             }] : []),
             {
                 type: 'option',
@@ -139,6 +148,12 @@ export class ViewEventContextMenuBuilder {
                 label: `Create Matching Modify Rule`,
                 callback: this.callbacks.onBuildRuleFromExchange
             },
+            ...(this.callbacks.onSaveToCollection && !event.isWebSocket() ? [{
+                type: 'option',
+                label: 'Save to Collection…',
+                accelerator: 'CmdOrCtrl+Shift+S',
+                callback: (data: HttpExchangeView) => this.callbacks.onSaveToCollection!([data])
+            }] as const : []),
             {
                 type: 'option',
                 enabled: isPaidUser,

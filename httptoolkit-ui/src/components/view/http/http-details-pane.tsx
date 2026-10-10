@@ -73,6 +73,7 @@ export class HttpDetailsPane extends React.Component<{
     onScrollToEvent: (event: CollectedEvent) => void,
     onBuildRuleFromExchange: (exchange: HttpExchangeView) => void,
     onPrepareToResendRequest?: (exchange: HttpExchangeView) => void,
+    onSaveToCollection?: (exchanges: HttpExchangeView[]) => void,
 
     // Injected:
     uiStore?: UiStore,
@@ -119,6 +120,7 @@ export class HttpDetailsPane extends React.Component<{
             uiStore={uiStore!}
             onBuildRuleFromExchange={onBuildRuleFromExchange}
             onPrepareToResendRequest={onPrepareToResendRequest}
+            onSaveToCollection={this.props.onSaveToCollection}
             onCreateBreakpoint={this.createRuleFromRequest}
             onScrollToEvent={onScrollToEvent}
             onDelete={onDelete}

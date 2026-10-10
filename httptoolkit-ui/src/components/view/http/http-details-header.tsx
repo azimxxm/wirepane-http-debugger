@@ -179,6 +179,7 @@ export const HttpDetailsHeader = observer((props: {
 
     onBuildRuleFromExchange: (exchange: HttpExchangeView) => void,
     onPrepareToResendRequest?: (exchange: HttpExchangeView) => void,
+    onSaveToCollection?: (exchanges: HttpExchangeView[]) => void,
     onCreateBreakpoint: () => void,
     onScrollToEvent: (event: CollectedEvent) => void,
     onDelete: (event: CollectedEvent) => void
@@ -221,6 +222,13 @@ export const HttpDetailsHeader = observer((props: {
                     }
                 }
             },
+            ...(props.onSaveToCollection ? [{
+                type: 'option' as const,
+                label: 'Save to Collection…',
+                accelerator: toAccelerator('Cmd+Shift+S'),
+                enabled: isPlainHttp,
+                callback: (data: HttpExchangeView) => props.onSaveToCollection!([data])
+            }] : []),
             {
                 type: 'option',
                 label: collectedEvent.pinned ? 'Unpin' : 'Pin',
