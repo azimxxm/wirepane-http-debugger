@@ -166,6 +166,14 @@ export const SendRequestLine = (props: {
 
     const onPaste = React.useCallback((event: React.ClipboardEvent<HTMLInputElement>) => {
         const pastedText = event.clipboardData.getData('text/plain');
+
+        // wirepane: a pasted URL replaces the 'https://' that focusing an empty field adds
+        if (event.currentTarget.value === 'https://' && /^\s*[a-z][a-z0-9+.-]*:\/\//i.test(pastedText)) {
+            event.preventDefault();
+            props.updateUrl(pastedText.trim());
+            return;
+        }
+
         if (pastedText.match(/^\s*curl /)) {
             event.preventDefault();
 
@@ -184,7 +192,7 @@ export const SendRequestLine = (props: {
                 alert(`Could not parse pasted curl command:\n\n${e.message || e}`);
             }
         }
-    }, [props.updateFromHar]);
+    }, [props.updateFromHar, props.updateUrl]);
 
     return <SendRequestLineContainer
         className='ignores-expanded' // This always shows, even if something is expanded
