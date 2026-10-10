@@ -11,6 +11,8 @@ import { getMethodThemeColor } from '../../model/events/categorization';
 import { Ctrl, isMac } from '../../util/ui';
 import { Button, Select, TextInput } from '../common/inputs';
 import { IconButton } from '../common/icon-button';
+import { WEBSOCKET_OPTION } from '../../model/send/websocket/request-type';
+import { useTypeSwitchFocus } from './websocket/use-type-switch-focus';
 
 type MethodName = keyof typeof Method;
 const validMethods = Object.values(Method)
@@ -18,7 +20,7 @@ const validMethods = Object.values(Method)
         value => typeof value === 'string'
     ) as Array<MethodName>;
 
-const SendRequestLineContainer = styled.form`
+export const SendRequestLineContainer = styled.form`
     background-color: ${p => p.theme.mainBackground};
     flex-grow: 0;
     display: flex;
@@ -27,7 +29,7 @@ const SendRequestLineContainer = styled.form`
     border-bottom: 1px solid ${p => p.theme.containerBorder};
 `;
 
-const MethodSelectArrow = styled(Icon).attrs(() => ({
+export const MethodSelectArrow = styled(Icon).attrs(() => ({
     icon: ['fas', 'chevron-down']
 }))`
     position: absolute;
@@ -42,7 +44,7 @@ const MethodSelectArrow = styled(Icon).attrs(() => ({
     pointer-events: none;
 `;
 
-const MethodSelect = styled(Select)<{ httpMethod: string }>`
+export const MethodSelect = styled(Select)<{ httpMethod: string }>`
     border-radius: 0;
     border: none;
     &:not(:focus-visible) { outline: none; }
@@ -60,7 +62,7 @@ const MethodSelect = styled(Select)<{ httpMethod: string }>`
     background-color: ${p => p.theme.mainLowlightBackground};
 `;
 
-const MethodSelectContainer = styled.div`
+export const MethodSelectContainer = styled.div`
     position: relative;
     font-size: ${p => p.theme.textSize};
 
@@ -80,7 +82,7 @@ const MethodSelectContainer = styled.div`
     }
 `;
 
-const UrlInput = styled(TextInput)`
+export const UrlInput = styled(TextInput)`
     flex-basis: 100%;
     flex-grow: 1;
 
@@ -104,7 +106,7 @@ const CopySnippetButton = styled(IconButton)`
 `;
 
 // A labelled accent button, inset from the bar's edges so its focus ring has room:
-const SendButton = styled(Button)`
+export const SendButton = styled(Button)`
     flex-shrink: 0;
     min-width: 88px;
     margin: 5px 6px 5px 4px;
@@ -124,7 +126,7 @@ const SendButton = styled(Button)`
     }
 `;
 
-const SendShortcut = styled.kbd`
+export const SendShortcut = styled.kbd`
     font-family: inherit;
     font-weight: 400;
 `;
@@ -144,10 +146,20 @@ export const SendRequestLine = (props: {
     sendRequest: () => void;
 
     showCopyAsSnippetMenu: (event: React.MouseEvent) => void;
+
+    // wirepane: adds a WebSocket entry to the method picker, which switches the tab to WebSocket
+    onSelectWebSocket?: () => void;
 }) => {
     const updateMethodFromEvent = React.useCallback((changeEvent: React.ChangeEvent<HTMLSelectElement>) => {
+        // wirepane: the WebSocket entry changes the request type, not the method
+        if (changeEvent.target.value === WEBSOCKET_OPTION) return props.onSelectWebSocket?.();
         props.updateMethod(changeEvent.target.value);
-    }, [props.updateMethod]);
+    }, [props.updateMethod, props.onSelectWebSocket]);
+
+    // wirepane: keeps the focus when the URL or the picker switches the tab to WebSocket and back
+    const methodSelectRef = React.useRef<HTMLSelectElement>(null);
+    const urlInputRef = React.useRef<HTMLInputElement>(null);
+    useTypeSwitchFocus(methodSelectRef, urlInputRef);
 
     const updateUrlFromEvent = React.useCallback((changeEvent: React.ChangeEvent<HTMLInputElement>) => {
         props.updateUrl(changeEvent.target.value);
@@ -200,6 +212,7 @@ export const SendRequestLine = (props: {
     >
         <MethodSelectContainer>
             <MethodSelect
+                ref={methodSelectRef}
                 value={props.method}
                 onChange={updateMethodFromEvent}
                 httpMethod={props.method}
@@ -212,10 +225,12 @@ export const SendRequestLine = (props: {
                         { methodOption }
                     </option>
                 ) }
+                { props.onSelectWebSocket && <option value={WEBSOCKET_OPTION}>WebSocket</option> }
             </MethodSelect>
             <MethodSelectArrow />
         </MethodSelectContainer>
         <UrlInput
+            ref={urlInputRef}
             // {{variables}} aren't URL syntax until they're filled in when sending
             type={/\{\{.*\}\}/.test(props.url) ? 'text' : 'url'}
             spellCheck='false'

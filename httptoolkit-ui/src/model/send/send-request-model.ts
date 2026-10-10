@@ -23,6 +23,7 @@ import {
 import { getHeaderValue, h2HeadersToH1, rawHeadersToHeaders } from '../http/headers';
 import { parseHarRequest } from '../http/har';
 import { SendExtras, SendExtrasData } from './send-extras';
+import { syncRequestTypeToUrl } from './websocket/request-type';
 
 // This is our model of a Request for sending. Similar to the API model,
 // but not identical, as we add extra UI metadata etc.
@@ -84,6 +85,8 @@ export class RequestInput {
         }
 
         syncUrlToHeaders(() => this.url, () => this.headers);
+        // wirepane: ws:// and wss:// URLs make this a WebSocket request, http(s):// ones HTTP
+        syncRequestTypeToUrl(() => this.url, () => this.extras, !existingData?.extras);
         syncBodyToContentLength(this.rawBody, () => this.headers);
         syncFormattingToContentType(
             () => this.headers,

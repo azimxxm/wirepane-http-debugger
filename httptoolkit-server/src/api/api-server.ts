@@ -17,6 +17,7 @@ import { exposeRestAPI } from './rest-api';
 import { HttpClient } from '../client/http-client';
 import { UiOperationBridge, getSocketPath } from './ui-operation-bridge';
 import { exposeCollectionsAPI } from '../collections/collections-api';
+import { exposeWebSocketClientAPI } from './ws-client-api';
 
 /**
  * This file contains the core server API, used by the UI to query
@@ -137,6 +138,8 @@ export class HttpToolkitServerApi extends events.EventEmitter {
 
         // After the Origin/auth checks, before the default JSON parser (collections take bigger bodies)
         exposeCollectionsAPI(this.server, config.configPath);
+        // wirepane: Send's WebSocket client. Its messages can be big too (binary, as base64 JSON).
+        exposeWebSocketClientAPI(this.server, httpClient);
         // wirepane: Send bodies can be files (multipart, binary), sent as base64 JSON
         this.server.use('/client/send', express.json({ limit: '256mb' }));
         this.server.use(express.json());

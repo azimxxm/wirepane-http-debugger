@@ -13,7 +13,7 @@ import { UiStore } from '../../model/ui/ui-store';
 import { RequestInput } from '../../model/send/send-request-model';
 import { EditableContentType } from '../../model/events/content-types';
 import { ContextMenuItem } from '../../model/ui/context-menu';
-import { generateCodeSnippetFromRequestInput } from '../../model/ui/export';
+import { generateSendSnippet } from '../../model/send/body-modes/send-snippets'; // wirepane: every body mode
 import {
     getCodeSnippetFormatKey,
     getCodeSnippetFormatName,
@@ -29,6 +29,7 @@ import { SendCardContainer } from './send-card-section';
 import { SendRequestLine } from './send-request-line';
 import { SendRequestHeadersCard } from './send-request-headers-card';
 import { SendBodyCard } from './body/send-body-card';
+import { switchRequestType } from '../../model/send/websocket/request-type';
 
 // Layout here is tricky. Current setup seems to work (flex grow & shrink everywhere,
 // card basis: auto and min-height: 0, with editor 50% + min-height, and then
@@ -87,6 +88,8 @@ export class RequestPane extends React.Component<{
             if (METHODS_WITHOUT_BODY.includes(method)) {
                 // If there's a body entered, don't mess with it
                 if (this.props.requestInput.rawBody.decoded.length > 0) return;
+                // wirepane: nor with form, file & GraphQL bodies (GraphQL can be sent with GET)
+                else if (!this.props.requestInput.extras.sendsRawBody) return;
                 else if (this.cardProps.requestBody.collapsed) return;
                 else this.cardProps.requestBody.onCollapseToggled();
             } else {
@@ -121,6 +124,7 @@ export class RequestPane extends React.Component<{
                 sendRequest={sendRequest}
                 updateFromHar={this.props.updateFromHar}
                 showCopyAsSnippetMenu={this.showCopyAsSnippetMenu}
+                onSelectWebSocket={() => switchRequestType(requestInput, 'websocket')} // wirepane
             />
             { this.props.belowRequestLine }
             <SendRequestHeadersCard
@@ -173,7 +177,7 @@ export class RequestPane extends React.Component<{
         const { requestInput } = this.props;
 
         try {
-            const snippet = generateCodeSnippetFromRequestInput(requestInput, snippetOption);
+            const snippet = await generateSendSnippet(requestInput, snippetOption);
             await copyToClipboard(snippet);
         } catch (e: any) {
             console.log(e);

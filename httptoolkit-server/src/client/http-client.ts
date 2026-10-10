@@ -25,7 +25,7 @@ import * as fs from '../util/fs';
 export class HttpClient {
 
     constructor(
-        private ruleParameters: RuleParameters
+        readonly ruleParameters: RuleParameters // wirepane: read by the WebSocket client too
     ) {}
 
     readonly getDns = _.memoize((dnsServers: string[] | undefined) => {

@@ -121,6 +121,8 @@ const SendTab = observer((props: {
     onContextMenu: (event: React.MouseEvent, request: SendRequest) => void
 }) => {
     const { request } = props.sendRequest;
+    // wirepane: WebSocket tabs show WS instead of their method
+    const methodLabel = request.extras.requestType === 'websocket' ? 'WS' : request.method;
 
     const onTabClick = React.useCallback(() => {
         props.onSelectTab(props.sendRequest)
@@ -151,13 +153,13 @@ const SendTab = observer((props: {
             selected={props.isSelectedTab}
             tabIndex={props.isSelectedTab ? 0 : -1}
         >
-            <TabMethodMarker method={request.method}>
-                { request.method }
+            <TabMethodMarker method={methodLabel}>
+                { methodLabel }
             </TabMethodMarker>
 
             <TabName>{
                 props.getTabTitle?.(props.sendRequest) ??
-                (request.url.replace(/^https?:\/\//, '') || '')
+                (request.url.replace(/^(https?|wss?):\/\//, '') || '')
             }</TabName>
         </TabButton>
 
