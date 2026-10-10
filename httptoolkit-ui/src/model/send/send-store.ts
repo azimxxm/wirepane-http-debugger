@@ -53,6 +53,37 @@ export class SendStore {
     prepareRequestInput: (sendRequest: SendRequest) => Promise<RequestInput | undefined> =
         (sendRequest) => buildRequestForSend(sendRequest.request);
 
+    // wirepane: fills in {{variables}} in text sent outside a request, like WebSocket messages.
+    // Collections set this, with the same variables as the tab's request.
+    resolveTemplates: (sendRequest: SendRequest, text: string) => string = (_sendRequest, text) => text;
+
+    // wirepane: the connection options Send uses (proxy, CAs, client certificates...), so
+    // GraphQL schema fetches and WebSocket connections behave like sent requests
+    getRequestOptions(url: URL): RequestOptions {
+        const passthroughOptions = this.rulesStore.activePassthroughOptions;
+
+        const effectivePort = getEffectivePort(url);
+        const hostWithPort = `${url.hostname}:${effectivePort}`;
+        const clientCertificate = passthroughOptions.clientCertificateHostMap?.[hostWithPort] ||
+            passthroughOptions.clientCertificateHostMap?.[url.hostname!] ||
+            passthroughOptions.clientCertificateHostMap?.['*'] ||
+            undefined;
+
+        const additionalCACerts = this.rulesStore.additionalCaCertificates.map((cert) =>
+            ({ cert: cert.rawPEM })
+        );
+
+        return {
+            ignoreHostHttpsErrors: passthroughOptions.ignoreHostHttpsErrors,
+            additionalTrustedCAs: additionalCACerts,
+            trustAdditionalCAs: additionalCACerts, // Deprecated alias, here for backward compat
+            clientCertificate,
+            proxyConfig: getProxyConfig(this.rulesStore.proxyConfig),
+            lookupOptions: passthroughOptions.lookupOptions,
+            keyLogFile: this.proxyStore.keyLogFilePath
+        };
+    }
+
     readonly initialized = lazyObservablePromise(async () => {
         await Promise.all([
             this.accountStore.initialized,
@@ -162,29 +193,7 @@ export class SendStore {
                 sendRequest.pendingSend.promise.then(clearPending, clearPending);
             });
 
-            const passthroughOptions = this.rulesStore.activePassthroughOptions;
-
-            const url = new URL(requestInput.url);
-            const effectivePort = getEffectivePort(url);
-            const hostWithPort = `${url.hostname}:${effectivePort}`;
-            const clientCertificate = passthroughOptions.clientCertificateHostMap?.[hostWithPort] ||
-                passthroughOptions.clientCertificateHostMap?.[url.hostname!] ||
-                passthroughOptions.clientCertificateHostMap?.['*'] ||
-                undefined;
-
-            const additionalCACerts = this.rulesStore.additionalCaCertificates.map((cert) =>
-                ({ cert: cert.rawPEM })
-            );
-
-            const requestOptions: RequestOptions = {
-                ignoreHostHttpsErrors: passthroughOptions.ignoreHostHttpsErrors,
-                additionalTrustedCAs: additionalCACerts,
-                trustAdditionalCAs: additionalCACerts, // Deprecated alias, here for backward compat
-                clientCertificate,
-                proxyConfig: getProxyConfig(this.rulesStore.proxyConfig),
-                lookupOptions: passthroughOptions.lookupOptions,
-                keyLogFile: this.proxyStore.keyLogFilePath
-            };
+            const requestOptions = this.getRequestOptions(new URL(requestInput.url));
 
             const encodedBody = await requestInput.rawBody.encodingBestEffortPromise;
 
