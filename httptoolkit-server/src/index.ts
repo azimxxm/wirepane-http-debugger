@@ -1,9 +1,7 @@
 import * as path from 'path';
 import * as fs from 'fs';
 import envPaths from 'env-paths';
-import { Mutex } from 'async-mutex';
 
-import { delay, isErrorLike } from '@httptoolkit/util';
 import {
     PluggableAdmin,
     generateCACertificate
@@ -15,7 +13,6 @@ import {
     MockRTCAdminPlugin
 } from 'mockrtc';
 
-import updateCommand from '@oclif/plugin-update/lib/commands/update';
 
 import { HttpToolkitServerApi } from './api/api-server';
 import { checkBrowserConfig } from './browsers';
@@ -235,49 +232,11 @@ export async function runHTK(options: {
         () => standalone.ruleParameterKeys
     );
 
-    const updateMutex = new Mutex();
+    // wirepane: no self-updates. The UI asks for one on every start, and oclif's update would
+    // fetch the official HTTP Toolkit server from its GitHub releases and run it instead of
+    // this one. Wirepane's server is updated together with the app.
     apiServer.on('update-requested', () => {
-        updateMutex.runExclusive(() =>
-            (<Promise<void>> updateCommand.run(['stable']))
-            .catch((error) => {
-                if (isErrorLike(error)) {
-                    // Did we receive a successful update, that wants to restart the server:
-                    if (error.code === 'EEXIT') {
-                        // Block future update checks for 6 hours.
-
-                        // If we don't, we'll redownload the same update again every check.
-                        // We don't want to block it completely though, in case this server
-                        // stays open for a very long time.
-                        return delay(1000 * 60 * 60 * 6, { unref: true });
-                    }
-
-                    if (error.code === 'EACCES') {
-                        // We're running the server without write access to the update directory.
-                        // Weird, but it happens and there's nothing we can do - ignore it.
-                        console.log(`Update check failed: ${error.message}`);
-                        return;
-                    }
-
-                    // Report any HTTP response errors cleanly & explicitly:
-                    if (error.statusCode) {
-                        let url: string | undefined;
-                        if ('http' in error) {
-                            const request = (error as any).http?.request;
-                            url = `${request?.protocol}//${request?.host}${request?.path}`
-                        }
-
-                        logError(`Failed to check for updates due to ${error.statusCode} response ${
-                            url
-                                ? `from ${url}`
-                                : 'from unknown URL'
-                        }`);
-                        return;
-                    }
-                }
-
-                console.error(`Failed to check for updates: ${error.message}`, { cause: error });
-            })
-        );
+        console.log('Ignored a server update request: Wirepane updates come with the app');
     });
 
     await apiServer.start(options.serverPort);
