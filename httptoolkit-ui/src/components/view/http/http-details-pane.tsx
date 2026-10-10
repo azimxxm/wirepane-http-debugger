@@ -32,7 +32,7 @@ import { HttpTrailersCard } from './http-trailers-card';
 import { HttpPerformanceCard } from './http-performance-card';
 import { HttpExportCard } from './http-export-card';
 import { HttpErrorHeader } from './http-error-header';
-import { HttpDetailsFooter } from './http-details-footer';
+import { HttpDetailsHeader } from './http-details-header';
 import { HttpRequestBreakpointHeader, HttpResponseBreakpointHeader } from './http-breakpoint-header';
 import { HttpBreakpointRequestCard } from './http-breakpoint-request-card';
 import { HttpBreakpointResponseCard } from './http-breakpoint-response-card';
@@ -114,9 +114,19 @@ export class HttpDetailsPane extends React.Component<{
             : undefined;
 
         const headerCard = this.renderHeaderCard(exchange);
+        const detailsHeader = <HttpDetailsHeader
+            exchange={exchange}
+            uiStore={uiStore!}
+            onBuildRuleFromExchange={onBuildRuleFromExchange}
+            onPrepareToResendRequest={onPrepareToResendRequest}
+            onCreateBreakpoint={this.createRuleFromRequest}
+            onScrollToEvent={onScrollToEvent}
+            onDelete={onDelete}
+        />;
 
         if (expandedViewCard) {
             return <>
+                { detailsHeader }
                 { headerCard }
                 { this.renderExpandedCard(expandedViewCard, exchange, apiExchange) }
             </>;
@@ -127,19 +137,11 @@ export class HttpDetailsPane extends React.Component<{
             : this.renderNormalCards(exchange, apiName, apiExchange);
 
         return <>
+            { detailsHeader }
             <PaneScrollContainer>
                 { headerCard }
                 { cards }
             </PaneScrollContainer>
-            <HttpDetailsFooter
-                event={exchange}
-                onDelete={onDelete}
-                onScrollToEvent={onScrollToEvent}
-                onBuildRuleFromExchange={onBuildRuleFromExchange}
-                onPrepareToResendRequest={onPrepareToResendRequest}
-                navigate={navigate}
-                isPaidUser={isPaidUser}
-            />
         </>;
     }
 

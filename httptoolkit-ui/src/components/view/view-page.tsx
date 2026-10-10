@@ -31,11 +31,12 @@ import { Filter, FilterSet } from '../../model/filters/search-filters';
 import { buildRuleFromExchange } from '../../model/rules/rule-creation';
 
 import { SplitPane } from '../split-pane';
-import { EmptyState } from '../common/empty-state';
+import { PageHeader, PageBody } from '../common/page-header';
 import { SelfSizedEditor } from '../editor/base-editor';
 
 import { ViewEventList } from './view-event-list';
-import { ViewEventListFooter } from './view-event-list-footer';
+import { ViewToolbar } from './view-toolbar';
+import { NoTrafficState, SelectRequestState } from './view-empty-states';
 import { ViewEventContextMenuBuilder } from './view-context-menu-builder';
 import { PaneOuterContainer } from './view-details-pane';
 import { HttpDetailsPane } from './http/http-details-pane';
@@ -405,10 +406,9 @@ class ViewPage extends React.Component<ViewPageProps> {
                 onBuildRule={this.onBuildRuleFromSelectedExchanges}
             />;
         } else if (!this.selectedEvent) {
-            if (this.splitDirection === 'vertical') {
-                rightPane = <EmptyState key='details' icon='ArrowLeft'>
-                    Select an exchange to see the full details.
-                </EmptyState>;
+            // With no traffic at all, the list's empty state stands alone
+            if (this.splitDirection === 'vertical' && events.length > 0) {
+                rightPane = <SelectRequestState key='details' />;
             } else {
                 rightPane = null;
             }
@@ -488,7 +488,23 @@ class ViewPage extends React.Component<ViewPageProps> {
                 onStartSearch={this.onStartSearch}
             />
 
-            <SplitPane
+            <PageHeader
+                title='View'
+                purpose='Every request that passes through Wirepane. Select one to inspect it.'
+                compactBelow={1180}
+            >
+                <ViewToolbar
+                    searchInputRef={this.searchInputRef}
+                    allEvents={events}
+                    filteredEvents={filteredEvents}
+                    filteredCount={filteredEventCount}
+                    onFiltersConsidered={this.onSearchFiltersConsidered}
+                    onClear={this.onClear}
+                    onScrollToEnd={this.onScrollToEnd}
+                />
+            </PageHeader>
+
+            <PageBody><SplitPane
                 ref={this.splitPaneRef}
                 split={this.splitDirection}
                 primary='second'
@@ -501,16 +517,12 @@ class ViewPage extends React.Component<ViewPageProps> {
                     aria-label='The collected events list pane'
                     aria-keyshortcuts={`${AriaCtrlCmd}+[`}
                 >
-                    <ViewEventListFooter // Footer above the list to ensure correct tab order
-                        searchInputRef={this.searchInputRef}
-                        allEvents={events}
-                        filteredEvents={filteredEvents}
-                        filteredCount={filteredEventCount}
-                        onFiltersConsidered={this.onSearchFiltersConsidered}
-                        onClear={this.onClear}
-                        onScrollToEnd={this.onScrollToEnd}
-                    />
-                    <ViewEventList
+                    { events.length === 0 && <NoTrafficState
+                        isPaused={isPaused}
+                        onConnectSource={this.onConnectSource}
+                        onResumeRecording={this.props.eventsStore.togglePause}
+                    /> }
+                    { events.length > 0 && <ViewEventList
                         events={events}
                         filteredEvents={filteredEvents}
                         selectedEventIds={this.props.uiStore.selectedEventIds}
@@ -527,7 +539,7 @@ class ViewPage extends React.Component<ViewPageProps> {
                         uiStore={this.props.uiStore}
 
                         ref={this.listRef}
-                    />
+                    /> }
                 </LeftPane>
                 <PaneOuterContainer
                     aria-label='The selected event details pane'
@@ -535,7 +547,7 @@ class ViewPage extends React.Component<ViewPageProps> {
                 >
                     { rightPane }
                 </PaneOuterContainer>
-            </SplitPane>
+            </SplitPane></PageBody>
 
             {Object.values(this.editors).map((node, i) =>
                 <portals.InPortal key={i} node={node}>
@@ -843,6 +855,11 @@ class ViewPage extends React.Component<ViewPageProps> {
     }
 
     @action.bound
+    onConnectSource() {
+        this.props.navigate('/intercept');
+    }
+
+    @action.bound
     onScrollToEvent(event: CollectedEvent) {
         this.listRef.current?.scrollToEvent(event);
     }
@@ -880,8 +897,10 @@ const StyledViewPage = styled(
         | 'navigate'
     >
 )`
-    height: 100vh;
+    height: 100%;
     position: relative;
+    display: flex;
+    flex-direction: column;
 `;
 
 export { StyledViewPage as ViewPage };

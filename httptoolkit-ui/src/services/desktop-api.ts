@@ -75,6 +75,7 @@ interface NativeContextMenuOption {
     id: string;
     label: string;
     enabled?: boolean;
+    accelerator?: string;
 }
 
 interface NativeContextMenuSubmenu {

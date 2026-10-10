@@ -23,8 +23,9 @@ import {
     SERVER_SEND_API_SUPPORTED
 } from '../services/service-versions';
 
-import { Sidebar, SidebarItem, SIDEBAR_WIDTH } from './sidebar';
-import { InterceptPage } from './intercept/intercept-page';
+import { Rail, RailItem } from './rail';
+import { StatusBar } from './status-bar';
+import { GuidedInterceptPage } from './intercept/guided-intercept-page';
 import { ViewPage } from './view/view-page';
 import { ModifyPage } from './modify/modify-page';
 import { SendPage } from './send/send-page';
@@ -38,10 +39,25 @@ import { ZipExportDialog } from './view/zip-export-dialog';
 const AppContainer = styled.div`
     display: flex;
     height: 100%;
+`;
 
-    > :not(:first-child) {
-        flex: 1 1;
-        width: calc(100% - ${SIDEBAR_WIDTH});
+// The current page, with the status bar below it
+const MainColumn = styled.div`
+    flex: 1 1 auto;
+    min-width: 0;
+    height: 100%;
+
+    display: flex;
+    flex-direction: column;
+`;
+
+const PageSlot = styled.div`
+    flex: 1 1 auto;
+    min-height: 0;
+    position: relative;
+
+    > div { /* The router's own wrapper element */
+        height: 100%;
     }
 `;
 
@@ -135,7 +151,7 @@ class App extends React.Component<{
             {
                 name: 'View',
                 title: `View intercepted HTTP traffic (${Ctrl}+2)`,
-                icon: 'MagnifyingGlass',
+                icon: 'Rows',
                 position: 'top',
                 type: 'router',
                 url: '/view'
@@ -182,8 +198,8 @@ class App extends React.Component<{
 
             ...(this.canUseMcp
                 ? [{
-                    name: 'MCP',
-                    title: 'Connect Wirepane to AI assistants via MCP',
+                    name: 'AI',
+                    title: 'Connect AI assistants (MCP)',
                     icon: 'Sparkle',
                     position: 'bottom',
                     type: 'callback',
@@ -194,14 +210,14 @@ class App extends React.Component<{
 
             {
                 name: 'Give feedback',
-                title: "Suggest features or report issues",
+                title: "Send feedback: suggest features or report issues",
                 icon: 'ChatText',
                 position: 'bottom',
-                highlight: true,
+                iconOnly: true,
                 type: 'web',
                 url: 'https://github.com/azimxxm/wirepane/issues/new'
             }
-        ] as SidebarItem[];
+        ] as RailItem[];
     }
 
     render() {
@@ -213,18 +229,23 @@ class App extends React.Component<{
         return <LocationProvider history={appHistory}>
             <AppKeyboardShortcuts navigate={appHistory.navigate} />
             <AppContainer>
-                <Sidebar items={this.menuItems} />
+                <Rail items={this.menuItems} />
 
-                <Router>
-                    <Redirect noThrow from="/" to={'/intercept'} />
-                    <Route path={'/intercept'} pageComponent={InterceptPage} />
-                    <Route path={'/view'} pageComponent={ViewPage} />
-                    <Route path={'/view/:eventId'} pageComponent={ViewPage} />
-                    <Route path={'/modify'} pageComponent={ModifyPage} />
-                    <Route path={'/modify/:initialRuleId'} pageComponent={ModifyPage} />
-                    <Route path={'/send'} pageComponent={SendPage} />
-                    <Route path={'/settings'} pageComponent={SettingsPage} />
-                </Router>
+                <MainColumn>
+                    <PageSlot>
+                        <Router>
+                            <Redirect noThrow from="/" to={'/intercept'} />
+                            <Route path={'/intercept'} pageComponent={GuidedInterceptPage} />
+                            <Route path={'/view'} pageComponent={ViewPage} />
+                            <Route path={'/view/:eventId'} pageComponent={ViewPage} />
+                            <Route path={'/modify'} pageComponent={ModifyPage} />
+                            <Route path={'/modify/:initialRuleId'} pageComponent={ModifyPage} />
+                            <Route path={'/send'} pageComponent={SendPage} />
+                            <Route path={'/settings'} pageComponent={SettingsPage} />
+                        </Router>
+                    </PageSlot>
+                    <StatusBar />
+                </MainColumn>
 
                 <DisconnectedWarning />
             </AppContainer>

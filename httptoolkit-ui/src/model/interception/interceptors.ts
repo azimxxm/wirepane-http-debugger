@@ -351,7 +351,7 @@ const INTERCEPT_OPTIONS: _.Dictionary<InterceptorConfig> = {
     [MANUAL_INTERCEPT_ID]: {
         name: 'Anything',
         description: ["Manually configure any source using the proxy settings and CA certificate"],
-        iconProps: SourceIcons.Unknown,
+        iconProps: { icon: 'Sliders', color: 'var(--wp-text-secondary)' },
         clientOnly: true,
         uiConfig: ManualInterceptCustomUi,
         tags: []
@@ -418,3 +418,27 @@ export function getInterceptOptions(
         }
     });
 }
+
+// Wirepane: the sources the Intercept page shows first, in order, with shorter titles for some.
+export const RECOMMENDED_INTERCEPTOR_IDS = [
+    'fresh-chrome',
+    'fresh-terminal',
+    'manual-ios-device',
+    'android-device'
+] as const;
+
+export const RECOMMENDED_INTERCEPTOR_TITLES: _.Dictionary<string> = {
+    'manual-ios-device': 'iPhone or iPad',
+    'android-device': 'Android (QR code)'
+};
+
+// Wirepane: options the UI knows about but the server has no interceptor for, so they
+// can never be activated. They're hidden from the Intercept page.
+export const UNIMPLEMENTED_INTERCEPTOR_IDS: ReadonlySet<string> = new Set([
+    'fresh-safari',
+    'ios-device',
+    'network-device',
+    'virtualbox-machine',
+    'system-proxy',
+    'existing-arc'
+]);

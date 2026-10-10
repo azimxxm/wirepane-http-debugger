@@ -26,7 +26,33 @@ import {
     CircleHalf,
     Swatches,
     Repeat,
-    ListChecks
+    ListChecks,
+
+    // Wirepane chrome: rail, status bar, page headers & empty states
+    Rows,
+    TerminalWindow,
+    Sliders,
+    ArrowCounterClockwise,
+    ArrowLineDown,
+    ArrowRight,
+    ArrowBendUpLeft,
+    ArrowUUpLeft,
+    ArrowsLeftRight,
+    Broom,
+    CaretDown,
+    CaretRight,
+    Check,
+    DownloadSimple,
+    Eye,
+    File,
+    FloppyDisk,
+    PauseCircle,
+    PencilSimpleLine,
+    Play,
+    Plus,
+    Prohibit,
+    Trash,
+    UploadSimple
 } from '@phosphor-icons/react';
 
 export type IconKey = keyof typeof Icons;
@@ -61,7 +87,32 @@ const Icons = {
     CircleHalf,
     Swatches,
     Repeat,
-    ListChecks
+    ListChecks,
+
+    Rows,
+    TerminalWindow,
+    Sliders,
+    ArrowCounterClockwise,
+    ArrowLineDown,
+    ArrowRight,
+    ArrowBendUpLeft,
+    ArrowUUpLeft,
+    ArrowsLeftRight,
+    Broom,
+    CaretDown,
+    CaretRight,
+    Check,
+    DownloadSimple,
+    Eye,
+    File,
+    FloppyDisk,
+    PauseCircle,
+    PencilSimpleLine,
+    Play,
+    Plus,
+    Prohibit,
+    Trash,
+    UploadSimple
 } as const;
 
 // Import required FA icons:
@@ -293,8 +344,15 @@ export const SourceIcons = {
     Network: { icon: ['fas', 'network-wired'], color: '#888' },
     Electron: { icon: ['fas', 'atom'], color: '#9FEAF9' },
 
+    // Command-line & API clients, in the theme's secondary text colour (a CSS var from GlobalStyles):
+    Curl: { icon: 'TerminalWindow', color: 'var(--wp-text-secondary)' },
+    Wget: { icon: 'TerminalWindow', color: 'var(--wp-text-secondary)' },
+    Httpie: { icon: 'TerminalWindow', color: 'var(--wp-text-secondary)' },
+    Postmanruntime: { icon: 'TerminalWindow', color: 'var(--wp-text-secondary)' },
+    Insomnia: { icon: 'TerminalWindow', color: 'var(--wp-text-secondary)' },
+
     Desktop: { icon: ['fas', 'desktop'], color: '#888' },
-    Unknown: { icon: ['fas', 'question'], color: '#888' }
+    Unknown: { icon: 'Plug', color: 'var(--wp-text-tertiary)' }
 } as const;
 
 import * as FA from '@fortawesome/react-fontawesome';

@@ -10,6 +10,7 @@ import { UiStore } from '../../model/ui/ui-store';
 import { serverVersion, versionSatisfies, PORT_RANGE_SERVER_RANGE } from '../../services/service-versions';
 
 import { CollapsibleCard, CollapsibleCardHeading } from '../common/card';
+import { PageHeader, PageLayout } from '../common/page-header';
 import { TabbedOptionsContainer, Tab, TabsContainer } from '../common/tabbed-options';
 import { ContainerSizedEditor } from '../editor/base-editor';
 
@@ -40,13 +41,6 @@ const SettingPageContainer = styled.section`
     }
 `;
 
-const SettingsHeading = styled.h1`
-    font-size: ${p => p.theme.loudHeadingSize};
-    font-family: ${p => p.theme.titleTextFamily};
-    font-weight: bold;
-    margin-bottom: 40px;
-`;
-
 const ThemeColors = styled.div`
     display: grid;
     grid-template-columns: 1fr 1fr;
@@ -75,10 +69,11 @@ class SettingsPage extends React.Component<SettingsPageProps> {
         const { uiStore } = this.props;
         const cardProps = uiStore.settingsCardProps;
 
-        return <SettingsPageScrollContainer>
+        return <PageLayout><PageHeader
+            title='Settings'
+            purpose='Proxy port, certificates, upstream proxy and appearance.'
+        /><SettingsPageScrollContainer>
             <SettingPageContainer>
-                <SettingsHeading>Settings</SettingsHeading>
-
                 {
                     _.isString(serverVersion.value) &&
                     versionSatisfies(serverVersion.value, PORT_RANGE_SERVER_RANGE) && <>
@@ -171,7 +166,7 @@ class SettingsPage extends React.Component<SettingsPageProps> {
                     </TabbedOptionsContainer>
                 </CollapsibleCard>
             </SettingPageContainer>
-        </SettingsPageScrollContainer>;
+        </SettingsPageScrollContainer></PageLayout>;
     }
 }
 

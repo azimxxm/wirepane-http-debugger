@@ -36,7 +36,7 @@ Source of the findings: the baseline critique of 2026-10-10 (overall grade **D**
 4. **Page title equals the nav label**, followed by a one-line purpose and the page's actions on the right.
 5. **No dead-end empty state.** Each one says what will appear and offers the next action as a button.
 6. **Keyboard-first.** Every action has a shortcut, and every shortcut is visible in the menu bar, in tooltips, or in the ⌘K palette. Focus rings stay visible (`:focus-visible`).
-7. **At most one solid accent button per view.** The wire gradient appears at most once per screen and never behind text.
+7. **At most one solid accent button per view.** The wire gradient is used only for the active rail bar and the recording hairline, and never behind text.
 
 ## Colour tokens
 

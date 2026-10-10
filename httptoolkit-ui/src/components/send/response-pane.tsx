@@ -18,6 +18,7 @@ import { FailedResponseStatusSection, PendingResponseStatusSection, ResponseStat
 import { PendingResponseHeaderSection, SentResponseHeaderSection } from './sent-response-headers';
 import { SentResponseBodyCard } from './sent-response-body';
 import { SentResponseError } from './sent-response-error';
+import { ResponsePlaceholder } from './response-placeholder';
 @inject('uiStore')
 @inject('accountStore')
 @observer
@@ -39,7 +40,7 @@ export class ResponsePane extends React.Component<{
 
     render() {
         const { exchange, uiStore } = this.props;
-        if (!exchange) return null;
+        if (!exchange) return <ResponsePlaceholder />;
 
         return <SendCardContainer
             hasExpandedChild={!!uiStore?.expandedSentResponseCard}

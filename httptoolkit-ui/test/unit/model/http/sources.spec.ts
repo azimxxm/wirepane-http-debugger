@@ -101,7 +101,19 @@ describe('HTTP source parsing', () => {
                 const source = parseSource(WGET);
 
                 expect(source.summary).to.equal('Wget/1.12 (Linux)');
-                expect(source.icon).to.equal(SourceIcons.Unknown);
+                expect(source.icon).to.equal(SourceIcons.Wget);
+            });
+
+            it('should show a terminal icon for command-line & API clients', () => {
+                expect(parseSource('curl/8.7.1').icon).to.equal(SourceIcons.Curl);
+                expect(parseSource('HTTPie/3.2.2').icon).to.equal(SourceIcons.Httpie);
+                expect(parseSource('PostmanRuntime/7.39.0').icon).to.equal(SourceIcons.Postmanruntime);
+                expect(parseSource('insomnia/2023.5.8').icon).to.equal(SourceIcons.Insomnia);
+            });
+
+            it('should prefer a specific client over a generic tool in the same UA', () => {
+                // Guzzle's UA mentions curl, but PHP is the more useful icon:
+                expect(parseSource(GUZZLE_PHP).icon).to.equal(SourceIcons.Php);
             });
 
             it('should handle empty user agents', () => {

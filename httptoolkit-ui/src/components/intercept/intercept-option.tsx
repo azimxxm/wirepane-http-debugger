@@ -16,13 +16,15 @@ import { clickOnEnter } from '../component-utils';
 import { LittleCard } from '../common/card';
 import { Pill } from '../common/pill';
 import { CloseButton } from '../common/close-button';
-import { DocsLink } from '../common/docs-link';
+import { InterceptorIcon } from './interceptor-icon';
+import { UnavailableReason } from './unavailable-reason';
 
 interface InterceptOptionProps {
     className?: string;
     interceptorStore?: InterceptorStore;
     index: number;
     interceptor: Interceptor;
+    title?: string; // Overrides the interceptor's own name
     showRequests: () => void;
 }
 
@@ -140,6 +142,10 @@ const InterceptOptionCard = styled(LittleCard)<{
 const InterceptorTitle = styled.h1<{
     expanded: boolean
 }>`
+    display: flex;
+    align-items: center;
+    gap: 10px;
+
     ${p => p.expanded
         ? 'margin-right: 20px;' // Avoid overlapping the close icon
         : ''
@@ -176,19 +182,7 @@ function getStatusPill(interceptor: Interceptor) {
             Activated
         </StatusPill>;
     } else if (!interceptor.isActivable) {
-        if (interceptor.isSupported) {
-            return <StatusPill>
-                Not available{
-                    interceptor.notAvailableHelpUrl
-                    ? <DocsLink href={interceptor.notAvailableHelpUrl} />
-                    : null
-                }
-            </StatusPill>;
-        } else {
-            return <StatusPill>
-                Coming soon
-            </StatusPill>;
-        }
+        return <UnavailableReason interceptor={interceptor} />;
     } else if (interceptor.experimental) {
         return <StatusPill color={warningColor}>
             Experimental
@@ -223,10 +217,6 @@ export class InterceptOption extends React.Component<InterceptOptionProps> {
         const { uiConfig } = interceptor;
         const ConfigComponent = uiConfig?.configComponent;
 
-        const icons = _.isArray(interceptor.iconProps)
-            ? interceptor.iconProps
-            : [interceptor.iconProps];
-
         const gridWidth = windowSize.width >= NARROW_LAYOUT_BREAKPOINT
             ? 4
             : 3;
@@ -254,18 +244,9 @@ export class InterceptOption extends React.Component<InterceptOptionProps> {
             onClick={this.expanded ? undefined : this.onClick}
             tabIndex={!isDisabled && !this.expanded ? 0 : undefined}
         >
-            <BackgroundIcons>
-                { icons.map((iconProps, i) =>
-                    <Icon
-                        key={i}
-                        size='8x'
-                        {...iconProps}
-                    />)
-                }
-            </BackgroundIcons>
-
             <InterceptorTitle expanded={expanded}>
-                { interceptor.name }
+                <InterceptorIcon iconProps={interceptor.iconProps} />
+                { this.props.title ?? interceptor.name }
             </InterceptorTitle>
 
             { ConfigComponent && expanded

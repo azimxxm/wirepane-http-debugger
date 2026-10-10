@@ -16,9 +16,10 @@ import "@fontsource/dm-mono/500.css";
 
 import reset from 'styled-reset';
 
-// Desktop type scale: 12px captions & column headers, 13px inputs & buttons,
-// 14px body text & list rows, 16px card titles, 22px page titles.
+// Desktop type scale: 11px rail labels & badges, 12px captions & column headers,
+// 13px inputs & buttons, 14px body text & list rows, 16px card titles, 22px page titles.
 const fontSizes = {
+    tinyTextSize: '11px',
     smallPrintSize: '12px',
     textInputFontSize: '13px',
     textSize: '14px',
@@ -37,6 +38,7 @@ export const NARROW_LAYOUT_BREAKPOINT = 1100;
 export const warningColor = '#D97706';
 
 const black = "#000000";
+const white = "#FFFFFF";
 const darkGrey = "#32343B";
 const mediumGrey = "#818490";
 
@@ -49,6 +51,7 @@ const brandTeal = '#2DD4BF';
 const brandSky = '#38BDF8';
 
 const gradientWire = `linear-gradient(90deg, ${brandTeal}, ${brandSky})`; // Decoration only, never behind text
+const gradientWireVertical = `linear-gradient(180deg, ${brandTeal}, ${brandSky})`; // The same wire, for vertical bars
 const gradientTile = `linear-gradient(160deg, ${brandNavy700}, ${brandNavy900})`;
 const navyBackdrop = `radial-gradient(${brandNavy700}, ${brandNavy900})`; // The logo tile, behind modals
 
@@ -94,6 +97,18 @@ const dark = {
     warning: '#FBBF24',
     error: '#FB8585',
     info: '#7DD3FC'
+} as const;
+
+// The navy rail is the same in light & dark: the logo tile, with the dark theme's
+// secondary text for idle items (at least 6.8:1 on the navy) and white when active.
+const navyRail = {
+    railBackground: gradientTile,
+    railColor: dark.textSecondary,
+    railActiveColor: white,
+    railActiveBackground: polished.rgba(brandTeal, 0.14),
+    railHoverBackground: polished.rgba(white, 0.06),
+    railEdge: polished.rgba(white, 0.08), // Keeps the rail distinct from dark page backgrounds
+    railFocusRing: dark.focusRing
 } as const;
 
 // Request method & 1xx status text colours, for list rows and tabs:
@@ -195,8 +210,10 @@ export const lightTheme = {
     error: light.error,
     info: light.info,
     ...lightHttpColors,
+    ...navyRail,
 
     gradientWire,
+    gradientWireVertical,
     gradientTile,
 
     ...fontSizes,
@@ -276,8 +293,10 @@ export const darkTheme = {
     error: dark.error,
     info: dark.info,
     ...darkHttpColors,
+    ...navyRail,
 
     gradientWire,
+    gradientWireVertical,
     gradientTile,
 
     ...fontSizes,
@@ -378,7 +397,17 @@ export const highContrastTheme = {
     info: dark.info,
     ...darkHttpColors,
 
+    // A black rail with white labels, keeping the teal active marker:
+    railBackground: black,
+    railColor: white,
+    railActiveColor: white,
+    railActiveBackground: navyRail.railActiveBackground,
+    railHoverBackground: polished.rgba(white, 0.12),
+    railEdge: polished.rgba(white, 0.4),
+    railFocusRing: dark.focusRing,
+
     gradientWire,
+    gradientWireVertical,
     gradientTile,
 
     ...fontSizes,
@@ -440,6 +469,12 @@ export const GlobalStyles = createGlobalStyle`
         font-size: ${p => p.theme.textSize};
         color: ${p => p.theme.mainColor};
         background-color: ${p => p.theme.containerBackground};
+    }
+
+    /* Theme colours for values that can only be a colour string, like client icon colours */
+    :root {
+        --wp-text-secondary: ${p => p.theme.mainLowlightColor};
+        --wp-text-tertiary: ${p => p.theme.containerWatermark};
     }
 
     input {

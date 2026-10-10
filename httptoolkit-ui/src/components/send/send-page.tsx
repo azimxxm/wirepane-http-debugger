@@ -6,6 +6,7 @@ import * as HarFormat from 'har-format';
 
 import { styled } from '../../styles';
 import { useHotkeys } from '../../util/ui';
+import { formatShortcut } from '../../util/shortcuts';
 import { WithInjected } from '../../types';
 
 import { ApiError } from '../../services/server-api-types';
@@ -16,19 +17,23 @@ import { buildRequestInputFromHarRequest } from '../../model/send/send-request-m
 import { ContainerSizedEditor } from '../editor/base-editor';
 
 import { SplitPane } from '../split-pane';
-import { SendTabs, TAB_BAR_HEIGHT } from './send-tabs';
+import { PageHeader } from '../common/page-header';
+import { SendTabs } from './send-tabs';
 import { RequestPane } from './request-pane';
 import { ResponsePane } from './response-pane';
 
 const SendPageContainer = styled.div`
-    height: 100vh;
+    height: 100%;
     position: relative;
     background-color: ${p => p.theme.mainBackground};
+    display: flex;
+    flex-direction: column;
 `;
 
 const TabContentContainer = styled.div`
     position: relative;
-    height: calc(100vh - ${TAB_BAR_HEIGHT});
+    flex: 1 1 auto;
+    min-height: 0;
     box-shadow: 0 -2px 5px 1px rgba(0,0,0,${p => p.theme.boxShadowAlpha});
 `;
 
@@ -116,6 +121,10 @@ class SendPage extends React.Component<{
         } = this.props.uiStore;
 
         return <SendPageContainer>
+            <PageHeader
+                title='Send'
+                purpose={`Build a request or paste a cURL command. Resend captured requests from View with ${formatShortcut('Cmd+R')}.`}
+            />
             <SendTabs
                 sendRequests={sendRequests}
                 selectedTab={selectedRequest}

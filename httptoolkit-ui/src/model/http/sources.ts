@@ -111,16 +111,21 @@ const isValidIconName = (name: string | undefined): name is SourceIconName => {
     return !!(name && _.has(SourceIcons, name));
 }
 
+const GENERIC_CLIENT_ICONS: SourceIconName[] = ['Curl', 'Wget', 'Httpie', 'Postmanruntime', 'Insomnia'];
+
 const getIcon = (useragent: IUAParser.IResult) => {
     const browserName = get(useragent, 'browser', 'name');
     if (isValidIconName(browserName)) return SourceIcons[browserName];
 
     const uaStrings = useragent.ua.match(/[A-Za-z]+/g) || [];
 
-    const recognizedUaPart = _.find(
-        uaStrings.map((s) => _.upperFirst(s.toLowerCase())),
-        (s) => isValidIconName(s)
-    ) as SourceIconName;
+    // Generic tools like curl also appear inside library UAs ("GuzzleHttp/6 curl/7 PHP/7"),
+    // so they're only used when nothing more specific is recognized:
+    const recognizedUaParts = uaStrings
+        .map((s) => _.upperFirst(s.toLowerCase()))
+        .filter(isValidIconName);
+    const recognizedUaPart = recognizedUaParts.find((s) => !GENERIC_CLIENT_ICONS.includes(s)) ??
+        recognizedUaParts[0];
 
     if (recognizedUaPart) {
         return SourceIcons[recognizedUaPart];

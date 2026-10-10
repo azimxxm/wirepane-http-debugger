@@ -6,7 +6,6 @@ import * as dateFns from 'date-fns';
 
 import { styled } from '../../styles';
 import { WithInjected } from '../../types';
-import { Icon } from '../../icons';
 import { logError } from '../../errors';
 import { uploadFile, saveFile } from '../../util/ui';
 
@@ -23,10 +22,13 @@ import {
     mapRules
 } from '../../model/rules/rules-structure';
 import { SERIALIZED_RULES_MIME_TYPE, serializeRules } from '../../model/rules/rule-serialization';
+import { RuleTemplate } from '../../model/rules/rule-templates';
+import { getUserRuleItems } from '../../model/traffic-summary';
 
-import { clickOnEnter } from '../component-utils';
-import { Button, SecondaryButton } from '../common/inputs';
+import { PageHeader } from '../common/page-header';
 import { RuleList } from './rule-list';
+import { RuleTemplateGrid } from './rule-templates';
+import { ModifyHeaderActions, ModifyPageShortcuts } from './modify-header-actions';
 
 interface ModifyPageProps {
     className?: string;
@@ -49,42 +51,6 @@ const ModifyPageContainer = styled.section`
 const ModifyPageScrollContainer = styled.div`
     overflow-y: scroll;
     flex-grow: 1;
-`;
-
-const ModifyPageHeader = styled.header`
-    box-sizing: border-box;
-    width: 100%;
-    padding: 20px calc(40px + 16px) 20px 40px; /* ~16px to match scrollbar below */
-    background-color: ${p => p.theme.containerBackground};
-    border-bottom: 1px solid rgba(0,0,0,0.12);
-    box-sizing: border-box;
-
-    display: flex;
-    flex-direction: row;
-    align-items: center;
-`;
-
-const EditHeading = styled.h1`
-    font-size: ${p => p.theme.loudHeadingSize};
-    font-weight: bold;
-    flex-grow: 1;
-`;
-
-const SaveButton = styled(Button)`
-    font-size: ${p => p.theme.textSize};
-    font-weight: bold;
-    padding: 10px 24px;
-    margin-left: 20px;
-
-    svg {
-        margin-right: 5px;
-    }
-`;
-const OtherButton = styled(SecondaryButton)`
-    border: none;
-    font-size: 1.2em;
-    padding: 5px 10px;
-    margin-left: 10px;
 `;
 
 @inject('rulesStore')
@@ -153,63 +119,30 @@ class ModifyPage extends React.Component<ModifyPageProps> {
         const isPaidUser = this.props.accountStore.user.isPaidUser();
 
         return <ModifyPageContainer ref={this.containerRef}>
-            <ModifyPageHeader>
-                <EditHeading>Transform & Mock HTTP</EditHeading>
-
-                <OtherButton
-                    disabled={!areSomeRulesNonDefault}
-                    onClick={this.resetToDefaults}
-                    onKeyPress={clickOnEnter}
-                    title="Reset rules to default"
-                >
-                    <Icon icon={['far', 'trash-alt']} />
-                </OtherButton>
-                <OtherButton
-                    disabled={!isPaidUser}
-                    onClick={this.importRules}
-                    onKeyPress={clickOnEnter}
-                    title={
-                        isPaidUser
-                            ? 'Import a saved set of rules'
-                            : (
-                                'With Pro: Import a set of saved rules, so you can build your ' +
-                                'own ready-to-use collections of predefined rules'
-                            )
-                    }
-                >
-                    <Icon icon={['fas', 'folder-open']} />
-                </OtherButton>
-                <OtherButton
-                    disabled={!isPaidUser || !areSomeRulesNonDefault || draftRules.items.length === 0}
-                    onClick={this.exportRules}
-                    onKeyPress={clickOnEnter}
-                    title={
-                        isPaidUser
-                            ? 'Export these rules'
-                            : 'With Pro: Export these rules, to save them for quick reuse later'
-                    }
-                >
-                    <Icon icon={['fas', 'download']} />
-                </OtherButton>
-                <OtherButton
-                    disabled={!areSomeRulesUnsaved}
-                    onClick={this.resetRuleDrafts}
-                    onKeyPress={clickOnEnter}
-                    title="Revert changes since the last save"
-                >
-                    <Icon icon={['fas', 'undo']} />
-                </OtherButton>
-                <SaveButton
-                    disabled={!areSomeRulesUnsaved}
-                    onClick={this.saveAll}
-                    onKeyPress={clickOnEnter}
-                    title="Save all rule changes"
-                >
-                    <Icon icon={['fas', 'save']} /> Save changes
-                </SaveButton>
-            </ModifyPageHeader>
+            <ModifyPageShortcuts onNewRule={this.addRule} onSave={this.saveIfUnsaved} />
+            <PageHeader
+                title='Modify'
+                purpose='Rules change matching traffic as it passes through: mock, rewrite, delay, breakpoint, map local or remote.'
+                compactBelow={1100}
+            >
+                <ModifyHeaderActions
+                    canReset={areSomeRulesNonDefault}
+                    canImport={isPaidUser}
+                    canExport={isPaidUser && areSomeRulesNonDefault && draftRules.items.length > 0}
+                    hasUnsavedChanges={areSomeRulesUnsaved}
+                    onReset={this.resetToDefaults}
+                    onImport={this.importRules}
+                    onExport={this.exportRules}
+                    onRevert={this.resetRuleDrafts}
+                    onSave={this.saveAll}
+                    onNewRule={this.addRule}
+                />
+            </PageHeader>
 
             <ModifyPageScrollContainer>
+                { getUserRuleItems(draftRules).length === 0 &&
+                    <RuleTemplateGrid onCreate={this.addTemplateRule} />
+                }
                 <RuleList
                     activeRules={rules}
                     draftRules={draftRules}
@@ -309,6 +242,19 @@ class ModifyPage extends React.Component<ModifyPageProps> {
             if (dropdown) dropdown.focus();
             // If there's a race, this will just do nothing
         }, 100);
+    }
+
+    @action.bound
+    addTemplateRule(template: RuleTemplate) {
+        const newRule = template.buildRule(this.props.rulesStore);
+        // Like a new blank rule, a template rule starts expanded, ready to edit:
+        this.collapsedRulesMap[newRule.id] = false;
+        this.props.rulesStore.addDraftItem(newRule);
+    }
+
+    @action.bound
+    saveIfUnsaved() {
+        if (this.props.rulesStore.areSomeRulesUnsaved) this.saveAll();
     }
 
     @action.bound

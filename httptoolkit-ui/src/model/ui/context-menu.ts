@@ -17,6 +17,7 @@ export interface ContextMenuOption<T> {
     type: 'option';
     label: string;
     enabled?: boolean;
+    accelerator?: string; // Shown next to native menu items, e.g. 'CmdOrCtrl+P'
     callback: (data: T) => void;
 }
 

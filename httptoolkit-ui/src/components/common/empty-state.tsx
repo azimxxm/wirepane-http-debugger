@@ -23,8 +23,7 @@ export const EmptyState = styled((props: React.HTMLAttributes<HTMLDivElement> & 
     justify-content: center;
 
     color: ${p => p.theme.containerWatermark};
-    font-size: ${p => p.theme.loudHeadingSize};
-    letter-spacing: -1px;
+    font-size: ${p => p.theme.subHeadingSize};
 
     text-align: center;
 
@@ -36,6 +35,6 @@ export const EmptyState = styled((props: React.HTMLAttributes<HTMLDivElement> & 
     margin: auto 0;
 
     > svg {
-        font-size: 150px;
+        font-size: 48px;
     }
 `;

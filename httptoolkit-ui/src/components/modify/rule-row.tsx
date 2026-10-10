@@ -143,10 +143,13 @@ export const AddRuleRow = styled((p: {
     margin-top: 20px;
 
     justify-content: center;
-    background-color: ${p =>
-        polished.rgba(p.theme.mainBackground, 0.4)
-    };
-    box-shadow: 0 0 4px 0 rgba(0,0,0,${p => p.theme.boxShadowAlpha});
+    background-color: transparent;
+    border: 1px dashed ${p => p.theme.inputBorder}; /* Reads as an "add" target, not a banner */
+    box-shadow: none;
+
+    &:hover {
+        background-color: ${p => p.theme.rowHover};
+    }
 `;
 
 const MatcherOrSteps = styled.section`

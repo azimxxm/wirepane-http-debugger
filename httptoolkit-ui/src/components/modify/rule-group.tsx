@@ -25,6 +25,7 @@ import { clickOnEnter, noPropagation } from '../component-utils';
 import { TextInput } from '../common/inputs';
 import { DragHandle } from './rule-drag-handle';
 import { IconMenu, IconMenuButton } from './rule-icon-menu';
+import { RuleGroupSubtitle } from './rule-templates';
 
 const CollapsedItemPlaceholder = styled.div<{
     index: number,
@@ -272,6 +273,7 @@ export const GroupHeader = observer((p: {
                     />
                     : p.group.title
                 }
+                { !isEditing && <RuleGroupSubtitle groupId={p.group.id} /> }
             </h2>
 
             <TitleButtonContainer>
