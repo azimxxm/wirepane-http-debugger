@@ -413,6 +413,15 @@ function redactBody(body: BrunoBody | undefined, location: string, context: Reda
         if (typeof graphql.query === 'string') graphql.query = context.scan(graphql.query, location);
         if (typeof graphql.variables === 'string') graphql.variables = redactJsonText(graphql.variables, location, context);
     }
+
+    // WebSocket requests' saved messages
+    for (const message of body.ws ?? []) {
+        if (typeof message.content !== 'string') continue;
+        const messageLocation = message.name ? `${location} › message "${message.name}"` : `${location} › message`;
+        message.content = message.type === 'json'
+            ? redactJsonText(message.content, messageLocation, context)
+            : context.scan(message.content, messageLocation);
+    }
 }
 
 // Finds "key": "value" pairs anywhere in JSON-like text, including bodies that {{variables}}

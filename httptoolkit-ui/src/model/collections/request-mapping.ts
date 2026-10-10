@@ -4,7 +4,8 @@ import { RawHeaders } from '../../types';
 import { getHeaderValue } from '../http/headers';
 import { EditableContentType, getEditableContentType } from '../events/content-types';
 import { RequestInput } from '../send/send-request-model';
-import { SendExtrasData } from '../send/send-extras';
+import { SendBodyMode, SendExtras, SendExtrasData } from '../send/send-extras';
+import { newMultipartBoundary } from '../send/build-request';
 
 import {
     BrunoBody,
@@ -13,19 +14,44 @@ import {
     BrunoKeyValue,
     BrunoMultipartField,
     BrunoParam,
-    BrunoRequest
+    BrunoRequest,
+    BrunoWsRequest,
+    isTextBodyMode,
+    TEXT_BODY_MODES,
+    TextBodyMode
 } from './collection-types';
 import { newUid } from './collection-tree';
-import { hasTemplate, mapTemplateLiterals } from './templates';
+import { hasTemplate } from './templates';
+import {
+    brunoBodyModeOf,
+    FilePathOf,
+    fileNameOf,
+    fromBinaryFile,
+    fromFormFields,
+    fromGraphqlBody,
+    fromMultipartFields,
+    fromWebSocketMessages,
+    isPlainHttp,
+    ItemFiles,
+    itemFilePaths,
+    sendBodyModeOf,
+    toBinaryFile,
+    toFormFields,
+    toGraphqlBody,
+    toMultipartFields,
+    toWebSocketDraft
+} from './extras-mapping';
 
 /**
- * Maps between a Send tab's request and a Bruno http-request item.
+ * Maps between a Send tab's request and a Bruno request item: http-request,
+ * graphql-request or ws-request.
  *
- * Send works with a raw request: method, URL, headers and a body. Items hold more
- * structure (query & path params, body modes, disabled entries, auth, scripts, docs,
- * examples), so saving a tab updates its item in place: whatever the tab can't show is
- * kept from the item, and values that Send derives (Host, Content-Length, the body's
- * default Content-Type) aren't stored, just as Bruno and Postman don't store them.
+ * Send works with a request line, headers and a body, which is raw text or one of the
+ * structured modes (form, multipart, binary, GraphQL: see extras-mapping.ts). Items hold
+ * more structure (query & path params, disabled entries, auth, scripts, docs, examples),
+ * so saving a tab updates its item in place: whatever the tab can't show is kept from the
+ * item, and values that Send derives (Host, Content-Length, the body's default
+ * Content-Type) aren't stored, just as Bruno and Postman don't store them.
  */
 
 export interface RequestParts {
@@ -60,13 +86,6 @@ const IMPLIED_CONTENT_TYPES: { [mode in BrunoBodyMode]?: string } = {
     formUrlEncoded: 'application/x-www-form-urlencoded',
     graphql: 'application/json'
 };
-
-const TEXT_BODY_MODES = ['json', 'text', 'xml', 'sparql'] as const;
-type TextBodyMode = typeof TEXT_BODY_MODES[number];
-const isTextBodyMode = (mode: BrunoBodyMode | undefined): mode is TextBodyMode =>
-    TEXT_BODY_MODES.includes(mode as TextBodyMode);
-
-const MULTIPART_BOUNDARY_PREFIX = '----WirepaneFormBoundary';
 
 const utf8Decoder = new TextDecoder('utf8', { fatal: true });
 export function isUtf8Text(body: Buffer) {
@@ -206,17 +225,7 @@ function toUrlAndParams(url: string, baseRequest: BrunoRequest | undefined): { u
 
 // --- Bodies ------------------------------------------------------------------------
 
-// Form encoding (spaces as +, like URLSearchParams) that leaves {{variables}} readable
-const formEncode = (text: string) =>
-    mapTemplateLiterals(text, (literal) => encodeURIComponent(literal).replace(/%20/g, '+'));
 const formDecode = (text: string) => safeDecodeURIComponent(text.replace(/\+/g, ' '));
-
-function encodeFormFields(fields: BrunoKeyValue[]): string {
-    return fields
-        .filter((field) => field.enabled !== false && field.name)
-        .map((field) => `${formEncode(field.name!)}=${formEncode(field.value ?? '')}`)
-        .join('&');
-}
 
 function decodeFormFields(text: string, baseFields: BrunoKeyValue[]): BrunoKeyValue[] {
     const reuse = matchingEntries(baseFields.filter((field) => field.enabled !== false), true);
@@ -228,17 +237,6 @@ function decodeFormFields(text: string, baseFields: BrunoKeyValue[]): BrunoKeyVa
     });
 
     return [...fields, ...baseFields.filter((field) => field.enabled === false)];
-}
-
-const quoteMultipartName = (name: string) => name.replace(/["\\\r\n]/g, (char) => encodeURIComponent(char));
-
-function encodeMultipartFields(fields: BrunoMultipartField[], boundary: string): string {
-    const parts = fields.map((field) => {
-        const headers = [`Content-Disposition: form-data; name="${quoteMultipartName(field.name ?? '')}"`];
-        if (field.contentType) headers.push(`Content-Type: ${field.contentType}`);
-        return `--${boundary}\r\n${headers.join('\r\n')}\r\n\r\n${field.value ?? ''}\r\n`;
-    });
-    return `${parts.join('')}--${boundary}--\r\n`;
 }
 
 function boundaryOf(contentType: string): string | undefined {
@@ -276,13 +274,6 @@ function decodeMultipartFields(text: string, boundary: string): BrunoMultipartFi
     return fields;
 }
 
-function encodeGraphqlBody(graphql: BrunoBody['graphql']): string {
-    const query = graphql?.query ?? '';
-    // The variables stay as written: they may hold {{variables}}, so they aren't parsed here
-    const variables = (graphql?.variables ?? '').trim() || '{}';
-    return `{\n  "query": ${JSON.stringify(query)},\n  "variables": ${variables}\n}`;
-}
-
 function decodeGraphqlBody(text: string): BrunoBody['graphql'] | undefined {
     try {
         const parsed = JSON.parse(text) as { query?: unknown, variables?: unknown } | null;
@@ -301,48 +292,38 @@ function decodeGraphqlBody(text: string): BrunoBody['graphql'] | undefined {
     }
 }
 
-interface BodyText {
-    body: Buffer;
-    // The Content-Type the body implies, for requests without one
-    impliedContentType?: string;
-    warnings: string[];
+const textModeOf = (contentType: EditableContentType): TextBodyMode =>
+    contentType === 'json' ? 'json' : contentType === 'xml' ? 'xml' : 'text';
+
+// The text a tab's raw editor shows for an item: the body itself for text modes. With a
+// structured mode, it's text kept from an earlier mode, so switching back brings it back.
+function rawTextOf(body: BrunoBody | undefined, bodyMode: SendBodyMode): { text: string, textMode?: TextBodyMode } {
+    const mode = body?.mode;
+    if (bodyMode === 'raw') return isTextBodyMode(mode) ? { text: body?.[mode] ?? '', textMode: mode } : { text: '' };
+
+    const textMode = TEXT_BODY_MODES.find((candidate) => !!body?.[candidate]);
+    return textMode ? { text: body![textMode]!, textMode } : { text: '' };
 }
 
-function bodyToText(body: BrunoBody | undefined): BodyText {
-    const mode = body?.mode ?? 'none';
-    const impliedContentType = IMPLIED_CONTENT_TYPES[mode];
-
-    switch (mode) {
-        case 'json':
-        case 'text':
-        case 'xml':
-        case 'sparql':
-            return { body: Buffer.from(body?.[mode] ?? ''), impliedContentType, warnings: [] };
-        case 'formUrlEncoded':
-            return { body: Buffer.from(encodeFormFields(body?.formUrlEncoded ?? [])), impliedContentType, warnings: [] };
-        case 'graphql':
-            return { body: Buffer.from(encodeGraphqlBody(body?.graphql)), impliedContentType, warnings: [] };
-        case 'multipartForm': {
-            const fields = (body?.multipartForm ?? []).filter((field) => field.enabled !== false);
-            const textFields = fields.filter((field) => field.type !== 'file');
-            const boundary = `${MULTIPART_BOUNDARY_PREFIX}${newUid().slice(0, 16)}`;
-            return {
-                body: Buffer.from(encodeMultipartFields(textFields, boundary)),
-                impliedContentType: `multipart/form-data; boundary=${boundary}`,
-                warnings: textFields.length < fields.length
-                    ? ['File fields of this form aren\'t sent from Send yet. They stay saved in the collection.']
-                    : []
-            };
-        }
-        case 'file':
-            return { body: Buffer.alloc(0), warnings: ['File bodies aren\'t sent from Send yet. The file stays saved in the collection.'] };
-        default:
-            return { body: Buffer.alloc(0), warnings: [] };
+// The Content-Type that a body implies, for requests without one
+function impliedContentType(body: BrunoBody | undefined, extras: SendExtrasData): string | undefined {
+    switch (extras.bodyMode) {
+        case 'raw': return IMPLIED_CONTENT_TYPES[body?.mode ?? 'none'];
+        case 'form': return 'application/x-www-form-urlencoded';
+        case 'multipart': return `multipart/form-data; boundary=${newMultipartBoundary()}`;
+        case 'binary': return extras.binaryFile?.contentType || 'application/octet-stream';
+        case 'graphql': return 'application/json';
     }
 }
 
-function textToBody(parts: RequestParts, base: BrunoItem | undefined): { body: BrunoBody, warnings: string[] } {
-    const baseBody = base?.request?.body;
+// Saves a raw body: its type comes from the Content-Type, and forms and multipart bodies
+// are read back into fields
+function textToBody(
+    parts: RequestParts,
+    baseBody: BrunoBody | undefined,
+    isGraphqlBase: boolean,
+    warnings: string[]
+): BrunoBody {
     const contentTypeHeader = getHeaderValue(parts.headers, 'content-type') ?? '';
     const contentType = contentTypeHeader.toLowerCase();
     const keep = (body: BrunoBody): BrunoBody => ({ ...baseBody, ...body });
@@ -350,24 +331,22 @@ function textToBody(parts: RequestParts, base: BrunoItem | undefined): { body: B
     if (!parts.body.length) {
         // An emptied body keeps its type, so a JSON request stays one
         const mode = baseBody?.mode;
-        if (!isTextBodyMode(mode)) return { body: keep({ mode: 'none' }), warnings: [] };
+        if (!isTextBodyMode(mode)) return keep({ mode: 'none' });
 
         const emptied: BrunoBody = keep({ mode });
         emptied[mode] = '';
-        return { body: emptied, warnings: [] };
+        return emptied;
     }
 
     if (!isUtf8Text(parts.body)) {
-        return {
-            body: keep({ mode: 'none' }),
-            warnings: ['The request body is binary data, which a collection can\'t store, so it was left out.']
-        };
+        warnings.push('The request body is binary data, which a collection can\'t store, so it was left out. Use the Binary body mode to send a file.');
+        return keep({ mode: 'none' });
     }
 
     const text = parts.body.toString('utf8');
 
     if (contentType.includes('application/x-www-form-urlencoded')) {
-        return { body: keep({ mode: 'formUrlEncoded', formUrlEncoded: decodeFormFields(text, baseBody?.formUrlEncoded ?? []) }), warnings: [] };
+        return keep({ mode: 'formUrlEncoded', formUrlEncoded: decodeFormFields(text, baseBody?.formUrlEncoded ?? []) });
     }
 
     // Boundaries are case-sensitive, so they're read from the header as written
@@ -375,18 +354,68 @@ function textToBody(parts: RequestParts, base: BrunoItem | undefined): { body: B
     const multipartFields = boundary ? decodeMultipartFields(text, boundary) : undefined;
     if (multipartFields) {
         const fileFields = (baseBody?.multipartForm ?? []).filter((field) => field.type === 'file');
-        return { body: keep({ mode: 'multipartForm', multipartForm: [...multipartFields, ...fileFields] }), warnings: [] };
+        return keep({ mode: 'multipartForm', multipartForm: [...multipartFields, ...fileFields] });
     }
 
-    if (base?.type === 'graphql-request' || baseBody?.mode === 'graphql') {
+    // Tabs opened before GraphQL had its own mode hold GraphQL requests as JSON text
+    if (isGraphqlBase) {
         const graphql = decodeGraphqlBody(text);
-        if (graphql) return { body: keep({ mode: 'graphql', graphql }), warnings: [] };
+        if (graphql) return keep({ mode: 'graphql', graphql });
     }
 
-    if (contentType.includes('sparql')) return { body: keep({ mode: 'sparql', sparql: text }), warnings: [] };
-    if (parts.contentType === 'json' || contentType.includes('json')) return { body: keep({ mode: 'json', json: text }), warnings: [] };
-    if (parts.contentType === 'xml' || contentType.includes('xml')) return { body: keep({ mode: 'xml', xml: text }), warnings: [] };
-    return { body: keep({ mode: 'text', text }), warnings: [] };
+    if (contentType.includes('sparql')) return keep({ mode: 'sparql', sparql: text });
+    if (parts.contentType === 'json' || contentType.includes('json')) return keep({ mode: 'json', json: text });
+    if (parts.contentType === 'xml' || contentType.includes('xml')) return keep({ mode: 'xml', xml: text });
+    return keep({ mode: 'text', text });
+}
+
+// Saves a structured body. Its data is added by addStructuredData.
+function structuredBody(parts: RequestParts, bodyMode: Exclude<SendBodyMode, 'raw'>, baseBody: BrunoBody | undefined): BrunoBody {
+    const body: BrunoBody = { ...baseBody, mode: brunoBodyModeOf(bodyMode) };
+
+    // The raw editor's text is kept too, as switching back to it brings it back
+    if (parts.body.length && isUtf8Text(parts.body)) body[textModeOf(parts.contentType)] = parts.body.toString('utf8');
+    return body;
+}
+
+/**
+ * Adds the data of every structured body mode, not only the one in use: switching modes
+ * and saving loses nothing. Tabs without any (e.g. captured traffic) save their raw body
+ * only, so they're saved exactly as before structured modes existed.
+ */
+function addStructuredData(
+    body: BrunoBody,
+    parts: RequestParts,
+    baseBody: BrunoBody | undefined,
+    filePathOf: FilePathOf,
+    warnings: string[]
+) {
+    const { extras } = parts;
+    if (!extras || isPlainHttp(extras)) return;
+
+    // A raw form or multipart body was read back into fields already: those win
+    const readFromText = extras.bodyMode === 'raw' ? body.mode : undefined;
+
+    if (readFromText !== 'formUrlEncoded' && (extras.formFields.length || baseBody?.formUrlEncoded)) {
+        body.formUrlEncoded = fromFormFields(extras.formFields, baseBody?.formUrlEncoded);
+    }
+
+    if (readFromText !== 'multipartForm' && (extras.multipartFields.length || baseBody?.multipartForm)) {
+        body.multipartForm = fromMultipartFields(extras.multipartFields, baseBody?.multipartForm, filePathOf, warnings);
+    }
+
+    if (extras.binaryFile || baseBody?.file) {
+        // Bruno sends a binary body with its file's type, so the tab's Content-Type goes there
+        const contentType = extras.bodyMode === 'binary'
+            ? getHeaderValue(parts.headers, 'content-type') ?? extras.binaryFile?.contentType ?? ''
+            : extras.binaryFile?.contentType ?? '';
+        body.file = fromBinaryFile(extras.binaryFile, contentType, baseBody?.file, filePathOf, warnings);
+    }
+
+    const hasGraphql = extras.bodyMode === 'graphql' || !!extras.graphql.query || !!extras.graphql.variables;
+    if (readFromText !== 'graphql' && (hasGraphql || baseBody?.graphql)) {
+        body.graphql = fromGraphqlBody(extras.graphql, baseBody?.graphql);
+    }
 }
 
 // --- Headers -----------------------------------------------------------------------
@@ -396,7 +425,7 @@ const normalizeMediaType = (value: string) => value.toLowerCase().replace(/\s+/g
 function isDerivedHeader(
     [name, value]: [string, string],
     url: string,
-    bodyMode: BrunoBodyMode,
+    body: BrunoBody,
     baseHadContentType: boolean
 ): boolean {
     const lowerName = name.toLowerCase();
@@ -405,13 +434,16 @@ function isDerivedHeader(
     if (lowerName !== 'content-type') return false;
 
     // The client picks a new boundary for every multipart request
-    if (bodyMode === 'multipartForm') return normalizeMediaType(value).startsWith('multipart/form-data');
+    if (body.mode === 'multipartForm') return normalizeMediaType(value).startsWith('multipart/form-data');
 
-    const implied = IMPLIED_CONTENT_TYPES[bodyMode];
-    return !baseHadContentType && !!implied && normalizeMediaType(value) === implied;
+    // A binary body is sent with its file's type
+    const implied = body.mode === 'file'
+        ? body.file?.find((entry) => entry.selected)?.contentType
+        : IMPLIED_CONTENT_TYPES[body.mode];
+    return !baseHadContentType && !!implied && normalizeMediaType(value) === normalizeMediaType(implied);
 }
 
-function toItemHeaders(parts: RequestParts, bodyMode: BrunoBodyMode, baseRequest: BrunoRequest | undefined): BrunoKeyValue[] {
+function toItemHeaders(parts: RequestParts, body: BrunoBody, baseRequest: BrunoWsRequest | undefined): BrunoKeyValue[] {
     const baseHeaders = baseRequest?.headers ?? [];
     const enabledBaseHeaders = baseHeaders.filter((header) => header.enabled !== false);
     const baseHadContentType = enabledBaseHeaders.some((header) => header.name?.toLowerCase() === 'content-type');
@@ -419,15 +451,26 @@ function toItemHeaders(parts: RequestParts, bodyMode: BrunoBodyMode, baseRequest
 
     const headers: BrunoKeyValue[] = parts.headers
         .filter(([name]) => !!name)
-        .filter((header) => !isDerivedHeader(header, parts.url, bodyMode, baseHadContentType))
+        .filter((header) => !isDerivedHeader(header, parts.url, body, baseHadContentType))
         .map(([name, value]) => ({ ...reuse(name), name, value, enabled: true }));
 
     return [...headers, ...baseHeaders.filter((header) => header.enabled === false)];
 }
 
+// The enabled headers of an item, plus Host like Send adds it
+function itemHeaders(request: BrunoWsRequest, url: string): RawHeaders {
+    const headers: RawHeaders = (request.headers ?? [])
+        .filter((header) => header.enabled !== false && header.name)
+        .map((header) => [header.name!, header.value ?? '']);
+
+    const host = hostOf(url);
+    if (host && !hasHeader(headers, 'host')) headers.unshift(['host', host]);
+    return headers;
+}
+
 // --- Items <-> requests --------------------------------------------------------------
 
-function editorContentType(headers: RawHeaders, mode: BrunoBodyMode): EditableContentType {
+function editorContentType(headers: RawHeaders, mode: BrunoBodyMode | undefined): EditableContentType {
     const fromHeader = getEditableContentType(getHeaderValue(headers, 'content-type'));
     if (fromHeader) return fromHeader;
     return mode === 'json' || mode === 'graphql' ? 'json'
@@ -435,12 +478,77 @@ function editorContentType(headers: RawHeaders, mode: BrunoBodyMode): EditableCo
         : 'text';
 }
 
+const listNames = (names: string[]) => names.length <= 1
+    ? names.join('')
+    : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`;
+
+function missingFilesWarnings(filePaths: string[]): string[] {
+    if (!filePaths.length) return [];
+
+    const names = listNames(filePaths.map((filePath) => `“${fileNameOf(filePath)}”`));
+    return [filePaths.length === 1
+        ? `The file ${names} (${filePaths[0]}) isn't in the collection folder, so it can't be sent. Attach it again.`
+        : `${filePaths.length} files aren't in the collection folder, so they can't be sent: ${names}. Attach them again.`
+    ];
+}
+
+function httpItemToParts(item: BrunoItem, request: BrunoRequest, files: ItemFiles): RequestParts {
+    const url = applyPathParams(request.url ?? '', request.params ?? []);
+    const headers = itemHeaders(request, url);
+    const body = request.body;
+
+    const extras = new SendExtras({
+        bodyMode: sendBodyModeOf(item),
+        formFields: toFormFields(body?.formUrlEncoded),
+        multipartFields: toMultipartFields(body?.multipartForm, files),
+        binaryFile: toBinaryFile(body?.file, files),
+        graphql: toGraphqlBody(body?.graphql)
+    }).toData();
+
+    const { text, textMode } = rawTextOf(body, extras.bodyMode);
+    const rawBody = Buffer.from(text);
+
+    const contentType = impliedContentType(body, extras);
+    if (contentType && !hasHeader(headers, 'content-type')) headers.push(['content-type', contentType]);
+
+    // Structured bodies are only built when sending, which sets their Content-Length then
+    const isFramed = hasHeader(headers, 'content-length') || hasHeader(headers, 'transfer-encoding');
+    if (extras.bodyMode === 'raw' && rawBody.length && !isFramed && !hasHeader(headers, 'content-encoding')) {
+        headers.push(['content-length', rawBody.byteLength.toString()]);
+    }
+
+    return {
+        method: (request.method || 'GET').toUpperCase(),
+        url,
+        headers,
+        body: rawBody,
+        contentType: editorContentType(headers, extras.bodyMode === 'graphql' ? 'graphql' : textMode),
+        extras
+    };
+}
+
+function webSocketItemToParts(request: BrunoWsRequest): RequestParts {
+    const url = request.url ?? '';
+    return {
+        // The opening handshake is a GET
+        method: 'GET',
+        url,
+        headers: itemHeaders(request, url),
+        body: Buffer.alloc(0),
+        contentType: 'text',
+        extras: new SendExtras({ requestType: 'websocket', websocket: toWebSocketDraft(request.body?.ws) }).toData()
+    };
+}
+
 /**
  * The request a Send tab shows for an item. Filled-in path params are applied to the
  * URL, and Host, Content-Type & Content-Length are added like Send does for typed
  * requests. Variables stay as {{templates}}: they're filled in when the request is sent.
+ *
+ * `files` holds the files the item sends (itemFilePaths), loaded into the Send file
+ * store. Files that aren't there are shown as missing.
  */
-export function itemToRequestParts(item: BrunoItem): OpenedRequest {
+export function itemToRequestParts(item: BrunoItem, files: ItemFiles = new Map()): OpenedRequest {
     const request = item.request;
     if (!request) {
         return {
@@ -449,47 +557,55 @@ export function itemToRequestParts(item: BrunoItem): OpenedRequest {
         };
     }
 
-    const url = applyPathParams(request.url ?? '', request.params ?? []);
-    const headers: RawHeaders = (request.headers ?? [])
-        .filter((header) => header.enabled !== false && header.name)
-        .map((header) => [header.name!, header.value ?? '']);
-    const { body, impliedContentType, warnings } = bodyToText(request.body);
-
-    const host = hostOf(url);
-    if (host && !hasHeader(headers, 'host')) headers.unshift(['host', host]);
-    if (impliedContentType && !hasHeader(headers, 'content-type')) headers.push(['content-type', impliedContentType]);
-    const isFramed = hasHeader(headers, 'content-length') || hasHeader(headers, 'transfer-encoding');
-    if (body.length && !isFramed && !hasHeader(headers, 'content-encoding')) {
-        headers.push(['content-length', body.byteLength.toString()]);
-    }
-
-    const mode = request.body?.mode ?? 'none';
     return {
-        parts: {
-            method: (request.method || 'GET').toUpperCase(),
-            url,
-            headers,
-            body,
-            contentType: editorContentType(headers, mode)
-        },
-        warnings
+        parts: item.type === 'ws-request' ? webSocketItemToParts(request) : httpItemToParts(item, request, files),
+        warnings: missingFilesWarnings(itemFilePaths(item).filter((filePath) => !files.has(filePath)))
     };
 }
 
-/**
- * Builds the item for a Send tab's request, updating `base` (the item the tab was opened
- * from) when there is one, so everything Send doesn't show is kept.
- */
-export function requestPartsToItem(
+// Settings that only the other kind of request (HTTP or WebSocket) has are dropped
+const HTTP_SETTINGS = ['encodeUrl', 'followRedirects', 'maxRedirects', 'timeout', 'forwardAuthorizationHeader', 'omitHeaders'];
+const WEBSOCKET_SETTINGS = ['timeout', 'keepAliveInterval'];
+
+function newItem(base: BrunoItem | undefined, defaults: NewItemDefaults, type: string, request: BrunoWsRequest): BrunoItem {
+    const item: BrunoItem = {
+        ...base,
+        uid: base?.uid ?? defaults.uid ?? newUid(),
+        type,
+        name: base?.name ?? defaults.name,
+        // ws-request items have no method or params, which BrunoRequest always lists
+        request: request as BrunoRequest
+    };
+
+    const isWebSocket = type === 'ws-request';
+    if (base?.settings && isWebSocket !== (base.type === 'ws-request')) {
+        item.settings = _.pick(base.settings, isWebSocket ? WEBSOCKET_SETTINGS : HTTP_SETTINGS);
+    }
+    // Bruno keeps examples for HTTP, GraphQL and gRPC requests only
+    if (isWebSocket) delete item.examples;
+    return item;
+}
+
+function httpPartsToItem(
     parts: RequestParts,
     docs: string,
     base: BrunoItem | undefined,
-    defaults: NewItemDefaults
+    defaults: NewItemDefaults,
+    filePathOf: FilePathOf
 ): { item: BrunoItem, warnings: string[] } {
+    const isFromWebSocket = base?.type === 'ws-request';
     const baseRequest = base?.request;
-    const { body, warnings } = textToBody(parts, base);
-    const { url, params } = toUrlAndParams(parts.url, baseRequest);
+    // A WebSocket request's messages have no place in an HTTP body
+    const baseBody = isFromWebSocket ? undefined : baseRequest?.body;
+    const bodyMode = parts.extras?.bodyMode ?? 'raw';
+    const warnings: string[] = [];
 
+    const body = bodyMode === 'raw'
+        ? textToBody(parts, baseBody, base?.type === 'graphql-request' || baseBody?.mode === 'graphql', warnings)
+        : structuredBody(parts, bodyMode, baseBody);
+    addStructuredData(body, parts, baseBody, filePathOf, warnings);
+
+    const { url, params } = toUrlAndParams(parts.url, isFromWebSocket ? undefined : baseRequest);
     const request: BrunoRequest = {
         auth: { mode: defaults.authMode ?? 'inherit' },
         script: {},
@@ -500,25 +616,61 @@ export function requestPartsToItem(
         method: parts.method.toUpperCase(),
         url,
         params,
-        headers: toItemHeaders(parts, body.mode, baseRequest),
+        headers: toItemHeaders(parts, body, baseRequest),
         body,
         docs
     };
 
-    const type = base?.type === 'graphql-request' && body.mode !== 'graphql'
-        ? 'http-request'
+    const type = body.mode === 'graphql' ? 'graphql-request'
+        : base?.type === 'graphql-request' || isFromWebSocket ? 'http-request'
         : base?.type ?? 'http-request';
 
-    return {
-        item: {
-            ...base,
-            uid: base?.uid ?? defaults.uid ?? newUid(),
-            type,
-            name: base?.name ?? defaults.name,
-            request
-        },
-        warnings
+    return { item: newItem(base, defaults, type, request), warnings };
+}
+
+function webSocketPartsToItem(
+    parts: RequestParts,
+    docs: string,
+    base: BrunoItem | undefined,
+    defaults: NewItemDefaults
+): { item: BrunoItem, warnings: string[] } {
+    const baseRequest = base?.request;
+    const baseMessages = base?.type === 'ws-request' ? baseRequest?.body?.ws : undefined;
+    const body: BrunoBody = { mode: 'ws', ws: fromWebSocketMessages(parts.extras?.websocket.savedMessages ?? [], baseMessages) };
+
+    const request: BrunoWsRequest = {
+        auth: { mode: defaults.authMode ?? 'inherit' },
+        script: {},
+        vars: {},
+        assertions: [],
+        tests: '',
+        ..._.omit(baseRequest, ['method', 'params', 'methodType']),
+        url: parts.url,
+        headers: toItemHeaders(parts, body, baseRequest),
+        body,
+        docs
     };
+
+    return { item: newItem(base, defaults, 'ws-request', request), warnings: [] };
+}
+
+/**
+ * Builds the item for a Send tab's request, updating `base` (the item the tab was opened
+ * from) when there is one, so everything Send doesn't show is kept.
+ *
+ * `filePathOf` gives the path in the collection folder of each file the tab sends, for
+ * files stored there already: files without one are left out, with a warning.
+ */
+export function requestPartsToItem(
+    parts: RequestParts,
+    docs: string,
+    base: BrunoItem | undefined,
+    defaults: NewItemDefaults,
+    filePathOf: FilePathOf = () => undefined
+): { item: BrunoItem, warnings: string[] } {
+    return parts.extras?.requestType === 'websocket'
+        ? webSocketPartsToItem(parts, docs, base, defaults)
+        : httpPartsToItem(parts, docs, base, defaults, filePathOf);
 }
 
 export function requestInputToParts(input: RequestInput): RequestParts {

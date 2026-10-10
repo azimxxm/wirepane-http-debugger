@@ -1,6 +1,6 @@
 import * as React from 'react';
 import { observer } from 'mobx-react-lite';
-import { CheckCircle, ShieldCheck } from '@phosphor-icons/react';
+import { CheckCircle, ShieldCheck, Warning } from '@phosphor-icons/react';
 
 import { styled } from '../../styles';
 import { saveFile } from '../../util/ui';
@@ -21,7 +21,7 @@ const FORMATS: ReadonlyArray<{ format: ExportFormat, title: string, hint: string
     {
         format: 'bruno',
         title: 'Bruno folder (.zip)',
-        hint: 'For Git: one readable .bru file per request, plus the environments (without secret values).'
+        hint: 'For Git: one readable .bru file per request, the files that requests send, and the environments (without secret values).'
     }
 ];
 
@@ -58,6 +58,34 @@ const FormatOption = styled.label<{ isChosen: boolean }>`
 
     span {
         color: ${p => p.theme.mainLowlightColor};
+    }
+`;
+
+// What the chosen format leaves out, e.g. files and WebSocket requests in Postman JSON
+const WarningList = styled.ul`
+    padding: 8px 10px;
+    border-radius: 6px;
+    border: 1px solid ${p => p.theme.warningColor};
+    background-color: ${p => p.theme.warningBackground};
+
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+
+    li {
+        display: flex;
+        align-items: flex-start;
+        gap: 8px;
+
+        font-size: ${p => p.theme.textInputFontSize};
+        line-height: 1.45;
+        color: ${p => p.theme.mainColor};
+    }
+
+    svg {
+        flex-shrink: 0;
+        margin-top: 2px;
+        color: ${p => p.theme.warningColor};
     }
 `;
 
@@ -246,6 +274,12 @@ export const ShareDialog = observer((props: {
                 </FormatOption>
             ) }
         </FormatList>
+
+        { result && result.warnings?.length > 0 && <WarningList aria-live='polite'>
+            { result.warnings.map((warning) =>
+                <li key={warning}><Warning size={16} weight='fill' aria-hidden={true} />{ warning }</li>
+            ) }
+        </WarningList> }
 
         <SectionTitle>Secrets</SectionTitle>
         { error && <ErrorText role='alert'>Couldn't build the file: { error }</ErrorText> }

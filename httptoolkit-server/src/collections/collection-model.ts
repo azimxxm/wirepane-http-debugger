@@ -52,8 +52,28 @@ export function toCollection(input: unknown, id: string): BrunoCollection {
         environments: Array.isArray(copy.environments) ? copy.environments : []
     };
 
+    normalizeRequestShapes(collection.items);
     hydrateUids(collection);
     return collection as BrunoCollection;
+}
+
+/**
+ * Bruno's .bru parser gives WebSocket requests an empty `method`, which their schema
+ * doesn't allow, so they couldn't be saved again. Bruno's app drops it (and params) when
+ * saving, in transformRequestToSaveToFilesystem; this does the same for every item.
+ */
+export function normalizeRequestShapes(items: unknown) {
+    if (!Array.isArray(items)) return;
+
+    for (const item of items) {
+        if (!isRecord(item)) continue;
+        if (item.type === 'ws-request' && isRecord(item.request)) {
+            delete item.request.method;
+            delete item.request.methodType;
+            delete item.request.params;
+        }
+        normalizeRequestShapes(item.items);
+    }
 }
 
 export async function validateCollection(collection: BrunoCollection): Promise<void> {

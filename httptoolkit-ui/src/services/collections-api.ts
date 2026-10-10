@@ -8,7 +8,8 @@ import type {
     ExportResult,
     ImportFileInput,
     ImportResult,
-    LoadedCollection
+    LoadedCollection,
+    StoredCollectionFile
 } from '../model/collections/collection-types';
 
 /**
@@ -45,7 +46,8 @@ async function readErrorMessage(response: Response): Promise<{ message?: string,
     }
 }
 
-async function request<T>(method: string, path: string, body?: object): Promise<T> {
+// Sends a request to the server, throwing a CollectionsApiError for any failure
+async function send(method: string, path: string, body?: { json: object } | { bytes: Uint8Array }): Promise<Response> {
     await waitUntilServerReady();
 
     let response: Response;
@@ -54,9 +56,10 @@ async function request<T>(method: string, path: string, body?: object): Promise<
             method,
             headers: {
                 ...(authToken ? { 'Authorization': `Bearer ${authToken}` } : {}),
-                ...(body ? { 'content-type': 'application/json' } : {})
+                ...(body ? { 'content-type': 'json' in body ? 'application/json' : 'application/octet-stream' } : {})
             },
-            body: body ? JSON.stringify(body) : undefined,
+            // A copy for bytes: fetch only takes ones backed by a plain ArrayBuffer
+            body: !body ? undefined : 'json' in body ? JSON.stringify(body.json) : new Uint8Array(body.bytes),
             signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS)
         });
     } catch (error) {
@@ -76,6 +79,11 @@ async function request<T>(method: string, path: string, body?: object): Promise<
         );
     }
 
+    return response;
+}
+
+async function request<T>(method: string, path: string, body?: object): Promise<T> {
+    const response = await send(method, path, body ? { json: body } : undefined);
     return await response.json() as T;
 }
 
@@ -102,3 +110,24 @@ export const importCollectionFile = (input: ImportFileInput) =>
 
 export const exportCollection = (id: string, format: ExportFormat) =>
     request<ExportResult>('POST', `${collectionPath(id)}/export`, { format });
+
+// Stores a file that a request sends in the collection's folder. Storing the same file
+// under the same name again gives the same path.
+export const storeCollectionFile = (id: string, name: string, bytes: Uint8Array) =>
+    send('POST', `${collectionPath(id)}/files?name=${encodeURIComponent(name)}`, { bytes })
+        .then((response) => response.json() as Promise<StoredCollectionFile>);
+
+// A file of the collection, by the path its requests refer to it by. Undefined when it's
+// not in the collection folder.
+export async function readCollectionFile(id: string, filePath: string): Promise<{ bytes: Buffer, contentType: string } | undefined> {
+    try {
+        const response = await send('GET', `${collectionPath(id)}/files?path=${encodeURIComponent(filePath)}`);
+        return {
+            bytes: Buffer.from(await response.arrayBuffer()),
+            contentType: response.headers.get('content-type') ?? ''
+        };
+    } catch (error) {
+        if (error instanceof CollectionsApiError && (error.status === 404 || error.status === 400)) return undefined;
+        throw error;
+    }
+}

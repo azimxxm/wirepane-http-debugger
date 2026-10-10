@@ -379,6 +379,14 @@ export const brunoToPostman = (collection, { preserveScripts = false } = {}) => 
           mode: 'graphql',
           graphql: body.graphql || {}
         };
+      case 'file': {
+        // wirepane: binary bodies are Postman's file mode; Bruno only sends the selected file
+        const selectedFile = (body.file || []).find((file) => file && file.selected);
+        return {
+          mode: 'file',
+          file: { src: selectedFile?.filePath || null }
+        };
+      }
       default:
         return {
           mode: 'raw',

@@ -13,7 +13,8 @@ import {
     isFolder,
     isRecord
 } from './bruno-types';
-import { hydrateUids, stableUid } from './collection-model';
+import { hydrateUids, normalizeRequestShapes, stableUid } from './collection-model';
+import { ATTACHMENTS_DIR } from './attachments';
 import { errorMessage } from './errors';
 import { uniqueFileName } from './file-names';
 
@@ -25,6 +26,7 @@ import { uniqueFileName } from './file-names';
  *   environments/<name>.bru    one file per environment; secret values are never written
  *   <folder>/folder.bru        folder name, order, auth, headers, variables, scripts and docs
  *   <folder>/<request>.bru     one file per request, with its docs and saved examples
+ *   files/<name>               files that requests send (see attachments.ts), stored separately
  *
  * Newer Bruno versions may use OpenCollection YAML instead (opencollection.yml plus .yml
  * files). Both are read, but collections are always written as .bru.
@@ -44,6 +46,8 @@ const FILE_ITEM_TYPES: ReadonlySet<string> = new Set([...REQUEST_ITEM_TYPES, 'ap
 
 // Request and folder files never take these names, which Bruno uses for itself
 const RESERVED_NAMES = ['bruno.json', 'collection.bru', 'folder.bru', 'environments', 'node_modules', '.git'];
+// ...and top-level folders don't take the name of the attached files' folder
+const RESERVED_TOP_LEVEL_NAMES = [...RESERVED_NAMES, ATTACHMENTS_DIR];
 
 const METADATA_FILES: ReadonlySet<string> = new Set([
     'bruno.json', 'collection.bru', 'folder.bru', 'opencollection.yml', 'folder.yml'
@@ -188,7 +192,7 @@ function toBrunoJson(collection: BrunoCollection): Record<string, unknown> {
 // listed first, then requests, each in their own `seq` order.
 function addItemFiles(items: BrunoItem[], dir: string, files: CollectionFiles) {
     const filestore = brunoFilestore();
-    const usedNames = new Set(RESERVED_NAMES);
+    const usedNames = new Set(dir ? RESERVED_NAMES : RESERVED_TOP_LEVEL_NAMES);
     let folderSeq = 0;
     let requestSeq = 0;
 
@@ -288,13 +292,14 @@ export async function filesToCollection(files: CollectionFiles, uid: string): Pr
         brunoConfig: _.omit(brunoConfig, ['size', 'filesCount'])
     };
 
+    normalizeRequestShapes(collection.items);
     hydrateUids(collection);
     return { collection, warnings: context.warnings };
 }
 
 // The shallowest bruno.json / opencollection.yml marks the collection root, which may be
 // inside a top-level folder (common in zips)
-function findCollectionRoot(files: CollectionFiles): string | undefined {
+export function findCollectionRoot(files: CollectionFiles): string | undefined {
     const configPaths = [...files.keys()].filter((filePath) => {
         const fileName = filePath.split('/').pop();
         return fileName === 'bruno.json' || fileName === 'opencollection.yml';
@@ -387,7 +392,7 @@ async function readItems(node: DirectoryNode, dirPath: string, context: ReadCont
     for (const [dirName, child] of node.directories) {
         const isIgnored = dirName.startsWith('.') ||
             dirName === 'node_modules' ||
-            (dirPath === '' && dirName === 'environments');
+            (dirPath === '' && (dirName === 'environments' || dirName === ATTACHMENTS_DIR));
         if (isIgnored) continue;
 
         folders.push(await readFolder(child, joinPath(dirPath, dirName), dirName, context));

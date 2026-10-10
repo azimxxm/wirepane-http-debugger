@@ -141,6 +141,50 @@ describe("Collections REST API", function () {
         expect(environment.body.collection.environments.map((e: { name: string }) => e.name)).to.deep.equal(['Local']);
     });
 
+    it("stores and serves the files that requests send", async () => {
+        const imported = await call('POST', '/collections/import', {
+            fileName: 'pets.json',
+            content: readCollectionFixture('postman-v21.json')
+        });
+        const id: string = imported.body.collection.uid;
+        const png = Buffer.from('89504e470d0a1a0a0000000d49484452', 'hex');
+
+        const upload = (name: string, bytes: Buffer) => fetch(`${baseUrl}/collections/${id}/files?name=${encodeURIComponent(name)}`, {
+            method: 'POST',
+            headers: { origin: ORIGIN, authorization: `Bearer ${AUTH_TOKEN}`, 'content-type': 'application/octet-stream' },
+            body: bytes
+        });
+        const download = (filePath: string) => fetch(`${baseUrl}/collections/${id}/files?path=${encodeURIComponent(filePath)}`, {
+            headers: { origin: ORIGIN, authorization: `Bearer ${AUTH_TOKEN}` }
+        });
+
+        const uploaded = await upload('cat photo.png', png);
+        expect(uploaded.status).to.equal(200);
+        expect(await uploaded.json()).to.deep.equal({ path: 'files/cat photo.png', name: 'cat photo.png', size: png.byteLength });
+
+        const downloaded = await download('files/cat photo.png');
+        expect(downloaded.status).to.equal(200);
+        expect(downloaded.headers.get('content-type')).to.equal('image/png');
+        expect(Buffer.from(await downloaded.arrayBuffer()).equals(png)).to.equal(true);
+
+        expect((await download('files/other.png')).status).to.equal(404);
+        const outside = await download('../../ca.pem');
+        expect(outside.status).to.equal(400);
+        expect((await outside.json()).error.message).to.equal("../../ca.pem isn't a file inside the collection folder");
+
+        const noName = await fetch(`${baseUrl}/collections/${id}/files`, {
+            method: 'POST',
+            headers: { origin: ORIGIN, authorization: `Bearer ${AUTH_TOKEN}` },
+            body: png
+        });
+        expect(noName.status).to.equal(400);
+
+        // The files are kept when the collection is saved
+        const { body: loaded } = await call('GET', `/collections/${id}`);
+        expect((await call('PUT', `/collections/${id}`, { collection: loaded.collection })).status).to.equal(200);
+        expect((await download('files/cat photo.png')).status).to.equal(200);
+    });
+
     it("answers bad requests with JSON errors", async () => {
         const invalidJson = await call('POST', '/collections/import', '{not json');
         expect(invalidJson.status).to.equal(400);

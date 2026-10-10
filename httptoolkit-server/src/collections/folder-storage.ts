@@ -11,7 +11,10 @@ import type { CollectionFiles } from './bruno-folder';
 
 // fflate's bundled typings need TypeScript 5.7+, so the two functions used are described here
 interface ZipLibrary {
-    zipSync(files: Record<string, Uint8Array>, options?: { level?: number }): Uint8Array;
+    zipSync(
+        files: Record<string, Uint8Array | [Uint8Array, { level?: number }]>,
+        options?: { level?: number }
+    ): Uint8Array;
     unzipSync(data: Uint8Array, options?: {
         filter?: (file: { name: string, size: number, originalSize: number }) => boolean
     }): Record<string, Uint8Array>;
@@ -78,9 +81,10 @@ async function writeFiles(dir: string, files: CollectionFiles) {
 /**
  * Replaces a folder's contents with a file map. The files are written to a new folder
  * first, which is then swapped in, so a failed save never leaves a half-written collection.
+ * The `keep` entries of the old folder (e.g. its files/ folder) move into the new one.
  * Callers must not run two replacements of the same folder at once.
  */
-export async function replaceFolder(targetDir: string, files: CollectionFiles): Promise<void> {
+export async function replaceFolder(targetDir: string, files: CollectionFiles, keep: readonly string[] = []): Promise<void> {
     const parentDir = path.dirname(targetDir);
     const suffix = `${path.basename(targetDir)}-${process.pid}-${Date.now()}`;
     const tempDir = path.join(parentDir, `.tmp-${suffix}`);
@@ -94,12 +98,27 @@ export async function replaceFolder(targetDir: string, files: CollectionFiles): 
     }
 
     const hadPrevious = await pathExists(targetDir);
-    if (hadPrevious) await fs.promises.rename(targetDir, backupDir);
+    const kept: string[] = [];
+    let isBackedUp = false;
 
     try {
+        for (const entry of hadPrevious ? keep : []) {
+            if (!await pathExists(path.join(targetDir, entry))) continue;
+            await fs.promises.rename(path.join(targetDir, entry), path.join(tempDir, entry));
+            kept.push(entry);
+        }
+
+        if (hadPrevious) {
+            await fs.promises.rename(targetDir, backupDir);
+            isBackedUp = true;
+        }
         await fs.promises.rename(tempDir, targetDir);
     } catch (error) {
-        if (hadPrevious) await fs.promises.rename(backupDir, targetDir);
+        if (isBackedUp) await fs.promises.rename(backupDir, targetDir);
+        // The kept entries go back to the old folder
+        for (const entry of kept) {
+            await fs.promises.rename(path.join(tempDir, entry), path.join(targetDir, entry));
+        }
         await fs.promises.rm(tempDir, { recursive: true, force: true });
         throw error;
     }
@@ -107,10 +126,19 @@ export async function replaceFolder(targetDir: string, files: CollectionFiles): 
     if (hadPrevious) await fs.promises.rm(backupDir, { recursive: true, force: true });
 }
 
-export function filesToZip(files: CollectionFiles): Buffer {
-    const entries = Object.fromEntries(
+// Attached files are mostly images, video and archives, which hardly compress any further
+const ATTACHMENT_COMPRESSION_LEVEL = 1;
+
+/**
+ * Zips a collection's files, plus any attached files (relative path -> bytes).
+ */
+export function filesToZip(files: CollectionFiles, attachments: ReadonlyMap<string, Buffer> = new Map()): Buffer {
+    const entries: Record<string, Uint8Array | [Uint8Array, { level: number }]> = Object.fromEntries(
         [...files].map(([filePath, content]) => [filePath, Buffer.from(content, 'utf8')])
     );
+    for (const [filePath, bytes] of attachments) {
+        entries[filePath] = [bytes, { level: ATTACHMENT_COMPRESSION_LEVEL }];
+    }
     return Buffer.from(zipSync(entries, { level: 9 }));
 }
 
@@ -120,6 +148,7 @@ export const isZip = (bytes: Uint8Array) =>
 // Limits for imported zips, so a hostile archive can't exhaust memory
 const MAX_ZIP_ENTRIES = 5000;
 const MAX_ZIP_UNCOMPRESSED_BYTES = 100 * 1024 * 1024;
+const MAX_ZIP_ATTACHMENT_BYTES = 256 * 1024 * 1024;
 
 // Zip entry names are untrusted: no parent references, no hidden or macOS metadata entries
 function normalizeZipPath(name: string): string | undefined {
@@ -165,4 +194,35 @@ export function zipToFiles(bytes: Uint8Array): UnzippedCollection {
     }
 
     return { files, skippedFiles };
+}
+
+/**
+ * Reads the given entries of a zip (by their normalized paths), e.g. the files that the
+ * requests of an imported collection send. Entries that aren't there are left out.
+ */
+export function readZipEntries(bytes: Uint8Array, entryPaths: ReadonlySet<string>, maxFileBytes: number): Map<string, Buffer> {
+    let totalBytes = 0;
+
+    const unzipped = unzipSync(bytes, {
+        filter: (entry) => {
+            const filePath = normalizeZipPath(entry.name);
+            if (!filePath || entry.name.endsWith('/') || !entryPaths.has(filePath)) return false;
+
+            if (entry.originalSize > maxFileBytes) {
+                throw new StatusError(400, `${filePath} in the zip file is too large to import`);
+            }
+            totalBytes += entry.originalSize;
+            if (totalBytes > MAX_ZIP_ATTACHMENT_BYTES) {
+                throw new StatusError(400, 'The files in the zip file are too large to import');
+            }
+            return true;
+        }
+    });
+
+    const entries = new Map<string, Buffer>();
+    for (const [entryName, data] of Object.entries(unzipped)) {
+        const filePath = normalizeZipPath(entryName);
+        if (filePath) entries.set(filePath, Buffer.from(data));
+    }
+    return entries;
 }

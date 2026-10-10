@@ -31,7 +31,9 @@ export const SaveRequestDialog = observer((props: {
     const { request } = sendRequest;
 
     const [name, setName] = React.useState(() =>
-        request.url ? defaultRequestName(request.method, request.url) : 'New request'
+        request.url
+            ? defaultRequestName(request.extras.requestType === 'websocket' ? 'WS' : request.method, request.url)
+            : 'New request'
     );
     const { state, picked } = usePickedTarget(collectionsStore, 'My API');
     const nameRef = React.useRef<HTMLInputElement>(null);

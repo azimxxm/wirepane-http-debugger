@@ -9,6 +9,8 @@ import * as CollectionsApi from '../../services/collections-api';
 import { SendStore } from '../send/send-store';
 import { RequestInput, SendRequest } from '../send/send-request-model';
 import { buildRequestForSend, SendBuildError } from '../send/build-request';
+import { FileRef, SendExtrasData } from '../send/send-extras';
+import { sendFileStore } from '../send/send-files';
 
 import {
     BrunoCollection,
@@ -47,11 +49,13 @@ import {
     effectiveAuth,
     findUnsetValues,
     inheritedHeaders,
+    resolveTemplate,
     resolveVariables,
     SendContext,
     UnsendableRequestError,
     UnsetValues
 } from './variables';
+import { extrasFiles, fileNameOf, isMissingFile, isPlainHttp, itemFilePaths } from './extras-mapping';
 import { addCapturedRequests, capturedRequestFromExchange } from './traffic-items';
 import { isSameSnapshot, snapshotOf, TabSnapshot } from './tab-snapshots';
 import { isEnvironmentFile, readImportFile } from './collection-files';
@@ -129,6 +133,9 @@ interface CommitResult {
     remap: (uid: string) => string | undefined;
 }
 
+// The same file under another name is stored separately: its name is part of the request
+const storedFileKey = (file: FileRef) => `${file.fileId}/${file.name}`;
+
 const errorMessage = (error: unknown) => error instanceof Error ? error.message : String(error);
 
 const toSummary = (collection: BrunoCollection, updatedAt: string): CollectionSummary => ({
@@ -150,8 +157,11 @@ export class CollectionsStore {
     constructor(
         private sendStore: SendStore
     ) {
-        // The one hook into Send: fill in {{variables}} just before a request goes out
+        // The hooks into Send: fill in {{variables}} just before a request goes out, and in
+        // text sent outside requests (WebSocket messages), with the same variables
         sendStore.prepareRequestInput = (sendRequest) => this.resolveSendRequest(sendRequest);
+        sendStore.resolveTemplates = (sendRequest, text) =>
+            resolveTemplate(text, this.sendContextFor(sendRequest.id)?.scope ?? new Map());
     }
 
     readonly initialized = lazyObservablePromise(async () => {
@@ -227,6 +237,10 @@ export class CollectionsStore {
     private pendingLoads = new Map<string, Promise<BrunoCollection | undefined>>();
     // Saves replace whole collections, so each collection's saves run one at a time
     private commitQueues = new Map<string, Promise<unknown>>();
+    // Items opening in Send, which waits for their files, so a double click opens one tab
+    private pendingOpens = new Map<string, Promise<void>>();
+    // Collection id -> where the files of Send tabs are stored in it (storedFileKey -> path)
+    private storedFiles = new Map<string, Map<string, string>>();
 
     // --- Loading ------------------------------------------------------------------------
 
@@ -295,22 +309,35 @@ export class CollectionsStore {
 
     // --- Saving -------------------------------------------------------------------------
 
-    private commit(collectionId: string, change: (draft: BrunoCollection) => void): Promise<CommitResult> {
+    /**
+     * Applies a change to a collection and saves it. `before` runs first, in the same
+     * queue, e.g. to store the files that the change refers to.
+     */
+    private commit(
+        collectionId: string,
+        change: (draft: BrunoCollection) => void,
+        before?: () => Promise<unknown>
+    ): Promise<CommitResult> {
         const previous = this.commitQueues.get(collectionId) ?? Promise.resolve();
         const next = previous
             .catch(() => {}) // A failed save doesn't block the next one
-            .then(() => this.runCommit(collectionId, change));
+            .then(() => this.runCommit(collectionId, change, before));
 
         this.commitQueues.set(collectionId, next);
         return next;
     }
 
-    private async runCommit(collectionId: string, change: (draft: BrunoCollection) => void): Promise<CommitResult> {
+    private async runCommit(
+        collectionId: string,
+        change: (draft: BrunoCollection) => void,
+        before: (() => Promise<unknown>) | undefined
+    ): Promise<CommitResult> {
         const current = await this.ensureLoaded(collectionId);
         if (!current) {
             throw new Error(this.loadErrors.get(collectionId) ?? 'The collection couldn\'t be loaded');
         }
 
+        await before?.();
         const draft = _.cloneDeep(current);
         change(draft);
 
@@ -592,17 +619,31 @@ export class CollectionsStore {
             !sendRequest.pendingSend &&
             request.url === '' &&
             request.headers.length === 0 &&
-            request.rawBody.decoded.length === 0;
+            request.rawBody.decoded.length === 0 &&
+            isPlainHttp(request.extras);
     }
 
-    async openItem(collectionId: string, uid: string, options: { newTab?: boolean } = {}): Promise<void> {
+    openItem(collectionId: string, uid: string, options: { newTab?: boolean } = {}): Promise<void> {
+        if (options.newTab) return this.runOpenItem(collectionId, uid, options);
+
+        const key = `${collectionId}:${uid}`;
+        const pending = this.pendingOpens.get(key);
+        if (pending) return pending;
+
+        const opening = this.runOpenItem(collectionId, uid, options)
+            .finally(() => this.pendingOpens.delete(key));
+        this.pendingOpens.set(key, opening);
+        return opening;
+    }
+
+    private async runOpenItem(collectionId: string, uid: string, options: { newTab?: boolean }): Promise<void> {
         const collection = await this.ensureLoaded(collectionId);
         const location = collection && findItem(collection, uid);
         if (!location) return;
 
         if (!isSendableItem(location.item)) {
             this.showNotice('info', `“${location.item.name}” can't be opened in Send`, [
-                'Send works with HTTP and GraphQL requests. gRPC and WebSocket requests stay saved in the collection.'
+                'Send works with HTTP, GraphQL and WebSocket requests. gRPC requests stay saved in the collection.'
             ]);
             return;
         }
@@ -619,7 +660,8 @@ export class CollectionsStore {
             return;
         }
 
-        const { parts, warnings } = itemToRequestParts(location.item);
+        const files = await this.loadItemFiles(collectionId, location.item);
+        const { parts, warnings } = itemToRequestParts(location.item, files);
         const docs = location.item.request?.docs ?? '';
         const requestInput = partsToRequestInput(parts);
 
@@ -633,7 +675,61 @@ export class CollectionsStore {
             this.selectedNodeId = itemNodeId(collectionId, uid);
         });
 
-        if (warnings.length) this.showNotice('info', `Opened “${location.item.name}”`, warnings);
+        if (warnings.length) this.showNotice('warning', `Opened “${location.item.name}”`, warnings);
+    }
+
+    // --- Files that requests send -------------------------------------------------------
+
+    // Loads the files an item sends into Send's file store. Files that can't be read are
+    // left out: the tab shows them as missing.
+    private async loadItemFiles(collectionId: string, item: BrunoItem): Promise<Map<string, FileRef>> {
+        const files = new Map<string, FileRef>();
+
+        for (const filePath of itemFilePaths(item)) {
+            const file = await CollectionsApi.readCollectionFile(collectionId, filePath).catch((error: unknown) => {
+                console.warn(`Couldn't read ${filePath} of collection ${collectionId}`, error);
+                return undefined;
+            });
+            if (!file) continue;
+
+            // The server's type comes from the file name, so octet-stream means "unknown"
+            const contentType = file.contentType.split(';')[0].trim();
+            const fileRef = await sendFileStore.put(file.bytes, {
+                name: fileNameOf(filePath),
+                contentType: contentType === 'application/octet-stream' ? '' : contentType
+            });
+            files.set(filePath, fileRef);
+            this.rememberStoredFile(collectionId, fileRef, filePath);
+        }
+
+        return files;
+    }
+
+    private rememberStoredFile(collectionId: string, file: FileRef, filePath: string) {
+        const stored = this.storedFiles.get(collectionId) ?? new Map<string, string>();
+        stored.set(storedFileKey(file), filePath);
+        this.storedFiles.set(collectionId, stored);
+    }
+
+    private storedFilePath(collectionId: string, file: FileRef): string | undefined {
+        return this.storedFiles.get(collectionId)?.get(storedFileKey(file));
+    }
+
+    // Stores the files a tab sends in the collection's folder, unless they're there already.
+    // Files whose bytes are gone are skipped: saving leaves them out, with a warning.
+    private async storeTabFiles(collectionId: string, extras: SendExtrasData | undefined): Promise<void> {
+        // WebSocket requests don't keep the files their tab had as an HTTP request
+        const files = _.uniqBy(extras?.requestType === 'http' ? extrasFiles(extras) : [], storedFileKey);
+
+        for (const file of files) {
+            if (isMissingFile(file) || this.storedFilePath(collectionId, file)) continue;
+
+            const bytes = await sendFileStore.get(file.fileId);
+            if (!bytes) continue;
+
+            const stored = await CollectionsApi.storeCollectionFile(collectionId, file.name, bytes);
+            this.rememberStoredFile(collectionId, file, stored.path);
+        }
     }
 
     @action
@@ -670,15 +766,18 @@ export class CollectionsStore {
 
         const parts = requestInputToParts(sendRequest.request);
         const docs = link!.docs;
+        const collectionId = linked.collection.uid;
         const uid = linked.location.item.uid;
         let warnings: string[] = [];
 
-        await this.commit(linked.collection.uid, (draft) => {
+        await this.commit(collectionId, (draft) => {
             const location = this.requireItem(draft, uid);
-            const result = requestPartsToItem(parts, docs, location.item, { name: location.item.name });
+            const result = requestPartsToItem(parts, docs, location.item, { name: location.item.name },
+                (file) => this.storedFilePath(collectionId, file)
+            );
             location.siblings[location.siblings.indexOf(location.item)] = result.item;
             warnings = result.warnings;
-        });
+        }, () => this.storeTabFiles(collectionId, parts.extras));
 
         runInAction(() => {
             const savedLink = this.tabLinks[sendRequest.id];
@@ -701,10 +800,12 @@ export class CollectionsStore {
         const { remap } = await this.commit(collectionId, (draft) => {
             const siblings = this.requireChildren(draft, target.folderUid);
             savedName = uniqueName(name, siblings.filter((sibling) => !isFolder(sibling)).map((sibling) => sibling.name));
-            const result = requestPartsToItem(parts, docs, undefined, { name: savedName, uid, authMode: 'inherit' });
+            const result = requestPartsToItem(parts, docs, undefined, { name: savedName, uid, authMode: 'inherit' },
+                (file) => this.storedFilePath(collectionId, file)
+            );
             siblings.push(result.item);
             warnings = result.warnings;
-        });
+        }, () => this.storeTabFiles(collectionId, parts.extras));
 
         const savedUid = remap(uid);
         runInAction(() => {

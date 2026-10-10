@@ -1158,6 +1158,46 @@ describe('brunoToPostman multipartForm handling', () => {
   });
 });
 
+// wirepane: binary (file) bodies export as Postman's file mode
+describe('brunoToPostman file body handling', () => {
+  const fileRequest = (file) => ({
+    items: [
+      {
+        name: 'Upload',
+        type: 'http-request',
+        request: {
+          method: 'PUT',
+          url: 'https://example.com/upload',
+          body: { mode: 'file', file }
+        }
+      }
+    ]
+  });
+
+  it('should export the selected file as mode: file with its path as src', () => {
+    const result = brunoToPostman(fileRequest([
+      { filePath: 'files/old.bin', contentType: '', selected: false },
+      { filePath: 'files/photo.png', contentType: 'image/png', selected: true }
+    ]));
+
+    expect(result.item[0].request.body).toEqual({
+      mode: 'file',
+      file: { src: 'files/photo.png' }
+    });
+  });
+
+  it('should export a null src when no file is selected', () => {
+    expect(brunoToPostman(fileRequest([{ filePath: 'files/old.bin', selected: false }])).item[0].request.body).toEqual({
+      mode: 'file',
+      file: { src: null }
+    });
+    expect(brunoToPostman(fileRequest(null)).item[0].request.body).toEqual({
+      mode: 'file',
+      file: { src: null }
+    });
+  });
+});
+
 describe('brunoToPostman protocolProfileBehavior handling', () => {
   it('should add disableBodyPruning for GET requests with body', () => {
     const simpleCollection = {

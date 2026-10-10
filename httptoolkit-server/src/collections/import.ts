@@ -4,10 +4,11 @@ import { StatusError } from '@httptoolkit/util';
 
 import { brunoConverters, brunoFilestore, brunoLang } from './bruno-libs';
 import { BrunoCollection, BrunoEnvironment, isRecord } from './bruno-types';
-import { filesToCollection, toEnvironment } from './bruno-folder';
+import { filesToCollection, findCollectionRoot, toEnvironment } from './bruno-folder';
 import { newUid, toCollection } from './collection-model';
-import { isZip, zipToFiles } from './folder-storage';
+import { isZip, readZipEntries, zipToFiles } from './folder-storage';
 import { harToCollection } from './har-import';
+import { collectionFileReferences, MAX_ATTACHMENT_BYTES, toCollectionRelativePath } from './attachments';
 
 export type ImportFormat =
     | 'postman'
@@ -31,6 +32,8 @@ export interface ImportResult {
     format: ImportFormat;
     collection: BrunoCollection;
     warnings: string[];
+    // Files that the requests send, from Bruno zips, by the path the requests use for them
+    attachments?: Map<string, Buffer>;
 }
 
 interface DecodedFile {
@@ -43,7 +46,7 @@ interface DecodedFile {
 }
 
 type Converted =
-    | { collection: unknown, warnings: string[] }
+    | { collection: unknown, warnings: string[], attachments?: Map<string, Buffer> }
     | { environment: BrunoEnvironment, warnings: string[] };
 
 const POSTMAN_COLLECTION_SCHEMA = /schema\.(?:get)?postman\.com\/json\/collection\//i;
@@ -82,7 +85,12 @@ export async function importCollectionFile(
     const named = isRecord(imported) && !(typeof imported.name === 'string' && imported.name.trim())
         ? { ...imported, name: collectionNameFromFile(input.fileName) }
         : imported;
-    return { format, collection: toCollection(named, newUid()), warnings: converted.warnings };
+    return {
+        format,
+        collection: toCollection(named, newUid()),
+        warnings: converted.warnings,
+        ...(converted.attachments?.size ? { attachments: converted.attachments } : {})
+    };
 }
 
 function decodeFile(input: ImportFileInput): DecodedFile {
@@ -208,13 +216,26 @@ async function convertPostman(json: unknown): Promise<Converted> {
 }
 
 async function convertBrunoZip(file: DecodedFile): Promise<Converted> {
-    const { files, skippedFiles } = zipToFiles(file.bytes ?? Buffer.alloc(0));
+    const bytes = file.bytes ?? Buffer.alloc(0);
+    const { files, skippedFiles } = zipToFiles(bytes);
     const { collection, warnings } = await filesToCollection(files, newUid());
 
-    if (skippedFiles > 0) {
-        warnings.push(`Skipped ${skippedFiles} file(s) that aren't Bruno requests, folders or environments`);
+    // The files the requests send come along, wherever they are in the collection folder
+    const rootPrefix = findCollectionRoot(files) ?? '';
+    const zipPaths = new Map<string, string>(); // Path in the zip -> path the requests use
+    for (const filePath of collectionFileReferences(collection)) {
+        const relativePath = toCollectionRelativePath(filePath);
+        if (relativePath) zipPaths.set(`${rootPrefix}${relativePath}`, filePath);
     }
-    return { collection, warnings };
+
+    const entries = readZipEntries(bytes, new Set(zipPaths.keys()), MAX_ATTACHMENT_BYTES);
+    const attachments = new Map([...entries].map(([zipPath, content]) => [zipPaths.get(zipPath)!, content]));
+
+    const otherFiles = Math.max(0, skippedFiles - attachments.size);
+    if (otherFiles > 0) {
+        warnings.push(`Skipped ${otherFiles} file(s) that aren't Bruno requests, folders, environments or files the requests send`);
+    }
+    return { collection, warnings, attachments };
 }
 
 function convertBrunoRequest(file: DecodedFile): Converted {

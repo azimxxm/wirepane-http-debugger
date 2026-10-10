@@ -1,6 +1,7 @@
 import { RawHeaders } from '../../types';
 import { getHeaderValue, removeHeader, setHeaderValue } from '../http/headers';
 import { RequestInput } from '../send/send-request-model';
+import { SendExtrasData } from '../send/send-extras';
 
 import {
     BrunoAuth,
@@ -28,6 +29,10 @@ import { hasTemplate, splitTemplate, templateVariableNames } from './templates';
  * environment, then the collection's variables. Values can use other variables. Requests
  * opened from a collection also get the collection's and folders' headers and auth, like
  * Bruno and Postman send them. A {{variable}} that nothing defines is sent as written.
+ *
+ * Variables are filled in wherever text is sent: the URL, headers, the raw body, form
+ * and multipart text fields, GraphQL queries and variables, and WebSocket messages. The
+ * contents of files are sent as they are.
  */
 
 export type VariableSource = 'request' | 'folder' | 'environment' | 'collection';
@@ -282,6 +287,66 @@ function resolveBody(body: Buffer, headers: RawHeaders, resolve: (text: string, 
     return resolved === text ? body : Buffer.from(resolved);
 }
 
+// The raw body is only sent by HTTP tabs in a raw body mode: other modes keep it for later
+const sendsRawBody = (extras: SendExtrasData | undefined) =>
+    !extras || (extras.requestType === 'http' && extras.bodyMode === 'raw');
+
+type Resolve = (text: string) => string;
+
+// Fills in the parts of a tab's extras that are sent, giving back the same object when
+// nothing changes. Only the active body mode's fields (and enabled ones) are sent.
+function resolveExtras(extras: SendExtrasData | undefined, resolve: Resolve): SendExtrasData | undefined {
+    if (!extras) return extras;
+    let changed = false;
+    const resolved = (text: string) => {
+        const result = resolve(text);
+        if (result !== text) changed = true;
+        return result;
+    };
+
+    let result: SendExtrasData;
+    if (extras.requestType === 'websocket') {
+        const { websocket } = extras;
+        result = {
+            ...extras,
+            websocket: {
+                ...websocket,
+                // Binary messages are base64 data, which has no {{variables}}
+                message: websocket.messageType === 'binary' ? websocket.message : resolved(websocket.message),
+                savedMessages: websocket.savedMessages.map((message) =>
+                    message.type === 'binary' ? message : { ...message, content: resolved(message.content) }
+                )
+            }
+        };
+    } else if (extras.bodyMode === 'form') {
+        result = {
+            ...extras,
+            formFields: extras.formFields.map((field) => field.enabled
+                ? { ...field, name: resolved(field.name), value: resolved(field.value) }
+                : field
+            )
+        };
+    } else if (extras.bodyMode === 'multipart') {
+        result = {
+            ...extras,
+            multipartFields: extras.multipartFields.map((field) => !field.enabled ? field : {
+                ...field,
+                name: resolved(field.name),
+                value: field.kind === 'text' ? resolved(field.value) : field.value
+            })
+        };
+    } else if (extras.bodyMode === 'graphql') {
+        result = {
+            ...extras,
+            graphql: { ...extras.graphql, query: resolved(extras.graphql.query), variables: resolved(extras.graphql.variables) }
+        };
+    } else {
+        return extras;
+    }
+
+    return changed ? result : extras;
+}
+
 // Keeps Content-Length right after variables changed the body
 function syncContentLength(headers: RawHeaders, body: Buffer) {
     // An encoded body's length is only known after encoding, so it's sent chunked instead
@@ -345,15 +410,17 @@ export function prepareRequest(parts: RequestParts, context: SendContext): Prepa
         }
     }
 
-    const body = resolveBody(parts.body, headers, resolve);
+    const body = sendsRawBody(parts.extras) ? resolveBody(parts.body, headers, resolve) : parts.body;
     if (body !== parts.body) {
         syncContentLength(headers, body);
         headersChanged = true;
     }
 
+    const extras = resolveExtras(parts.extras, (text) => resolve(text));
+
     return {
-        parts: { ...parts, url, headers, body },
-        changed: headersChanged || url !== parts.url || body !== parts.body,
+        parts: { ...parts, url, headers, body, extras },
+        changed: headersChanged || url !== parts.url || body !== parts.body || extras !== parts.extras,
         unresolved: [...unresolved],
         empty: [...empty]
     };
@@ -396,7 +463,9 @@ function missingVariableHint(context: SendContext | undefined, count: number): s
  */
 function assertSendableUrl(originalUrl: string, prepared: PreparedRequest, context: SendContext | undefined) {
     const url = prepared.parts.url.trim();
-    if (!url) throw new UnsendableRequestError('Enter a URL to send this request.');
+    const isWebSocket = prepared.parts.extras?.requestType === 'websocket';
+    if (!url) throw new UnsendableRequestError(isWebSocket ? 'Enter a URL to connect to.' : 'Enter a URL to send this request.');
+    const schemes = isWebSocket ? 'wss:// or ws://' : 'https:// or http://';
 
     const missing = prepared.unresolved.filter((name) => url.includes(`{{${name}}}`));
     if (missing.length) {
@@ -416,7 +485,8 @@ function assertSendableUrl(originalUrl: string, prepared: PreparedRequest, conte
 
     const usedVariables = templateVariableNames(originalUrl);
     if (!usedVariables.length) {
-        throw new UnsendableRequestError(`"${url}" isn't a full URL. URLs start with https:// or http://, like https://api.example.com/users.`);
+        const example = isWebSocket ? 'wss://echo.websocket.org' : 'https://api.example.com/users';
+        throw new UnsendableRequestError(`"${url}" isn't a full URL. URLs start with ${schemes}, like ${example}.`);
     }
 
     const firstVariable = usedVariables[0];
@@ -428,7 +498,7 @@ function assertSendableUrl(originalUrl: string, prepared: PreparedRequest, conte
         : '';
     throw new UnsendableRequestError(
         `${originalUrl.trim()} isn't a full URL once its variables are filled in. ` +
-        `Check {{${firstVariable}}}${where}: a base URL starts with https:// or http://.`
+        `Check {{${firstVariable}}}${where}: a base URL starts with ${schemes}.`
     );
 }
 

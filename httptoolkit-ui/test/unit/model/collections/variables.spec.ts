@@ -1,6 +1,7 @@
 import { expect } from '../../../test-setup';
 
 import { RequestInput } from '../../../../src/model/send/send-request-model';
+import { FileRef, SendExtras, SendExtrasData } from '../../../../src/model/send/send-extras';
 import { BrunoCollection, BrunoItem } from '../../../../src/model/collections/collection-types';
 import { findItem } from '../../../../src/model/collections/collection-tree';
 import { RequestParts } from '../../../../src/model/collections/request-mapping';
@@ -30,6 +31,8 @@ const parts = (overrides: Partial<RequestParts>): RequestParts => ({
     contentType: 'text',
     ...overrides
 });
+
+const extrasOf = (data: Partial<SendExtrasData>): SendExtrasData => new SendExtras(data).toData();
 
 const request = (uid: string, extra: Partial<BrunoItem> = {}): BrunoItem => ({
     uid,
@@ -257,6 +260,128 @@ describe("Collection variables", () => {
             });
 
             expect(unset).to.deep.equal({ variables: ['token'], emptyVariables: ['apiKey'], pathParams: ['id'] });
+        });
+    });
+
+    describe("structured bodies and WebSocket messages", () => {
+        const scope = scopeOf({ name: 'Ann', search: 'a&b c', code: 'UZ', token: '' });
+        const photo: FileRef = { fileId: 'sha', name: '{{name}}.png', size: 4, contentType: 'image/png' };
+
+        it("fill in form fields that are sent, leaving the encoding to the form", () => {
+            const prepared = prepareRequest(parts({
+                method: 'POST',
+                body: Buffer.from('{{stale}}'), // Kept for the raw editor, not sent
+                extras: extrasOf({ bodyMode: 'form', formFields: [
+                    { id: 'a', name: 'q', value: '{{search}}', enabled: true },
+                    { id: 'b', name: 'off', value: '{{missing}}', enabled: false }
+                ] })
+            }), { scope });
+
+            expect(prepared.changed).to.equal(true);
+            expect(prepared.parts.extras!.formFields.map(({ name, value }) => [name, value])).to.deep.equal([
+                ['q', 'a&b c'],
+                ['off', '{{missing}}']
+            ]);
+            expect(prepared.parts.body.toString()).to.equal('{{stale}}');
+            expect(prepared.unresolved).to.deep.equal([]);
+        });
+
+        it("fill in multipart text fields, but never files", () => {
+            const prepared = prepareRequest(parts({
+                method: 'POST',
+                extras: extrasOf({ bodyMode: 'multipart', multipartFields: [
+                    { id: 'a', name: 'title', enabled: true, kind: 'text', value: 'Hi {{name}}', files: [] },
+                    { id: 'b', name: 'avatar', enabled: true, kind: 'file', value: '', files: [photo] }
+                ] })
+            }), { scope });
+
+            const [title, avatar] = prepared.parts.extras!.multipartFields;
+            expect(title.value).to.equal('Hi Ann');
+            expect(avatar.files).to.deep.equal([photo]);
+        });
+
+        it("fill in GraphQL queries and variables", () => {
+            const prepared = prepareRequest(parts({
+                method: 'POST',
+                extras: extrasOf({ bodyMode: 'graphql', graphql: { query: 'query { country(code: "{{code}}") { name } }', variables: '{ "token": "{{token}}" }' } })
+            }), { scope });
+
+            expect(prepared.parts.extras!.graphql).to.deep.equal({
+                query: 'query { country(code: "UZ") { name } }',
+                variables: '{ "token": "" }'
+            });
+            expect(prepared.empty).to.deep.equal(['token']);
+        });
+
+        it("fill in WebSocket messages, but not binary ones", () => {
+            const prepared = prepareRequest(parts({
+                url: 'wss://echo.example.com/',
+                extras: extrasOf({ requestType: 'websocket', websocket: {
+                    message: 'Hello {{name}}',
+                    messageType: 'text',
+                    savedMessages: [
+                        { id: '1', name: 'json', type: 'json', content: '{"code":"{{code}}"}' },
+                        { id: '2', name: 'bytes', type: 'binary', content: 'e3t4fX0=' }
+                    ]
+                } })
+            }), { scope });
+
+            const { websocket } = prepared.parts.extras!;
+            expect(websocket.message).to.equal('Hello Ann');
+            expect(websocket.savedMessages.map(({ content }) => content)).to.deep.equal(['{"code":"UZ"}', 'e3t4fX0=']);
+        });
+
+        it("count unset variables in the fields that are sent", () => {
+            const unset = findUnsetValues(parts({
+                method: 'POST',
+                body: Buffer.from('{{onlyInTheRawEditor}}'),
+                extras: extrasOf({ bodyMode: 'form', formFields: [{ id: 'a', name: 'key', value: '{{apiKey}}', enabled: true }] })
+            }), { scope });
+            expect(unset.variables).to.deep.equal(['apiKey']);
+
+            const webSocket = findUnsetValues(parts({
+                url: 'wss://echo.example.com/',
+                extras: extrasOf({ requestType: 'websocket', websocket: {
+                    message: '{{draft}}',
+                    messageType: 'text',
+                    savedMessages: [{ id: '1', name: 'saved', type: 'text', content: '{{saved}}' }]
+                } })
+            }), { scope });
+            expect(webSocket.variables).to.deep.equal(['draft', 'saved']);
+        });
+
+        it("explain WebSocket URLs that aren't full URLs", () => {
+            const webSocket = (url: string) => new RequestInput({
+                method: 'GET',
+                url,
+                headers: [],
+                requestContentType: 'text',
+                rawBody: Buffer.alloc(0),
+                extras: { requestType: 'websocket' }
+            });
+
+            expect(() => resolveVariables(webSocket('echo'), undefined))
+                .to.throw('"echo" isn\'t a full URL. URLs start with wss:// or ws://, like wss://echo.websocket.org.');
+            expect(() => resolveVariables(webSocket('{{wsUrl}}/chat'), { scope: scopeOf({ wsUrl: 'host' }), environmentName: 'Dev' }))
+                .to.throw('Check {{wsUrl}} in Dev: a base URL starts with wss:// or ws://.');
+            expect(resolveVariables(webSocket('{{wsUrl}}/chat'), { scope: scopeOf({ wsUrl: 'wss://echo.example.com' }) }).url)
+                .to.equal('wss://echo.example.com/chat');
+        });
+
+        it("are sent as a filled-in copy from the Send hook", () => {
+            const original = new RequestInput({
+                method: 'POST',
+                url: 'https://example.com/',
+                headers: [],
+                requestContentType: 'text',
+                rawBody: Buffer.alloc(0),
+                extras: { bodyMode: 'form', formFields: [{ id: 'a', name: 'who', value: '{{name}}', enabled: true }] }
+            });
+
+            const sent = resolveVariables(original, { scope });
+            expect(sent).to.not.equal(original);
+            expect(sent.extras.formFields[0].value).to.equal('Ann');
+            expect(original.extras.formFields[0].value).to.equal('{{name}}');
         });
     });
 

@@ -10,8 +10,8 @@ const REQUEST_ITEM_TYPES: ReadonlySet<string> = new Set([
 ]);
 const FILE_ITEM_TYPES: ReadonlySet<string> = new Set([...REQUEST_ITEM_TYPES, 'app']);
 
-// Request types that Send can open: it sends plain HTTP requests only
-const SENDABLE_ITEM_TYPES: ReadonlySet<string> = new Set(['http-request', 'graphql-request']);
+// Request types that Send can open: HTTP, GraphQL and WebSocket requests, but not gRPC
+const SENDABLE_ITEM_TYPES: ReadonlySet<string> = new Set(['http-request', 'graphql-request', 'ws-request']);
 
 export const isFolder = (item: BrunoItem) => item.type === 'folder';
 export const isRequestItem = (item: BrunoItem) => REQUEST_ITEM_TYPES.has(item.type);

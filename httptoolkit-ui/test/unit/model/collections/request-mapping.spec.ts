@@ -7,6 +7,8 @@ import {
     RequestParts,
     requestPartsToItem
 } from '../../../../src/model/collections/request-mapping';
+import { FilePathOf, ItemFiles, missingFileRef } from '../../../../src/model/collections/extras-mapping';
+import { FileRef, SendExtras, SendExtrasData } from '../../../../src/model/send/send-extras';
 
 const UID = 'AAAAAAAAAAAAAAAAAAAA1';
 
@@ -43,10 +45,25 @@ const parts = (overrides: Partial<RequestParts>): RequestParts => ({
     ...overrides
 });
 
-const roundTrip = (item: BrunoItem) => {
-    const { parts: opened } = itemToRequestParts(item);
-    return requestPartsToItem(opened, item.request?.docs ?? '', item, { name: item.name }).item;
+const roundTrip = (item: BrunoItem, files: ItemFiles = new Map(), filePathOf?: FilePathOf) => {
+    const { parts: opened } = itemToRequestParts(item, files);
+    return requestPartsToItem(opened, item.request?.docs ?? '', item, { name: item.name }, filePathOf).item;
 };
+
+const fileRef = (fileId: string, name: string, contentType = ''): FileRef => ({ fileId, name, size: 4, contentType });
+const PHOTO = fileRef('photo-sha', 'photo.png', 'image/png');
+const NOTES = fileRef('notes-sha', 'notes.txt', 'text/plain');
+
+// The files of a collection, as opening an item loads them: path -> file
+const filesOf = (entries: Array<[string, FileRef]>): ItemFiles => new Map(entries);
+// Where tab files are stored, as saving finds them: file -> path
+const storedAt = (entries: Array<[FileRef, string]>): FilePathOf =>
+    (file) => entries.find(([candidate]) => candidate.fileId === file.fileId && candidate.name === file.name)?.[1];
+
+const extras = (data: Partial<SendExtrasData>): SendExtrasData => new SendExtras(data).toData();
+
+const headerValue = (parts: RequestParts, name: string) =>
+    parts.headers.find(([headerName]) => headerName.toLowerCase() === name)?.[1];
 
 describe("Collection request mapping", () => {
 
@@ -124,53 +141,140 @@ describe("Collection request mapping", () => {
             ]);
         });
 
-        it("form-encodes URL-encoded fields, leaving {{variables}} readable", () => {
-            const { parts: opened } = itemToRequestParts(httpItem({
+        it("opens URL-encoded fields in the form editor, with all their fields", () => {
+            const { parts: opened, warnings } = itemToRequestParts(httpItem({
                 method: 'POST',
                 body: {
                     mode: 'formUrlEncoded',
                     formUrlEncoded: [
-                        { name: 'user name', value: 'Ann & Bob', enabled: true },
-                        { name: 'token', value: '{{token}}', enabled: true },
-                        { name: 'debug', value: '1', enabled: false }
+                        { uid: 'f1', name: 'user name', value: 'Ann & Bob', enabled: true, description: 'Full name' },
+                        { uid: 'f2', name: 'token', value: '{{token}}', enabled: true },
+                        { uid: 'f3', name: 'debug', value: '1', enabled: false }
                     ]
                 }
             }));
 
-            expect(opened.body.toString()).to.equal('user+name=Ann+%26+Bob&token={{token}}');
-            expect(opened.headers).to.deep.include(['content-type', 'application/x-www-form-urlencoded']);
+            expect(warnings).to.deep.equal([]);
+            expect(opened.extras!.bodyMode).to.equal('form');
+            expect(opened.extras!.formFields).to.deep.equal([
+                { id: 'f1', name: 'user name', value: 'Ann & Bob', enabled: true, description: 'Full name' },
+                { id: 'f2', name: 'token', value: '{{token}}', enabled: true },
+                { id: 'f3', name: 'debug', value: '1', enabled: false }
+            ]);
+            // The body is built when sending, which sets Content-Length then
+            expect(opened.body.length).to.equal(0);
+            expect(opened.headers).to.deep.equal([
+                ['host', 'api.example.com'],
+                ['content-type', 'application/x-www-form-urlencoded']
+            ]);
         });
 
-        it("builds multipart bodies from text fields, and warns about file fields", () => {
+        it("opens multipart forms with their text and file fields", () => {
             const { parts: opened, warnings } = itemToRequestParts(httpItem({
                 method: 'POST',
                 body: {
                     mode: 'multipartForm',
                     multipartForm: [
-                        { type: 'text', name: 'title', value: 'Hello', enabled: true },
-                        { type: 'file', name: 'avatar', value: ['/tmp/avatar.png'], enabled: true }
+                        { uid: 'm1', type: 'text', name: 'title', value: 'Hello', enabled: true, contentType: '' },
+                        { uid: 'm2', type: 'file', name: 'avatar', value: ['files/photo.png', 'files/notes.txt'], enabled: true, contentType: 'image/png' }
                     ]
+                }
+            }), filesOf([['files/photo.png', PHOTO], ['files/notes.txt', NOTES]]));
+
+            expect(warnings).to.deep.equal([]);
+            expect(opened.extras!.bodyMode).to.equal('multipart');
+            expect(opened.extras!.multipartFields).to.deep.equal([
+                { id: 'm1', name: 'title', enabled: true, kind: 'text', value: 'Hello', files: [] },
+                { id: 'm2', name: 'avatar', enabled: true, kind: 'file', value: '', files: [PHOTO, NOTES], contentType: 'image/png' }
+            ]);
+            expect(headerValue(opened, 'content-type')).to.match(/^multipart\/form-data; boundary=----WirepaneFormBoundary\w+$/);
+            expect(headerValue(opened, 'content-length')).to.equal(undefined);
+        });
+
+        it("shows files that aren't in the collection folder as missing, with a warning", () => {
+            const { parts: opened, warnings } = itemToRequestParts(httpItem({
+                method: 'POST',
+                body: {
+                    mode: 'multipartForm',
+                    multipartForm: [{ type: 'file', name: 'avatar', value: ['files/photo.png'], enabled: true }]
                 }
             }));
 
-            const contentType = opened.headers.find(([name]) => name === 'content-type')![1];
-            const boundary = /boundary=(.+)$/.exec(contentType)![1];
-            expect(opened.body.toString()).to.equal(
-                `--${boundary}\r\nContent-Disposition: form-data; name="title"\r\n\r\nHello\r\n--${boundary}--\r\n`
-            );
-            expect(warnings).to.have.length(1);
+            expect(opened.extras!.multipartFields[0].files).to.deep.equal([missingFileRef('files/photo.png')]);
+            expect(warnings).to.deep.equal([
+                'The file “photo.png” (files/photo.png) isn\'t in the collection folder, so it can\'t be sent. Attach it again.'
+            ]);
         });
 
-        it("sends GraphQL requests as JSON", () => {
+        it("opens binary bodies with their selected file, sent with its type", () => {
+            const { parts: opened } = itemToRequestParts(httpItem({
+                method: 'PUT',
+                body: {
+                    mode: 'file',
+                    file: [
+                        { uid: 'b1', filePath: 'files/old.bin', contentType: '', selected: false },
+                        { uid: 'b2', filePath: 'files/photo.png', contentType: 'image/webp', selected: true }
+                    ]
+                }
+            }), filesOf([['files/photo.png', PHOTO]]));
+
+            expect(opened.extras!.bodyMode).to.equal('binary');
+            expect(opened.extras!.binaryFile).to.deep.equal({ ...PHOTO, contentType: 'image/webp' });
+            expect(headerValue(opened, 'content-type')).to.equal('image/webp');
+        });
+
+        it("opens GraphQL requests in the GraphQL editor", () => {
             const { parts: opened } = itemToRequestParts(httpItem({
                 method: 'POST',
                 body: { mode: 'graphql', graphql: { query: 'query { me { id } }', variables: '{ "id": {{id}} }' } }
             }, { type: 'graphql-request' }));
 
-            expect(opened.body.toString()).to.equal(
-                '{\n  "query": "query { me { id } }",\n  "variables": { "id": {{id}} }\n}'
-            );
+            expect(opened.extras!.bodyMode).to.equal('graphql');
+            expect(opened.extras!.graphql).to.deep.equal({ query: 'query { me { id } }', variables: '{ "id": {{id}} }' });
+            expect(opened.body.length).to.equal(0);
             expect(opened.contentType).to.equal('json');
+            expect(headerValue(opened, 'content-type')).to.equal('application/json');
+        });
+
+        it("keeps the text of earlier body modes for the raw editor", () => {
+            const { parts: opened } = itemToRequestParts(httpItem({
+                method: 'POST',
+                body: { mode: 'formUrlEncoded', formUrlEncoded: [], json: '{"a":1}' }
+            }));
+
+            expect(opened.extras!.bodyMode).to.equal('form');
+            expect(opened.body.toString()).to.equal('{"a":1}');
+            expect(opened.contentType).to.equal('json');
+        });
+
+        it("opens WebSocket requests with their saved messages", () => {
+            const { parts: opened } = itemToRequestParts({
+                uid: UID,
+                type: 'ws-request',
+                name: 'Echo',
+                request: {
+                    url: 'wss://echo.example.com/socket',
+                    headers: [{ name: 'Sec-WebSocket-Protocol', value: 'chat', enabled: true }],
+                    auth: { mode: 'inherit' },
+                    body: { mode: 'ws', ws: [
+                        { name: 'hello', type: 'text', content: 'hi {{name}}' },
+                        { name: 'login', type: 'json', content: '{"user":"ann"}', selected: true }
+                    ] }
+                } as BrunoRequest
+            });
+
+            expect(opened.method).to.equal('GET');
+            expect(opened.url).to.equal('wss://echo.example.com/socket');
+            expect(opened.headers).to.deep.equal([['host', 'echo.example.com'], ['Sec-WebSocket-Protocol', 'chat']]);
+            expect(opened.extras!.requestType).to.equal('websocket');
+
+            const { message, messageType, savedMessages } = opened.extras!.websocket;
+            expect(savedMessages.map(({ name, type, content }) => [name, type, content])).to.deep.equal([
+                ['hello', 'text', 'hi {{name}}'],
+                ['login', 'json', '{"user":"ann"}']
+            ]);
+            // The composer starts with the selected message
+            expect([message, messageType]).to.deep.equal(['{"user":"ann"}', 'json']);
         });
     });
 
@@ -397,6 +501,244 @@ describe("Collection request mapping", () => {
             const saved = roundTrip(item);
             expect(saved.type).to.equal('graphql-request');
             expect(saved.request!.body).to.deep.equal(item.request!.body);
+        });
+    });
+
+    describe("round trips of every body mode", () => {
+
+        it("gives back the same form request", () => {
+            const item = httpItem({
+                method: 'POST',
+                headers: [{ uid: 'h1', name: 'Accept', value: '*/*', enabled: true }],
+                body: {
+                    mode: 'formUrlEncoded',
+                    formUrlEncoded: [
+                        { uid: 'f1', name: 'user name', value: 'Ann & Bob', enabled: true, description: 'Full name' },
+                        { uid: 'f2', name: 'empty', value: '', enabled: true },
+                        { uid: 'f3', name: 'debug', value: '1', enabled: false }
+                    ],
+                    json: '{"kept": true}'
+                }
+            });
+            expect(roundTrip(item)).to.deep.equal(item);
+        });
+
+        it("gives back the same multipart request, keeping its file paths", () => {
+            const item = httpItem({
+                method: 'POST',
+                body: {
+                    mode: 'multipartForm',
+                    multipartForm: [
+                        { uid: 'm1', type: 'text', name: 'title', value: 'Hello {{name}}', enabled: true, contentType: '' },
+                        { uid: 'm2', type: 'file', name: 'avatar', value: ['files/photo.png'], enabled: true, contentType: 'image/png' },
+                        { uid: 'm3', type: 'file', name: 'gone', value: ['files/gone.png'], enabled: false, contentType: '' }
+                    ]
+                }
+            });
+
+            // gone.png isn't in the folder: its path stays, so it's back once the file is
+            const saved = roundTrip(item, filesOf([['files/photo.png', PHOTO]]), storedAt([[PHOTO, 'files/photo.png']]));
+            expect(saved).to.deep.equal(item);
+        });
+
+        it("gives back the same binary request", () => {
+            const item = httpItem({
+                method: 'PUT',
+                body: {
+                    mode: 'file',
+                    file: [
+                        { uid: 'b1', filePath: 'files/old.bin', contentType: '', selected: false },
+                        { uid: 'b2', filePath: 'files/photo.png', contentType: 'image/png', selected: true }
+                    ]
+                }
+            });
+            expect(roundTrip(item, filesOf([['files/photo.png', PHOTO]]), storedAt([[PHOTO, 'files/photo.png']]))).to.deep.equal(item);
+        });
+
+        it("gives back the same GraphQL request", () => {
+            const item = httpItem({
+                method: 'POST',
+                url: 'https://countries.example.com/graphql',
+                body: { mode: 'graphql', graphql: { query: 'query ($code: ID!) { country(code: $code) { name } }', variables: '{ "code": "{{code}}" }' } }
+            }, { type: 'graphql-request' });
+            expect(roundTrip(item)).to.deep.equal(item);
+        });
+
+        it("gives back the same WebSocket request", () => {
+            const item: BrunoItem = {
+                uid: UID,
+                type: 'ws-request',
+                name: 'Echo',
+                seq: 2,
+                settings: { timeout: 0, keepAliveInterval: 0 },
+                request: {
+                    url: '{{wsUrl}}/socket',
+                    headers: [{ uid: 'h1', name: 'X-Client', value: 'wirepane', enabled: true }],
+                    auth: { mode: 'inherit' },
+                    body: { mode: 'ws', ws: [
+                        { name: 'hello', type: 'text', content: 'hi {{name}}', selected: true },
+                        { name: 'untyped', type: '', content: 'plain' },
+                        { name: 'data', type: 'binary', content: 'AAEC' }
+                    ] },
+                    script: {},
+                    vars: {},
+                    assertions: [],
+                    tests: '',
+                    docs: '# Echo'
+                } as BrunoRequest
+            };
+            expect(roundTrip(item)).to.deep.equal(item);
+        });
+    });
+
+    describe("saving structured bodies", () => {
+
+        it("saves form fields from the form editor, leaving out empty rows", () => {
+            const { item } = requestPartsToItem(parts({
+                method: 'POST',
+                headers: [['content-type', 'application/x-www-form-urlencoded']],
+                extras: extras({
+                    bodyMode: 'form',
+                    formFields: [
+                        { id: 'a', name: 'q', value: '{{search}}', enabled: true },
+                        { id: 'b', name: '', value: '', enabled: true }
+                    ]
+                })
+            }), '', undefined, { name: 'Search' });
+
+            expect(item.request!.body).to.deep.equal({
+                mode: 'formUrlEncoded',
+                formUrlEncoded: [{ name: 'q', value: '{{search}}', enabled: true }]
+            });
+            expect(item.request!.headers).to.deep.equal([]);
+        });
+
+        it("saves multipart file fields as the paths their files are stored at", () => {
+            const { item, warnings } = requestPartsToItem(parts({
+                method: 'POST',
+                headers: [['content-type', 'multipart/form-data; boundary=XYZ']],
+                extras: extras({
+                    bodyMode: 'multipart',
+                    multipartFields: [
+                        { id: 'a', name: 'title', enabled: true, kind: 'text', value: 'Hi', files: [] },
+                        { id: 'b', name: 'photos', enabled: true, kind: 'file', value: '', files: [PHOTO, NOTES], contentType: 'image/png' }
+                    ]
+                })
+            }), '', undefined, { name: 'Upload' }, storedAt([[PHOTO, 'files/photo.png']]));
+
+            expect(item.request!.body!.multipartForm).to.deep.equal([
+                { type: 'text', name: 'title', value: 'Hi', enabled: true },
+                // notes.txt was never stored: it's left out, and the save says so
+                { type: 'file', name: 'photos', value: ['files/photo.png'], enabled: true, contentType: 'image/png' }
+            ]);
+            expect(warnings).to.deep.equal([
+                '“notes.txt” isn\'t available any more, so it wasn\'t saved with the request. Attach it again.'
+            ]);
+            expect(item.request!.headers).to.deep.equal([]);
+        });
+
+        it("saves binary bodies with the Content-Type they're sent with", () => {
+            const { item } = requestPartsToItem(parts({
+                method: 'PUT',
+                headers: [['content-type', 'image/webp']],
+                extras: extras({ bodyMode: 'binary', binaryFile: PHOTO })
+            }), '', undefined, { name: 'Upload' }, storedAt([[PHOTO, 'files/photo.png']]));
+
+            expect(item.request!.body).to.deep.equal({
+                mode: 'file',
+                file: [{ filePath: 'files/photo.png', contentType: 'image/webp', selected: true }]
+            });
+            expect(item.request!.headers).to.deep.equal([]);
+        });
+
+        it("saves GraphQL bodies as GraphQL requests", () => {
+            const { item } = requestPartsToItem(parts({
+                method: 'POST',
+                headers: [['content-type', 'application/json']],
+                extras: extras({ bodyMode: 'graphql', graphql: { query: '{ me { id } }', variables: '', operationName: 'Me' } })
+            }), '', undefined, { name: 'Me' });
+
+            expect(item.type).to.equal('graphql-request');
+            expect(item.request!.body).to.deep.equal({ mode: 'graphql', graphql: { query: '{ me { id } }', variables: '' } });
+            expect(item.request!.headers).to.deep.equal([]);
+        });
+
+        it("keeps every mode's data, so switching modes and saving loses nothing", () => {
+            const base = httpItem({
+                method: 'POST',
+                body: { mode: 'formUrlEncoded', formUrlEncoded: [{ uid: 'f1', name: 'a', value: '1', enabled: true }] }
+            });
+            const { parts: opened } = itemToRequestParts(base);
+
+            // Switched to JSON in the tab, and saved
+            const { item } = requestPartsToItem({
+                ...opened,
+                headers: [['content-type', 'application/json']],
+                body: Buffer.from('{"a":1}'),
+                contentType: 'json',
+                extras: { ...opened.extras!, bodyMode: 'raw' }
+            }, '', base, { name: base.name });
+
+            expect(item.request!.body).to.deep.equal({
+                mode: 'json',
+                json: '{"a":1}',
+                formUrlEncoded: [{ uid: 'f1', name: 'a', value: '1', enabled: true }]
+            });
+
+            // ...and opening it again shows the JSON, with the form one switch away
+            const { parts: reopened } = itemToRequestParts(item);
+            expect(reopened.extras!.bodyMode).to.equal('raw');
+            expect(reopened.extras!.formFields.map(({ name, value }) => [name, value])).to.deep.equal([['a', '1']]);
+        });
+
+        it("saves WebSocket tabs as ws-request items, without a method or params", () => {
+            const base = httpItem({
+                url: 'https://api.example.com/socket',
+                params: [{ name: 'debug', value: '1', enabled: false, type: 'query' }],
+                body: { mode: 'json', json: '{}' }
+            }, { settings: { encodeUrl: true, timeout: 5000 }, examples: [{ name: '200 OK', type: 'http-request' }] });
+
+            const { item } = requestPartsToItem(parts({
+                url: 'wss://api.example.com/socket',
+                headers: [['host', 'api.example.com'], ['Sec-WebSocket-Protocol', 'chat']],
+                extras: extras({
+                    requestType: 'websocket',
+                    websocket: { message: 'draft', messageType: 'text', savedMessages: [{ id: 'x', name: 'ping', type: 'json', content: '{"op":"ping"}' }] }
+                })
+            }), 'Docs', base, { name: base.name });
+
+            expect(item.type).to.equal('ws-request');
+            expect(item.settings).to.deep.equal({ timeout: 5000 });
+            expect(item).to.not.have.property('examples');
+            expect(item.request).to.not.have.property('method');
+            expect(item.request).to.not.have.property('params');
+            expect(item.request!.url).to.equal('wss://api.example.com/socket');
+            expect(item.request!.headers).to.deep.equal([{ name: 'Sec-WebSocket-Protocol', value: 'chat', enabled: true }]);
+            expect(item.request!.body).to.deep.equal({ mode: 'ws', ws: [{ name: 'ping', type: 'json', content: '{"op":"ping"}' }] });
+            expect(item.request!.docs).to.equal('Docs');
+        });
+
+        it("turns WebSocket requests back into HTTP ones", () => {
+            const base: BrunoItem = {
+                uid: UID,
+                type: 'ws-request',
+                name: 'Echo',
+                settings: { timeout: 0, keepAliveInterval: 10 },
+                request: {
+                    url: 'wss://api.example.com/socket',
+                    headers: [],
+                    auth: { mode: 'inherit' },
+                    body: { mode: 'ws', ws: [{ name: 'hello', type: 'text', content: 'hi' }] }
+                } as BrunoRequest
+            };
+
+            const { item } = requestPartsToItem(parts({ url: 'https://api.example.com/socket?v=2' }), '', base, { name: base.name });
+
+            expect(item.type).to.equal('http-request');
+            expect(item.settings).to.deep.equal({ timeout: 0 });
+            expect(item.request!.method).to.equal('GET');
+            expect(item.request!.params).to.deep.equal([{ name: 'v', value: '2', enabled: true, type: 'query' }]);
+            expect(item.request!.body).to.deep.equal({ mode: 'none' });
         });
     });
 

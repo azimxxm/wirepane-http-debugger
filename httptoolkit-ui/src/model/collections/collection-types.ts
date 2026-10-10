@@ -29,10 +29,28 @@ export interface BrunoMultipartField {
     uid?: string;
     type: 'text' | 'file';
     name?: string | null;
+    // Text: the value. File: the paths of the files, relative to the collection folder.
     value?: string | string[] | null;
     contentType?: string | null;
     description?: string | null;
     enabled?: boolean;
+}
+
+// A binary body's file. Only the selected one is sent.
+export interface BrunoFileEntry {
+    uid?: string;
+    filePath?: string | null;
+    contentType?: string | null;
+    selected?: boolean;
+}
+
+// A saved message of a WebSocket request (ws-request)
+export interface BrunoWsMessage {
+    name?: string | null;
+    // 'text', 'json' or 'xml' in Bruno; Wirepane adds 'binary' (base64 content)
+    type?: string | null;
+    content?: string | null;
+    selected?: boolean;
 }
 
 export type BrunoBodyMode =
@@ -44,7 +62,14 @@ export type BrunoBodyMode =
     | 'formUrlEncoded'
     | 'multipartForm'
     | 'graphql'
-    | 'file';
+    | 'file'
+    | 'ws';
+
+// The body modes whose content is text, kept in the body's field of the same name
+export const TEXT_BODY_MODES = ['json', 'text', 'xml', 'sparql'] as const;
+export type TextBodyMode = typeof TEXT_BODY_MODES[number];
+export const isTextBodyMode = (mode: BrunoBodyMode | undefined): mode is TextBodyMode =>
+    TEXT_BODY_MODES.includes(mode as TextBodyMode);
 
 export interface BrunoBody {
     mode: BrunoBodyMode;
@@ -55,7 +80,9 @@ export interface BrunoBody {
     formUrlEncoded?: BrunoKeyValue[] | null;
     multipartForm?: BrunoMultipartField[] | null;
     graphql?: { query?: string | null, variables?: string | null } | null;
-    file?: unknown[] | null;
+    file?: BrunoFileEntry[] | null;
+    // Only in WebSocket requests, whose body mode is 'ws'
+    ws?: BrunoWsMessage[] | null;
 }
 
 export interface BrunoAuth {
@@ -87,6 +114,9 @@ export interface BrunoRequest {
     tests?: string | null;
     docs?: string | null;
 }
+
+// WebSocket requests (ws-request) store no method and no params: Bruno's schema rejects them
+export type BrunoWsRequest = Omit<BrunoRequest, 'method' | 'params'>;
 
 export type ExampleBodyType = 'json' | 'text' | 'xml' | 'html' | 'binary';
 
@@ -219,4 +249,14 @@ export interface ExportResult {
     encoding: 'utf8' | 'base64';
     content: string;
     redactionReport: RedactionEntry[];
+    // What the file leaves out (files, WebSocket requests...), for showing to the user
+    warnings: string[];
+}
+
+// A file stored in a collection folder (POST /collections/:id/files)
+export interface StoredCollectionFile {
+    // Relative to the collection folder, e.g. "files/photo.png": what items refer to it by
+    path: string;
+    name: string;
+    size: number;
 }

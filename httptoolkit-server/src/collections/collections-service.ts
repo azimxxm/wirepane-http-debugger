@@ -17,6 +17,16 @@ import { asClientError } from './errors';
 import { ExportFormat, ExportResult, exportCollection } from './export';
 import { listFolderFiles, readFolderFiles, replaceFolder } from './folder-storage';
 import { ImportFileInput, ImportResult, importCollectionFile } from './import';
+import {
+    ATTACHMENTS_DIR,
+    collectionFileReferences,
+    fileNameOf,
+    planAttachments,
+    readAttachment,
+    rewriteFileReferences,
+    storeAttachment,
+    writeAttachments
+} from './attachments';
 
 export interface CollectionSummary {
     id: string;
@@ -32,6 +42,19 @@ export interface ImportRequest extends ImportFileInput {
     collectionId?: string;
 }
 
+export interface StoredFile {
+    // Where the file is, relative to the collection folder: what requests refer to it by
+    path: string;
+    name: string;
+    size: number;
+}
+
+export interface CollectionFile {
+    path: string;
+    name: string;
+    bytes: Buffer;
+}
+
 // A secret environment value, kept only on this machine
 interface StoredSecret {
     environment: string;
@@ -45,6 +68,7 @@ const notFound = (id: string) => new StatusError(404, `Collection ${id} not foun
 
 /**
  * Stores API collections under <configPath>/collections/<id>/ in Bruno's folder format.
+ * The files that requests send are kept in the same folder, under files/ (attachments.ts).
  *
  * .bru files never contain the values of secret environment variables, so those values
  * live in <configPath>/collection-secrets/<id>.json (readable only by the current user),
@@ -94,6 +118,11 @@ export class CollectionsService {
      * collection as read back from disk, which is what later reads will return too.
      */
     async save(id: string, input: unknown): Promise<LoadedCollection> {
+        return this.write(id, input, new Map());
+    }
+
+    // Saves a collection, plus new attached files (relative path -> bytes) for its folder
+    private async write(id: string, input: unknown, attachments: ReadonlyMap<string, Buffer>): Promise<LoadedCollection> {
         assertValidCollectionId(id);
 
         const collection = toCollection(input, id);
@@ -103,11 +132,39 @@ export class CollectionsService {
 
         return this.diskLock.runExclusive(async () => {
             await fs.promises.mkdir(this.collectionsDir, { recursive: true });
-            await replaceFolder(this.collectionDir(id), collectionToFiles(collection));
+            // The attached files were stored separately, so they move into the new folder
+            await replaceFolder(this.collectionDir(id), collectionToFiles(collection), [ATTACHMENTS_DIR]);
+            await writeAttachments(this.collectionDir(id), attachments);
             await this.storeSecrets(collection);
 
             const saved = await this.readCollection(id);
             return { ...saved, warnings: [...warnings, ...saved.warnings] };
+        });
+    }
+
+    /**
+     * Adds a file for requests to send to a collection's files/ folder, and returns the
+     * path that requests refer to it by. The same file under the same name gets the same
+     * path every time, so saving a request again doesn't make copies.
+     */
+    async addFile(id: string, name: string, bytes: Buffer): Promise<StoredFile> {
+        assertValidCollectionId(id);
+
+        return this.diskLock.runExclusive(async () => {
+            await this.assertExists(id);
+            const filePath = await storeAttachment(this.collectionDir(id), name, bytes);
+            return { path: filePath, name: fileNameOf(filePath), size: bytes.byteLength };
+        });
+    }
+
+    // Reads a file that the collection's requests send, by the path they refer to it by
+    async readFile(id: string, filePath: string): Promise<CollectionFile> {
+        assertValidCollectionId(id);
+
+        return this.diskLock.runExclusive(async () => {
+            await this.assertExists(id);
+            const { relativePath, bytes } = await readAttachment(this.collectionDir(id), filePath);
+            return { path: relativePath, name: fileNameOf(relativePath), bytes };
         });
     }
 
@@ -116,8 +173,7 @@ export class CollectionsService {
 
         await this.diskLock.runExclusive(async () => {
             const dir = this.collectionDir(id);
-            const exists = await fs.promises.access(path.join(dir, 'bruno.json')).then(() => true, () => false);
-            if (!exists) throw notFound(id);
+            await this.assertExists(id);
 
             await fs.promises.rm(dir, { recursive: true, force: true });
             await fs.promises.rm(this.secretsFile(id), { force: true });
@@ -140,7 +196,11 @@ export class CollectionsService {
             throw asClientError(error, `Couldn't import ${request.fileName}`);
         }
 
-        const saved = await this.save(result.collection.uid, result.collection);
+        // Imported files move to files/, and the requests follow them there
+        const { newPaths, contents } = planAttachments(result.attachments ?? new Map());
+        rewriteFileReferences(result.collection, (filePath) => newPaths.get(filePath));
+
+        const saved = await this.write(result.collection.uid, result.collection, contents);
         return {
             format: result.format,
             collection: saved.collection,
@@ -150,7 +210,16 @@ export class CollectionsService {
 
     async exportCollection(id: string, format: ExportFormat): Promise<ExportResult> {
         const { collection } = await this.get(id);
-        return exportCollection(collection, format);
+        if (format !== 'bruno') return exportCollection(collection, format);
+
+        // Bruno zips include the files that requests send. Files that can't be read are
+        // left out, and the export says so.
+        const attachments = new Map<string, Buffer>();
+        for (const filePath of collectionFileReferences(collection)) {
+            const file = await this.readFile(id, filePath).catch(() => undefined);
+            if (file) attachments.set(file.path, file.bytes);
+        }
+        return exportCollection(collection, format, { attachments });
     }
 
     private collectionDir(id: string) {
@@ -159,6 +228,11 @@ export class CollectionsService {
 
     private secretsFile(id: string) {
         return path.join(this.secretsDir, `${id}.json`);
+    }
+
+    private async assertExists(id: string) {
+        const exists = await fs.promises.access(path.join(this.collectionDir(id), 'bruno.json')).then(() => true, () => false);
+        if (!exists) throw notFound(id);
     }
 
     private async readCollection(id: string): Promise<LoadedCollection> {
@@ -191,6 +265,7 @@ export class CollectionsService {
                     const fileName = filePath.split('/').pop();
                     return filePath.endsWith('.bru') &&
                         !filePath.startsWith('environments/') &&
+                        !filePath.startsWith(`${ATTACHMENTS_DIR}/`) &&
                         fileName !== 'folder.bru' &&
                         fileName !== 'collection.bru';
                 }).length,

@@ -28,6 +28,22 @@ export interface BrunoAuth {
     akamaiEdgegrid?: Record<string, unknown> | null;
 }
 
+// A binary body's file. Only the selected one is sent.
+export interface BrunoFileEntry {
+    uid?: string;
+    filePath?: string | null;
+    contentType?: string | null;
+    selected?: boolean;
+}
+
+// A WebSocket request's saved message
+export interface BrunoWsMessage {
+    name?: string | null;
+    type?: string | null;
+    content?: string | null;
+    selected?: boolean;
+}
+
 export interface BrunoBody {
     mode?: string;
     json?: string | null;
@@ -35,8 +51,11 @@ export interface BrunoBody {
     xml?: string | null;
     sparql?: string | null;
     formUrlEncoded?: BrunoKeyValue[] | null;
+    // File fields have `type: 'file'` and a list of file paths as their value
     multipartForm?: BrunoKeyValue[] | null;
     graphql?: { query?: string | null, variables?: string | null } | null;
+    file?: BrunoFileEntry[] | null;
+    ws?: BrunoWsMessage[] | null;
 }
 
 export interface BrunoVars {
@@ -51,6 +70,7 @@ export interface BrunoScript {
 
 export interface BrunoRequest {
     url?: string;
+    // WebSocket requests (ws-request) have no method and no params
     method?: string;
     headers?: BrunoKeyValue[];
     params?: BrunoKeyValue[];
