@@ -18,7 +18,7 @@ These keep the "HTTP Toolkit" name on purpose, don't rename them:
 - Internal identifiers: package names, the `httptoolkit` config and Electron userData dirs (`extraMetadata` in `httptoolkit-desktop/package.json`), `HTK_*` / `HTTPTOOLKIT_*` env vars, `amiusing.httptoolkit.tech`.
 - "HTTP Toolkit Pro" texts still inside upstream components: those prompts never render any more (see Architecture), so they stay untouched to keep syncs small.
 
-The logo source is `brand/icon.svg`. `./brand/build-icons.sh` regenerates every icon and logo file from it (`httptoolkit-desktop/src/icons/*`, `httptoolkit-ui/src/images/logo-icon.svg` and `loading-logo.png`), so change the source and rerun the script instead of editing those files.
+The logo source is `brand/icon.svg`, and `brand/tray-template.svg` is its one-colour menu bar version. `./brand/build-icons.sh` regenerates every icon and logo file from it (`httptoolkit-desktop/src/icons/*`, `httptoolkit-ui/src/images/logo-icon.svg` and `loading-logo.png`), so change the source and rerun the script instead of editing those files.
 
 ## Repo layout
 

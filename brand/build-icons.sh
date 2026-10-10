@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Builds every Wirepane icon and logo file from brand/icon.svg:
 #   httptoolkit-desktop/src/icons/  icon.icns (macOS), icon.ico (Windows), icon.svg + icon.png (Linux, window)
+#                                   trayTemplate*.png (macOS menu bar, from brand/tray-template.svg)
 #   httptoolkit-ui/src/images/      logo-icon.svg (sidebar, favicon), loading-logo.png (loading screen)
 # Needs rsvg-convert (brew install librsvg), iconutil (macOS) and ./setup.sh (Electron renders the wordmark).
 set -euo pipefail
@@ -54,6 +55,10 @@ for size, data in images:
 
 Path(out_path).write_bytes(struct.pack("<HHH", 0, 1, len(images)) + entries + blobs)
 PY
+
+echo "==> macOS menu bar icon (template image, 18 pt)"
+rsvg-convert -w 18 -h 18 "$BRAND/tray-template.svg" -o "$DESKTOP_ICONS/trayTemplate.png"
+rsvg-convert -w 36 -h 36 "$BRAND/tray-template.svg" -o "$DESKTOP_ICONS/trayTemplate@2x.png"
 
 echo "==> Linux icon.svg and icon.png"
 cp "$BRAND/icon.svg" "$DESKTOP_ICONS/icon.svg"

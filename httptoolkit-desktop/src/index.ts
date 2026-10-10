@@ -27,6 +27,7 @@ import getPort, { portNumbers } from 'get-port';
 import { stopServer } from './stop-server.ts';
 import { shouldClearStaleUICache, clearUICache, recordUIRun } from './cache-cleanup.ts';
 import { getDeviceDetails } from './device.ts';
+import { createMenuBarIcon } from './menu-bar-icon.ts';
 
 import packageJson from '../package.json' with { type: 'json' };
 
@@ -672,6 +673,7 @@ if (!amMainInstance) {
 
     Promise.all([appReady.promise, portsResolved.promise, uiCacheReady]).then(() => {
         Menu.setApplicationMenu(getMenu(windows, openNewWindow));
+        createMenuBarIcon(windows, openNewWindow); // wirepane
         createWindow();
     });
 
