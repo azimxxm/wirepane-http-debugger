@@ -4,9 +4,13 @@ const DEV_MODE = process.env.HTK_DEV === 'true';
 
 import * as Sentry from '@sentry/electron/main';
 
-if (!DEV_MODE) {
+// wirepane: no built-in DSN, as in the server. Upstream builds send their crashes to HTTP
+// Toolkit's own Sentry; Wirepane only reports to a Sentry that you set up, with SENTRY_DSN.
+const SENTRY_DSN = process.env.SENTRY_DSN;
+
+if (!DEV_MODE && SENTRY_DSN) {
     Sentry.init({
-        dsn: 'https://1194b128453942ed9470d49a74c35992@o202389.ingest.sentry.io/1367048',
+        dsn: SENTRY_DSN,
         integrations: [
             Sentry.rewriteFramesIntegration({
                 // Make all paths relative to this root, because otherwise it can make

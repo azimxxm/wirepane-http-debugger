@@ -3,24 +3,15 @@ import { randomUUID } from 'crypto';
 import * as Sentry from '@sentry/node';
 import { ErrorLike } from '@httptoolkit/util';
 
-import { IS_PROD_BUILD } from './constants';
 
 let sentryInitialized = false;
 
 export function initErrorTracking() {
     const packageJson = require('../package.json');
 
-    let { SENTRY_DSN, CI } = process.env;
-
-    const shouldBeEnabled = IS_PROD_BUILD && !CI;
-
-    // Note that we disable all error reporting in CI envs, both our own & others. They
-    // tend to be weird configurations that aren't representative so this isn't useful.
-
-    if (!SENTRY_DSN && shouldBeEnabled) {
-        // If we're a built binary, use the standard DSN automatically
-        SENTRY_DSN = 'https://5838a5520ad44602ae46793727e49ef5@sentry.io/1371158';
-    }
+    // wirepane: no built-in DSN. Upstream builds send their errors to HTTP Toolkit's own
+    // Sentry; Wirepane only reports to a Sentry that you set up yourself, with SENTRY_DSN.
+    const { SENTRY_DSN } = process.env;
 
     if (SENTRY_DSN) {
         Sentry.init({
