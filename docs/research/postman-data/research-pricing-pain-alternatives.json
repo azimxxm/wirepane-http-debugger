@@ -1,0 +1,678 @@
+{
+  "status": "partial",
+  "angle": "money, pain and alternatives",
+  "as_of": "2026-10-10",
+  "tldr": "Postman moved to Free/Solo/Team/Enterprise plans on March 1, 2026. Free is now limited to 1 user and cannot create a team (before, up to 3 people). Collection runs and mock servers became unlimited on all plans. Team costs $19/user/month billed annually. The Enterprise price was replaced by 'Contact sales' around Sep 19, 2026. The pains that keep coming back are: forced account and cloud dependency (Scratch Pad removed Sep 15, 2023; Postman down during the Oct 20, 2025 AWS outage), secrets leaking through public workspaces, a heavy app that hangs on large payloads, an AI popup that could not be closed, closed exports and frequent pricing changes. People who leave mostly go to Bruno (plain files in Git, offline, no account), then Yaak, Insomnia/Insomnium, Hoppscotch, Hurl, HTTPie/xh, Kreya and .http files.",
+  "pricing": {
+    "tiers": [
+      {
+        "name": "Free",
+        "price": "$0",
+        "users": "1, cannot create a team",
+        "source": "https://www.postman.com/pricing/ ; https://learning.postman.com/docs/billing/about-plans",
+        "confidence": "high"
+      },
+      {
+        "name": "Solo",
+        "price": "$9/month billed annually, 1 user",
+        "source": "https://www.postman.com/pricing/",
+        "confidence": "high"
+      },
+      {
+        "name": "Team",
+        "price": "$19/user/month billed annually (also sold through AWS Marketplace). Unlimited users and viewers. Basic RBAC. SSO only through the 'Simple Security' add-on at $6/user/month. Private and Partner workspaces are listed as unavailable on Team (from a partial page parse; verify)",
+        "source": "https://www.postman.com/pricing/",
+        "confidence": "high (price), medium (workspace rows)"
+      },
+      {
+        "name": "Enterprise",
+        "price": "'Contact sales for pricing'. It was $49/user/month billed annually until the change detected Sep 19, 2026, which also removed self-serve buying",
+        "source": "https://www.postman.com/pricing/ ; https://pricingsaas.com/news/article/postman-pulls-its-49-enterprise-price-routes-the-tier-to-sales",
+        "confidence": "high"
+      }
+    ],
+    "billing_notes": "The annual toggle says 'Save up to 25%'. Monthly-billing prices for Solo and Team were not visible in the fetched text. Paid usage rates: AI overage $0.05 (Solo), $0.04 (Team), $0.035 (Enterprise) per credit; '$1 per 1000 Flows credits'; cloud performance testing $0.04 per virtual-user hour; '$20 per 50,000 requests / team / month' (probably monitor overage). Source: https://www.postman.com/pricing/",
+    "paid_tier_limits": "Solo / Team / Enterprise: AI credits 400/mo, 400/user/mo, 800/user/mo pooled. Flows credits 50/mo, 100/team/mo, 500/team/mo. Monitor requests 10,000/mo on all three. Postman API calls 100k, 1M, 10M. Integrations up to 10, 50, 100. Deleted-collection recovery 30, 90, 90 days. Insights and the Private API Network are Enterprise-only. Support is Community & Email except Enterprise, which gets 24x5 with a 24h SLA. Source: https://www.postman.com/pricing/"
+  },
+  "free_plan_limits": [
+    {
+      "item": "Users",
+      "value": "1, no team. Before March 2026 a Free team could have up to 3 people",
+      "source": "https://learning.postman.com/docs/billing/about-plans",
+      "confidence": "high"
+    },
+    {
+      "item": "Collection runs (Collection Runner)",
+      "value": "Unlimited on all plans since March 2026. The legacy cap was 25 local runs/month on Free and Basic (Feb 2023)",
+      "source": "https://www.postman.com/pricing/ ; https://learning.postman.com/docs/billing/about-plans ; https://news.ycombinator.com/item?id=34875153",
+      "confidence": "high"
+    },
+    {
+      "item": "Mock servers",
+      "value": "Included. 'Mock server usage is now unlimited on all plans' and consumption billing was removed. Legacy Free had 1,000 calls/month (third-party figure)",
+      "source": "https://learning.postman.com/docs/billing/about-plans ; https://www.capterra.com/p/188497/Postman/pricing/",
+      "confidence": "high (current), medium (legacy)"
+    },
+    {
+      "item": "Monitor requests",
+      "value": "1,000/month per team. Monitor reports are not on Free",
+      "source": "https://www.postman.com/pricing/",
+      "confidence": "high"
+    },
+    {
+      "item": "AI credits",
+      "value": "50/month, no overage purchase on Free",
+      "source": "https://www.postman.com/pricing/",
+      "confidence": "high"
+    },
+    {
+      "item": "Automation Flows",
+      "value": "25 credits/month, plus unlimited manual Flows",
+      "source": "https://www.postman.com/pricing/",
+      "confidence": "high"
+    },
+    {
+      "item": "Vault",
+      "value": "Local Vault included. Shared Vault is not on Free",
+      "source": "https://www.postman.com/pricing/",
+      "confidence": "high"
+    },
+    {
+      "item": "Postman API calls",
+      "value": "10,000/month",
+      "source": "https://www.postman.com/pricing/",
+      "confidence": "high"
+    },
+    {
+      "item": "Context Graph queries",
+      "value": "1,000/month, then $0.01/query",
+      "source": "https://www.postman.com/pricing/",
+      "confidence": "high"
+    },
+    {
+      "item": "Integrations",
+      "value": "Up to 5",
+      "source": "https://www.postman.com/pricing/",
+      "confidence": "high"
+    },
+    {
+      "item": "Deleted-collection recovery",
+      "value": "1 day",
+      "source": "https://www.postman.com/pricing/",
+      "confidence": "high"
+    },
+    {
+      "item": "Included with no numeric cap",
+      "value": "Native Git, Postman CLI, Specs, public workspaces, Public API Network, local performance testing",
+      "source": "https://www.postman.com/pricing/",
+      "confidence": "high"
+    },
+    {
+      "item": "Not on Free",
+      "value": "Shared Vault, cloud performance testing, monitor reports, webhooks, private NPM packages, datasets, Multi-protocol Runner, Playwright integration, test result exports, custom domains, SSO, Insights, Private API Network, RBAC. Docs carry Postman branding",
+      "source": "https://www.postman.com/pricing/",
+      "confidence": "high"
+    },
+    {
+      "item": "Support",
+      "value": "Community & Email",
+      "source": "https://www.postman.com/pricing/",
+      "confidence": "high"
+    }
+  ],
+  "plan_changes_timeline": [
+    {
+      "date": "2020-01",
+      "change": "Plans and pricing update (HN, 97 points). Older, low relevance",
+      "source": "https://news.ycombinator.com/item?id=22002560",
+      "confidence": "high"
+    },
+    {
+      "date": "2023-02",
+      "change": "Local collection runner capped at 25 runs/month on Free/Basic, 250 on Professional. Strong backlash",
+      "source": "https://news.ycombinator.com/item?id=34875153",
+      "confidence": "medium"
+    },
+    {
+      "date": "2023-05-14",
+      "change": "CEO Abhinav Asthana announced the Scratch Pad sunset. New downloads had no Scratch Pad from May 15, 2023. It was replaced by the Lightweight API Client (v10.14): HTTP/GraphQL/gRPC/WebSocket with local history, but no collections or environments without signing in. Stated reason: keeping two architectures cost '2x-4x the amount of time'",
+      "source": "https://blog.postman.com/announcing-new-lightweight-postman-api-client/",
+      "confidence": "high"
+    },
+    {
+      "date": "2023-09-15",
+      "change": "Scratch Pad removed. Collections and environments now require an account and cloud sync",
+      "source": "https://blog.postman.com/announcing-new-lightweight-postman-api-client/",
+      "confidence": "high"
+    },
+    {
+      "date": "2023-10-06",
+      "change": "Backlash over the forced account (Tell HN, 365 points, 173 comments)",
+      "source": "https://news.ycombinator.com/item?id=37792690",
+      "confidence": "high"
+    },
+    {
+      "date": "2024 (policy start 'June', year inferred)",
+      "change": "Postman started secret scanning with notifications and began removing public workspaces with detected secrets after warning the owners",
+      "source": "https://cloudsek.com/blog/postman-data-leaks-the-hidden-risks-lurking-in-your-workspaces ; https://www.scworld.com/brief/data-exposed-by-over-30k-postman-workspace-instances",
+      "confidence": "medium"
+    },
+    {
+      "date": "2025-10-20",
+      "change": "About 15h12m incident during the AWS outage: desktop and browser clients and login affected, workspaces not loading",
+      "source": "https://pingoru.io/providers/postman/incidents/26594 ; https://github.com/postmanlabs/postman-app-support/issues/13821 ; https://news.ycombinator.com/item?id=45645172",
+      "confidence": "high"
+    },
+    {
+      "date": "2025-10-21",
+      "change": "Agent Mode AI onboarding popup with no close button. Postman later said it had been removed and disabled",
+      "source": "https://github.com/postmanlabs/postman-app-support/issues/13835",
+      "confidence": "high"
+    },
+    {
+      "date": "2026-01-31",
+      "change": "Announced new plans and v12 features for March 1: Git-native, AI, built-in terminal, local and CI mock servers, GraphQL/gRPC/WebSocket/MQTT/MCP, CLI, Insights, API Catalog",
+      "source": "https://blog.postman.com/new-capabilities-march-2026/",
+      "confidence": "high"
+    },
+    {
+      "date": "2026-03-01",
+      "change": "New plans live. Free limited to 1 user with no team. Unlimited collection runs and mock usage on all plans. Add-ons folded into plans. Basic and Professional closed to new customers: Basic moves to Team 'over time', Professional can renew. Partner Workspaces included in Enterprise, and partners do not take paid seats",
+      "source": "https://learning.postman.com/docs/billing/about-plans ; https://www.postman.com/pricing/",
+      "confidence": "high"
+    },
+    {
+      "date": "2026-08-31",
+      "change": "Cloud load testing split out as a usage-billed add-on at $0.04/VuH",
+      "source": "https://pricingsaas.com/news/article/postman-pulls-its-49-enterprise-price-routes-the-tier-to-sales",
+      "confidence": "medium"
+    },
+    {
+      "date": "2026-09-19 (detected)",
+      "change": "Public Enterprise price of $49/user/month removed and replaced by 'Contact sales'. Self-serve and AWS buying of Enterprise removed. PricingSaaS counts 11 pricing changes since Apr 2024, 8 of them in the last 12 months",
+      "source": "https://pricingsaas.com/news/article/postman-pulls-its-49-enterprise-price-routes-the-tier-to-sales",
+      "confidence": "high"
+    }
+  ],
+  "pain_points": [
+    "Forced account: since Sep 15, 2023 collections and environments need sign-in. Signed out, only the Lightweight API Client works, with no collections or environments. [high] https://blog.postman.com/announcing-new-lightweight-postman-api-client/",
+    "Perceived data loss on forced sign-up: 'When I declined, it wiped all my collections' (HN, Oct 2023, 365 points). Postman staff said the data was safe and could be migrated. [medium] https://news.ycombinator.com/item?id=37792690",
+    "Data-sovereignty bans: 'DO NOT want the information stored on a 3rd party server' (Sep 2023); 'forbidden tool in many corporations' (HN 2025); 'asked us to uninstall when postman switched to online'. [high] https://community.postman.com/t/losing-users-after-sunsetting-scratch-pad/52618 ; https://news.ycombinator.com/item?id=44005654 ; https://news.ycombinator.com/item?id=45645172",
+    "Cloud dependency: Postman was down for local work during the Oct 20, 2025 AWS outage. 'If it stops working locally, what even is the point anymore?' (HN, 537 points). [high] https://news.ycombinator.com/item?id=45645172 ; https://pingoru.io/providers/postman/incidents/26594",
+    "Secrets leaked through public workspaces: 30,000+ workspaces exposed tokens and keys, including GitHub (5,924), Slack (5,552) and Salesforce (4,206) (CloudSEK, Dec 23, 2024). [high] https://cloudsek.com/blog/postman-data-leaks-the-hidden-risks-lurking-in-your-workspaces",
+    "Confusing secret UX: 'secret' variables are only masked on screen, and 'Initial value' is synced to the cloud and visible to everyone in the workspace. 1,689 live credentials were verified in about 40k workspaces, with an estimate of at least 4,000. Postman's scanner warns only after publishing. [high] https://trufflesecurity.com/blog/postman-carries-lots-of-secrets",
+    "Unclear telemetry: users ask to know 'exactly what data is sent to Postman servers' and want a full opt-out. A May 2025 claim that Postman logs secrets was disputed by the founder and is unverified. [medium] https://news.ycombinator.com/item?id=45652555 ; https://news.ycombinator.com/item?id=44005654",
+    "Free plan is 1 user since Mar 1, 2026 (was up to 3). Any sharing needs Team at $19/user/month billed annually; Apidog, a competitor, estimates a 3-person team at $684/yr. [high] https://learning.postman.com/docs/billing/about-plans ; https://www.postman.com/pricing/ ; https://apidog.com/blog/postman-free-plan-2026-one-user-limit/",
+    "Pricing churn and opacity: 11 changes since Apr 2024, the Enterprise price hidden in Sep 2026, and past caps on local-only features ('requires absolutely no resources from Postman's servers'). [high] https://pricingsaas.com/news/article/postman-pulls-its-49-enterprise-price-routes-the-tier-to-sales ; https://news.ycombinator.com/item?id=34875153",
+    "Billing dispute (G2, Aug 2026): 'charged an extortionate amount after not using the product for over a year', with the refund refused. [low, single review] https://aws.amazon.com/marketplace/reviews/reviews-list/prodview-2nezdpu4cqcac?page=14",
+    "Heavy RAM/CPU use: the 'Eating too much RAM' issue has been open since 2018 and was still reported on 12.19.4 in July 2026. 'postman is slow, eats a ton of memory' (HN 2025). G2 reviewers call it 'resource-intensive'. [high] https://github.com/postmanlabs/postman-app-support/issues/4687 ; https://news.ycombinator.com/item?id=45645172",
+    "Large payloads crash or hang the UI: a 250 MB response fills memory and crashes the app (Jun 2025), long base64 variables hang it (Dec 2025), very long query params hang it (Sep 2025), and JSON over 1 MB freezes it (HN 2024). [high] https://github.com/postmanlabs/postman-app-support/issues/13632 ; https://github.com/postmanlabs/postman-app-support/issues/13943 ; https://github.com/postmanlabs/postman-app-support/issues/13784 ; https://news.ycombinator.com/item?id=39653718",
+    "Slow at scale: collection search is sluggish and freezes (Mar 2026), and large collections lag (G2 2026). [medium] https://github.com/postmanlabs/postman-app-support/issues/14030 ; https://aws.amazon.com/marketplace/reviews/reviews-list/prodview-2nezdpu4cqcac?page=14",
+    "Bloat: 'the whole Postman UI has become an overcomplicated mess' (HN 2024). G2 2026: 'vast number of features makes it a bit complex' and 'interface can feel overwhelming'. [high] https://news.ycombinator.com/item?id=39653718 ; https://aws.amazon.com/marketplace/reviews/reviews-list/prodview-2nezdpu4cqcac?page=14",
+    "Forced AI: an Agent Mode popup with no close button kept coming back even with AI disabled. 'Why is this an opt-out feature instead of an opt-in feature?' [high] https://github.com/postmanlabs/postman-app-support/issues/13835",
+    "No control over updates: 'Option to disable auto updates' has been open since 2019 (94 comments). [high] https://github.com/postmanlabs/postman-app-support/issues/6999",
+    "Export lock-in: collections with WebSocket or gRPC requests cannot be exported. The issue has been open since Sep 2022 (106 comments) and was still being requested in Jul 2026. [high] https://github.com/postmanlabs/postman-app-support/issues/11252",
+    "Team lock-in: teams stay because their shared collections live inside Postman, and collaboration means paying per seat. [medium] https://news.ycombinator.com/item?id=45645172",
+    "Sync problems: the v8 Sync/WS issue is still open (128 comments), 'Workspaces not loading' (Oct 2025), and a Capterra Feb 2026 review mentions team sync problems. [medium] https://github.com/postmanlabs/postman-app-support/issues/9481 ; https://github.com/postmanlabs/postman-app-support/issues/13821",
+    "Offline still partial: 'can't use postman offline after signing in'. v12 Native Git keeps local files but still syncs with Postman Cloud and works only in the desktop app. [medium] https://github.com/postmanlabs/postman-app-support/issues/13835 ; https://learning.postman.com/latest-v-12/docs/use/native-git/overview.md",
+    "Trust erosion: 'Postman became enshittified, so we switched to Insomnia'. Users fear that every free tool will eventually do the same ('rugpull'). [medium] https://news.ycombinator.com/item?id=45645172 ; https://news.ycombinator.com/item?id=39653718",
+    "Electron weight: Apidog, a competitor, claims about 280 MB at launch and 450-600 MB with 3 collections (unverified). Separately, every Postman version crashes on Windows 11 build 26200 with a GPU-process failure (May 2026). [low] https://apidog.com/blog/postman-slow-bloated-2026-alternatives/ ; https://github.com/postmanlabs/postman-app-support/issues/14149",
+    "Sign-in friction: the 'sign in button is disabled' bug (Aug 2026) blocks all use because login is mandatory. [low, single issue] https://github.com/postmanlabs/postman-app-support/issues/14252"
+  ],
+  "alternatives": [
+    {
+      "name": "Bruno",
+      "category": "API client",
+      "why_people_move": "Offline-only. Collections are plain-text .bru files kept in Git. No cloud, no account, MIT licence, no VC money (the creator says he turned down about 10 VC approaches). 'no pay-to-remove limits'. Has a CLI for CI. It is the most-recommended alternative in every thread (launch on HN: 1,538 points, Mar 2024)",
+      "what_they_miss_or_risks": "In 2024 comments: no cookies, WebSockets or SSE, and weaker scripting. People worry about the closed-source paid 'Golden Edition'. One 2025 user 'lost all my work because of a bug'",
+      "sources": "https://news.ycombinator.com/item?id=39653718 ; https://news.ycombinator.com/item?id=37792690 ; https://news.ycombinator.com/item?id=44005654 ; https://news.ycombinator.com/item?id=46942116",
+      "confidence": "high"
+    },
+    {
+      "name": "Yaak",
+      "category": "API client",
+      "why_people_move": "Made by Insomnia's creator: 'fully offline, no telemetry, open source, and can even sync with Git'",
+      "what_they_miss_or_risks": "Doubts about long-term independence. Paid terms apply only to the prebuilt binaries",
+      "sources": "https://news.ycombinator.com/item?id=45645172 ; https://news.ycombinator.com/item?id=39653718",
+      "confidence": "medium"
+    },
+    {
+      "name": "Insomnia / Insomnium",
+      "category": "API client",
+      "why_people_move": "It was the 2023 escape route ('migrated to insomnia.rest when postman required logging in'). Insomnium is a fork with no sign-up",
+      "what_they_miss_or_risks": "Insomnia added a forced login in 2023 and users reported lost requests: 'the cycle continues'",
+      "sources": "https://news.ycombinator.com/item?id=39653718 ; https://news.ycombinator.com/item?id=37792690",
+      "confidence": "medium"
+    },
+    {
+      "name": "Hoppscotch",
+      "category": "Web/desktop API client",
+      "why_people_move": "Open source, self-hostable, Postman-style UI (HN: 668 points in 2022, 177 points in Feb 2025)",
+      "what_they_miss_or_risks": "Needs a browser extension for CORS ('I don't want to install an extension'). Seen as online-first. VC concerns",
+      "sources": "https://news.ycombinator.com/item?id=37792690 ; https://news.ycombinator.com/item?id=42895108",
+      "confidence": "medium"
+    },
+    {
+      "name": "HTTPie / xh",
+      "category": "CLI",
+      "why_people_move": "Friendly argument syntax, scriptable",
+      "what_they_miss_or_risks": "The HTTPie GUI is proprietary and lacked HTTP/2 (2023 comment). xh is an open Rust clone",
+      "sources": "https://news.ycombinator.com/item?id=37792690 ; https://news.ycombinator.com/item?id=45645172",
+      "confidence": "medium"
+    },
+    {
+      "name": "Hurl",
+      "category": "CLI tests",
+      "why_people_move": "Plain-text, curl-based, works well in CI. The poster of the May 2025 'logging secrets' thread switched to it",
+      "what_they_miss_or_risks": "No GUI; reusing requests is awkward",
+      "sources": "https://news.ycombinator.com/item?id=44005654 ; https://news.ycombinator.com/item?id=39653718",
+      "confidence": "medium"
+    },
+    {
+      "name": ".http files (VS Code REST Client, JetBrains HTTP Client, httpyac)",
+      "category": "Editor-based",
+      "why_people_move": "Request files are committed alongside the code, with no cloud sync",
+      "what_they_miss_or_risks": "Can leave you 'almost entirely tied to VS Code and the REST Client extension'",
+      "sources": "https://news.ycombinator.com/item?id=37792690 ; https://news.ycombinator.com/item?id=45645172",
+      "confidence": "medium"
+    },
+    {
+      "name": "Kreya",
+      "category": "API client",
+      "why_people_move": "Offline, privacy-focused, data stays local, REST and gRPC, works with Git",
+      "what_they_miss_or_risks": "Not open source",
+      "sources": "https://news.ycombinator.com/item?id=37792690 ; https://news.ycombinator.com/item?id=32066569",
+      "confidence": "medium"
+    },
+    {
+      "name": "Thunder Client",
+      "category": "VS Code extension",
+      "why_people_move": "Handy because it lives inside the editor",
+      "what_they_miss_or_risks": "Proprietary. Pricing changes were criticised. Collections capped at 50 endpoints (2024 claim). Team features are paid",
+      "sources": "https://news.ycombinator.com/item?id=39653718 ; https://news.ycombinator.com/item?id=37792690",
+      "confidence": "medium"
+    },
+    {
+      "name": "Restfox",
+      "category": "API client",
+      "why_people_move": "Offline, Git-versioned, imports Postman collections (Show HN, 758 points, 2022)",
+      "what_they_miss_or_risks": "Not researched",
+      "sources": "https://news.ycombinator.com/item?id=33287137 ; https://news.ycombinator.com/item?id=45645172",
+      "confidence": "low"
+    },
+    {
+      "name": "Paw / RapidAPI",
+      "category": "Native macOS client",
+      "why_people_move": "Native app with a one-time purchase",
+      "what_they_miss_or_risks": "Called abandonware after its acquisition",
+      "sources": "https://news.ycombinator.com/item?id=37792690 ; https://news.ycombinator.com/item?id=39653718",
+      "confidence": "medium"
+    },
+    {
+      "name": "Apidog / EchoAPI",
+      "category": "All-in-one platform",
+      "why_people_move": "Free team tier, design + test + docs",
+      "what_they_miss_or_risks": "Most 'Postman alternatives 2026' articles are their own marketing. The Feb 2026 HN post was accused of being Apidog astroturfing",
+      "sources": "https://news.ycombinator.com/item?id=46942116 ; https://apidog.com/blog/postman-free-plan-2026-one-user-limit/",
+      "confidence": "medium"
+    },
+    {
+      "name": "New entrants in 2026: Voiden, appear.sh, APIFlow Studio",
+      "category": "API clients",
+      "why_people_move": "Offline-first or Markdown-based. appear.sh offers 3 free seats",
+      "what_they_miss_or_risks": "Promoted by their own makers; adoption unproven",
+      "sources": "https://news.ycombinator.com/item?id=46942116 ; https://news.ycombinator.com/item?id=50016426",
+      "confidence": "low"
+    },
+    {
+      "name": "Debuggers: Proxyman, Charles, HTTP Toolkit, Reqable, Requestly",
+      "category": "Interception proxies",
+      "why_people_move": "Not covered because time ran out. In the fetched threads mitmproxy appeared only as a traffic inspector and Burp only once",
+      "what_they_miss_or_risks": "Unknown",
+      "sources": "https://news.ycombinator.com/item?id=39653718",
+      "confidence": "low"
+    }
+  ],
+  "opportunities_for_our_app": [
+    {
+      "idea": "No account, fully offline by default, nothing depends on a cloud",
+      "addresses": "Forced login, outages, corporate bans, sign-in bugs",
+      "sources": "https://blog.postman.com/announcing-new-lightweight-postman-api-client/ ; https://news.ycombinator.com/item?id=45645172"
+    },
+    {
+      "idea": "Free multi-user collaboration through readable, diff-friendly files in Git (the Bruno model) for saved requests, mock rules and environments",
+      "addresses": "Free plan limited to 1 user since Mar 2026; team lock-in",
+      "sources": "https://learning.postman.com/docs/billing/about-plans ; https://news.ycombinator.com/item?id=39653718"
+    },
+    {
+      "idea": "Secret safety by design: keep secrets in the OS keychain, never put them in exports, automatically redact Authorization/Cookie/API keys from HAR and collection exports, and scan for secrets before sharing",
+      "addresses": "CloudSEK and Truffle findings; Postman's confusing 'Initial value' and 'secret' fields",
+      "sources": "https://cloudsek.com/blog/postman-data-leaks-the-hidden-risks-lurking-in-your-workspaces ; https://trufflesecurity.com/blog/postman-carries-lots-of-secrets"
+    },
+    {
+      "idea": "One-click import of Postman collections v2.1, environments and globals, plus open export that includes WebSocket and gRPC",
+      "addresses": "Export lock-in (#11252); makes migration easy",
+      "sources": "https://github.com/postmanlabs/postman-app-support/issues/11252"
+    },
+    {
+      "idea": "Handle very large payloads: stream bodies to disk and use virtualised viewers. Target: a 250 MB response with no UI freeze. Publish the benchmark",
+      "addresses": "Postman crashes and hangs on large payloads",
+      "sources": "https://github.com/postmanlabs/postman-app-support/issues/13632 ; https://github.com/postmanlabs/postman-app-support/issues/13943"
+    },
+    {
+      "idea": "Capture, replay and save: turn intercepted traffic into editable requests, mockttp mock rules and assertions. This is a debugger-native workflow API clients do not own. Postman's own proxy/Interceptor was not checked",
+      "addresses": "Positions us as a debugger plus a light client rather than a Postman clone",
+      "sources": "https://news.ycombinator.com/item?id=39653718"
+    },
+    {
+      "idea": "AI only when the user opts in, using their own key or a local model, and never in onboarding",
+      "addresses": "Forced Agent Mode popup",
+      "sources": "https://github.com/postmanlabs/postman-app-support/issues/13835"
+    },
+    {
+      "idea": "Let users choose how updates happen: off, notify or auto",
+      "addresses": "#6999, open since 2019",
+      "sources": "https://github.com/postmanlabs/postman-app-support/issues/6999"
+    },
+    {
+      "idea": "Telemetry off by default or opt-in, with a documented list of what is sent and a single kill switch",
+      "addresses": "Unclear telemetry",
+      "sources": "https://news.ycombinator.com/item?id=45652555"
+    },
+    {
+      "idea": "A stable pricing promise: AGPL, free, no seats, no metering. Note that Postman Free already has unlimited runs and mocks, so 'unlimited' alone is not a differentiator; 'free for multiple users with no account' is",
+      "addresses": "Pricing churn (11 changes since Apr 2024)",
+      "sources": "https://pricingsaas.com/news/article/postman-pulls-its-49-enterprise-price-routes-the-tier-to-sales ; https://www.postman.com/pricing/"
+    },
+    {
+      "idea": "A performance budget with published benchmarks (cold start, idle RAM, large collections). Our app is also Electron, so we should not claim it is lighter without numbers",
+      "addresses": "Complaints about RAM and Electron weight",
+      "sources": "https://github.com/postmanlabs/postman-app-support/issues/4687"
+    },
+    {
+      "idea": "Simple UI for beginners that reveals advanced features gradually",
+      "addresses": "'overcomplicated mess' and 'overwhelming' complaints",
+      "sources": "https://news.ycombinator.com/item?id=39653718 ; https://aws.amazon.com/marketplace/reviews/reviews-list/prodview-2nezdpu4cqcac?page=14"
+    }
+  ],
+  "counter_arguments": [
+    "Postman v12 (Mar 2026) closed part of the gap: Native Git and local files, local and CI mocks, and unlimited runs and mocks on Free. 'Postman is cloud-only' is partly outdated. [high] https://blog.postman.com/new-capabilities-march-2026/ ; https://www.postman.com/pricing/",
+    "Postman is still rated highly: 4.6 on G2 (1,820 ratings) and 4.7 on Capterra (507). The pain is concentrated among developers who care about privacy, offline use or small teams. [medium] https://aws.amazon.com/marketplace/reviews/reviews-list/prodview-2nezdpu4cqcac?page=14 ; https://www.capterra.com/p/188497/Postman/reviews/?page=2",
+    "Much of the 'alternatives' content is competitor marketing (Apidog, EchoAPI), so treat their numbers as illustrative. [high] https://news.ycombinator.com/item?id=46942116",
+    "Users expect any free tool to turn on them eventually (Insomnia in 2023, worries about Bruno's Golden Edition). Our 'free' promise needs a credible way to stay sustainable. [medium] https://news.ycombinator.com/item?id=39653718",
+    "Postman is a whole API platform (docs, monitors, Flows, Catalog, governance). A debugger fork should not chase parity. [medium, analytical]",
+    "Our app is also Electron, so the RAM criticism of Postman applies to us too unless we measure and optimise. [medium, analytical]"
+  ],
+  "contradictions": [
+    {
+      "topic": "Free-plan runs and mock calls",
+      "side_a": "CostBench (verified Aug 22, 2026): 25 runs and 1,000 mock requests per month",
+      "side_b": "Postman's docs and pricing page: unlimited on all plans since Mar 2026",
+      "verdict": "Postman's own sources are better supported; CostBench is stale"
+    },
+    {
+      "topic": "Date of the plan overhaul",
+      "side_a": "Postman blog: March 1, 2026",
+      "side_b": "CostBench changelog: April 24, 2026 (that page now returns 404)",
+      "verdict": "March 1, 2026"
+    },
+    {
+      "topic": "Previous Free team size",
+      "side_a": "Postman docs: up to 3 people",
+      "side_b": "Apidog: 'teams of any size'",
+      "verdict": "3, per Postman's docs"
+    },
+    {
+      "topic": "Enterprise price",
+      "side_a": "$49/user/month (Apidog snapshot, Sep 8, 2026)",
+      "side_b": "'Contact sales' (pricing page now; PricingSaaS detected the change Sep 19, 2026)",
+      "verdict": "Both were true at different dates; it is now contact-sales"
+    },
+    {
+      "topic": "Did the 2023 forced sign-up delete data?",
+      "side_a": "Original poster: 'wiped all my collections'",
+      "side_b": "Postman staff: 'Your Scratch Pad data is safe and accessible'",
+      "verdict": "The data was probably hidden behind sign-in rather than deleted, but users really experienced it as lost"
+    },
+    {
+      "topic": "Does Postman log secrets?",
+      "side_a": "Medium post, May 2025",
+      "side_b": "Founder: inaccurate; history can be disabled and secrets kept in the local vault",
+      "verdict": "Unresolved; the article returned 403 and was not read"
+    },
+    {
+      "topic": "Can Postman be used offline?",
+      "side_a": "Founder: 'still an offline client built in just for requests'",
+      "side_b": "Users: 'can't use postman offline after signing in', plus the outage",
+      "verdict": "Both partly true: offline works only in the signed-out lightweight client"
+    },
+    {
+      "topic": "Number of leaked secrets",
+      "side_a": "Truffle estimate: at least 4,000",
+      "side_b": "Truffle verified count: 1,689",
+      "verdict": "1,689 was measured; 4,000 is an extrapolation"
+    },
+    {
+      "topic": "Legacy prices",
+      "side_a": "A Turkish-language Apidog page quotes $14 (Team) and $29 (Professional)",
+      "side_b": "Official pricing page: Team $19",
+      "verdict": "$19 is current; $14 and $29 are probably the legacy Basic and Professional prices (unverified)"
+    }
+  ],
+  "sources": [
+    {
+      "title": "Postman Pricing",
+      "url": "https://www.postman.com/pricing/",
+      "date": "fetched 2026-10-10",
+      "why": "Official tiers and limits"
+    },
+    {
+      "title": "About plans (Postman Docs)",
+      "url": "https://learning.postman.com/docs/billing/about-plans",
+      "date": "2026",
+      "why": "Official March 2026 changes and the legacy policy"
+    },
+    {
+      "title": "New capabilities, March 2026 (Postman blog)",
+      "url": "https://blog.postman.com/new-capabilities-march-2026/",
+      "date": "2026-01-31",
+      "why": "Announcement of the plan change and v12"
+    },
+    {
+      "title": "Announcing the new lightweight Postman API client and sunsetting Scratch Pad",
+      "url": "https://blog.postman.com/announcing-new-lightweight-postman-api-client/",
+      "date": "2023-05-14",
+      "why": "Scratch Pad removal (old but foundational)"
+    },
+    {
+      "title": "Losing Users after sunsetting Scratch Pad",
+      "url": "https://community.postman.com/t/losing-users-after-sunsetting-scratch-pad/52618",
+      "date": "2023-09-29",
+      "why": "Data-sovereignty complaint and staff reply"
+    },
+    {
+      "title": "PricingSaaS: Postman pulls its $49 Enterprise price",
+      "url": "https://pricingsaas.com/news/article/postman-pulls-its-49-enterprise-price-routes-the-tier-to-sales",
+      "date": "2026-09",
+      "why": "Pricing-change tracker"
+    },
+    {
+      "title": "Apidog: Postman Free Plan 2026, 1-user limit",
+      "url": "https://apidog.com/blog/postman-free-plan-2026-one-user-limit/",
+      "date": "2026-09-08",
+      "why": "Team cost examples; biased competitor"
+    },
+    {
+      "title": "CostBench: Postman Free plan",
+      "url": "https://costbench.com/software/developer-tools/postman/free-plan/",
+      "date": "2026-08-22",
+      "why": "Third-party table, partly stale"
+    },
+    {
+      "title": "CloudSEK: Postman Data Leaks",
+      "url": "https://cloudsek.com/blog/postman-data-leaks-the-hidden-risks-lurking-in-your-workspaces",
+      "date": "2024-12-23",
+      "why": "30k leaking public workspaces"
+    },
+    {
+      "title": "Truffle Security: Postman Carries Lots of Secrets",
+      "url": "https://trufflesecurity.com/blog/postman-carries-lots-of-secrets",
+      "date": "2024-04-25",
+      "why": "Measured count of live secrets; UX causes"
+    },
+    {
+      "title": "HN: Postman which I thought worked locally is down",
+      "url": "https://news.ycombinator.com/item?id=45645172",
+      "date": "2025-10-20",
+      "why": "Outage, alternatives, quotes"
+    },
+    {
+      "title": "HN: founder a85 comment",
+      "url": "https://news.ycombinator.com/item?id=45652555",
+      "date": "2025-10-21",
+      "why": "Postman's side"
+    },
+    {
+      "title": "HN: Postman update removes all your stuff if you refuse to create account",
+      "url": "https://news.ycombinator.com/item?id=37792690",
+      "date": "2023-10-06",
+      "why": "Forced-account backlash"
+    },
+    {
+      "title": "HN: Bruno launch thread",
+      "url": "https://news.ycombinator.com/item?id=39653718",
+      "date": "2024-03-09",
+      "why": "Why people switch, and what Bruno lacks"
+    },
+    {
+      "title": "HN: Postman removes free team collaboration",
+      "url": "https://news.ycombinator.com/item?id=46942116",
+      "date": "2026-02-09",
+      "why": "Reaction to the 1-user cap; astroturf accusation"
+    },
+    {
+      "title": "HN: 25 local collection runs limit",
+      "url": "https://news.ycombinator.com/item?id=34875153",
+      "date": "2023-02-21",
+      "why": "History of metering local features"
+    },
+    {
+      "title": "HN: Postman is logging all your secrets",
+      "url": "https://news.ycombinator.com/item?id=44005654",
+      "date": "2025-05-16",
+      "why": "Privacy claim (unverified)"
+    },
+    {
+      "title": "GitHub #13835 AI in your face",
+      "url": "https://github.com/postmanlabs/postman-app-support/issues/13835",
+      "date": "2025-10-21",
+      "why": "Forced AI"
+    },
+    {
+      "title": "GitHub #4687 Eating too much RAM",
+      "url": "https://github.com/postmanlabs/postman-app-support/issues/4687",
+      "date": "2018 to 2026-07",
+      "why": "Long-running RAM complaint"
+    },
+    {
+      "title": "GitHub #13632 250 MB response crash",
+      "url": "https://github.com/postmanlabs/postman-app-support/issues/13632",
+      "date": "2025-06-17",
+      "why": "Large-payload failure"
+    },
+    {
+      "title": "GitHub #13943 base64 variables hang",
+      "url": "https://github.com/postmanlabs/postman-app-support/issues/13943",
+      "date": "2025-12-19",
+      "why": "Large-payload failure"
+    },
+    {
+      "title": "GitHub #13784 long query param hang",
+      "url": "https://github.com/postmanlabs/postman-app-support/issues/13784",
+      "date": "2025-09-23",
+      "why": "Large-payload failure"
+    },
+    {
+      "title": "GitHub #14030 search freezes",
+      "url": "https://github.com/postmanlabs/postman-app-support/issues/14030",
+      "date": "2026-03-10",
+      "why": "Slow at scale"
+    },
+    {
+      "title": "GitHub #11252 WS/gRPC export",
+      "url": "https://github.com/postmanlabs/postman-app-support/issues/11252",
+      "date": "2022 to 2026-07",
+      "why": "Export lock-in"
+    },
+    {
+      "title": "GitHub #6999 disable auto updates",
+      "url": "https://github.com/postmanlabs/postman-app-support/issues/6999",
+      "date": "2019 (still open)",
+      "why": "No update control"
+    },
+    {
+      "title": "GitHub #13821 Workspaces not loading",
+      "url": "https://github.com/postmanlabs/postman-app-support/issues/13821",
+      "date": "2025-10-20",
+      "why": "Outage impact"
+    },
+    {
+      "title": "GitHub #9481 Sync/WS issue",
+      "url": "https://github.com/postmanlabs/postman-app-support/issues/9481",
+      "date": "2021 (still open)",
+      "why": "Sync pain"
+    },
+    {
+      "title": "GitHub #14149 Win11 GPU crash",
+      "url": "https://github.com/postmanlabs/postman-app-support/issues/14149",
+      "date": "2026-05-22",
+      "why": "Electron/GPU crash (title only)"
+    },
+    {
+      "title": "GitHub #14252 sign-in button disabled",
+      "url": "https://github.com/postmanlabs/postman-app-support/issues/14252",
+      "date": "2026-08-17",
+      "why": "Login friction (title only)"
+    },
+    {
+      "title": "G2 reviews via AWS Marketplace",
+      "url": "https://aws.amazon.com/marketplace/reviews/reviews-list/prodview-2nezdpu4cqcac?page=14",
+      "date": "2026-07 to 2026-09",
+      "why": "Recent user complaints; 4.6 from 1,820 ratings"
+    },
+    {
+      "title": "Pingoru Postman incident",
+      "url": "https://pingoru.io/providers/postman/incidents/26594",
+      "date": "2025-10-20",
+      "why": "Outage duration (search snippet)"
+    },
+    {
+      "title": "Postman Native Git overview",
+      "url": "https://learning.postman.com/latest-v-12/docs/use/native-git/overview.md",
+      "date": "2026",
+      "why": "v12 local files (search snippet only)"
+    },
+    {
+      "title": "Capterra Postman pricing and reviews",
+      "url": "https://www.capterra.com/p/188497/Postman/pricing/",
+      "date": "2026-03 (stale data)",
+      "why": "Legacy limits; 4.7 from 507 (search snippet only)"
+    },
+    {
+      "title": "Apidog: Why Postman is slow and bloated in 2026",
+      "url": "https://apidog.com/blog/postman-slow-bloated-2026-alternatives/",
+      "date": "2026-06",
+      "why": "RAM claims; biased (search snippet only)"
+    }
+  ],
+  "errors": [
+    "The StructuredOutput tool was not exposed in this session, so the result is returned as JSON text.",
+    "reddit.com cannot be fetched; there are no direct Reddit quotes.",
+    "G2 and Capterra pages returned 403; G2 reviews syndicated on AWS Marketplace and search snippets were used instead.",
+    "web.archive.org is blocked, so the pre-March-2026 Free limits could not be checked on Postman's own archived page. Legacy figures (25 runs, 1,000 mock calls, 3 users) come from Postman's docs, HN and third parties.",
+    "The Medium article 'Postman is logging all your secrets' returned 403; the claim is unverified.",
+    "Not researched because time was cut: why people love or miss Proxyman, Charles, HTTP Toolkit, Reqable and Requestly; 2026 pricing of Bruno, Yaak, Insomnia, Hoppscotch and Thunder Client; Postman's own proxy/Interceptor capture features; the second half of the Bruno HN thread.",
+    "Monthly-billing prices for Solo and Team were not visible. The Team 'Private workspaces: Unavailable' row comes from a partial parse and needs checking.",
+    "Some items come from search snippets only, not full-page reads: Native Git details, the Equinor guideline, Capterra pricing, TechRadar/SC World, and Apidog's RAM figures."
+  ]
+}

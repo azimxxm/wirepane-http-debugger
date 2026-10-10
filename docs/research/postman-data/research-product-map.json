@@ -1,0 +1,1214 @@
+{
+  "worker": "deep-researcher, angle: official product map (deep=true, parallel worker)",
+  "status": "partial: stopped on coordinator time limit",
+  "as_of": "2026-10-10",
+  "tldr": "Postman now sells itself as 'The AI-native API Platform'. Postman 12 shipped on 2026-03-01 and the latest desktop build is 12.31.7 (2026-10-09). The product family is a Git-native desktop app, a web app, a signed CLI, a VS Code extension, a coding-agent plugin and an MCP server. They sit around a multi-protocol API client and Enterprise layers (API Catalog, Insights, governance). In March 2026 the Free plan became single-user with no team. Solo ($9) and Team ($19/user) were added, and AI, Flows, monitors and cloud load tests are metered. Postman can capture traffic through a built-in proxy, the Interceptor extension and the Browser Tool. That capture is a session recorder that feeds collections; no rewrite, breakpoint, map-local or throttling tools are documented. For our HTTP Toolkit fork the useful parts are interop and client ergonomics: Postman collection and environment import/export, saving captured traffic as a collection, auth helpers, a cookie jar and variables. Also worth taking are the AI-era ideas Postman sells as separate products: secret-leak detection, MCP/LLM traffic inspection and browser-recording-to-Playwright. The cloud platform itself is not worth copying.",
+  "what_postman_is": [
+    {
+      "claim": "Positions itself as 'The AI-native API Platform. Built for engineers. Designed for enterprise scale.'",
+      "source": [
+        "https://www.postman.com/new-postman/"
+      ],
+      "confidence": "high"
+    },
+    {
+      "claim": "v12 GA on 2026-03-01 (12.0.1), described as 'a new platform designed for the agentic era'. It added Native Git, the Collection 3.0 YAML format, local mock servers, API Catalog (Enterprise), a new Private API Network (Enterprise), SDK generation (Team+) and a unified workbench UI. Postbot, API Builder and the legacy Git/CI integrations were removed.",
+      "source": [
+        "https://www.postman.com/release-notes/postman-app/",
+        "https://heise.de/-11198271"
+      ],
+      "confidence": "high"
+    },
+    {
+      "claim": "Can be used four ways: desktop app, web app, Postman CLI, or coding agents with installed skills. Docs: 'Postman is also usable entirely through the Postman CLI, without the desktop or web app'.",
+      "source": [
+        "https://learning.postman.com/docs/introduction/overview/",
+        "https://learning.postman.com/latest-v-12/llms.txt"
+      ],
+      "confidence": "high"
+    },
+    {
+      "claim": "Vendor claim of 40M+ users ('Trusted by 40M+ developers').",
+      "source": [
+        "https://www.postman.com/release-notes/postman-app/",
+        "https://www.postman.com/downloads.md"
+      ],
+      "confidence": "medium"
+    },
+    {
+      "claim": "Product map. Design & Build: Spec Hub, Workspaces, Documents, Mock Servers, SDK Generator, Flows. Test & Validate: API Client, Collection Runner, Performance Testing, Monitors, Webhook Testing, Functional Testing, Data-Driven Testing. Manage & Operate: API Catalog, Insights, Application Inventory, Context Graph, AI Engineer, Agent Mode, Postman CLI, Postman MCP Server. Explore: API Network, MCP Server Catalog. Sister brands: Fabric, Fern, Astro AI, Orbit, Passport.",
+      "source": [
+        "https://www.postman.com/downloads/?forceOS=mac"
+      ],
+      "confidence": "high"
+    },
+    {
+      "claim": "v11 is still maintained (11.99.0 on 2026-05-27). Pricing FAQ: 'Postman V11 will continue to be supported'.",
+      "source": [
+        "https://www.postman.com/release-notes/postman-app/",
+        "https://www.postman.com/pricing/"
+      ],
+      "confidence": "high"
+    }
+  ],
+  "products": [
+    {
+      "name": "Desktop app",
+      "detail": "Platforms: macOS 11+ (Intel osx_64, Apple Silicon osx_arm64), Windows 10+ (x64, ARM64), Linux x64/ARM64 (Ubuntu 18.04+, Fedora 32+, Debian 10+; Snap recommended). Also installable with 'brew install --cask postman'. Download links point to 'latest' with no version shown. Desktop-only features: proxy capture, Browser Tool, Native Git, terminal, find and replace, performance tests. Bundles the Postman CLI since 12.31.7.",
+      "plan": "Free+ (lightweight no-account mode also available)",
+      "source": [
+        "https://www.postman.com/downloads/?forceOS=mac",
+        "https://www.postman.com/downloads.md",
+        "https://learning.postman.com/docs/getting-started/installation/system-requirements/",
+        "https://learning.postman.com/docs/getting-started/installation/install-app/",
+        "https://www.postman.com/release-notes/postman-app/"
+      ],
+      "confidence": "high"
+    },
+    {
+      "name": "Web app (go.postman.co)",
+      "detail": "Supports Chrome 80+, Firefox 76+, Edge 79+, Safari 13.1.1+. Account required. Not available on web: find and replace, system proxy for online services, proxy and Interceptor capture, collection-run export, performance testing, lightweight client. Terminal and vault work only through an agent.",
+      "plan": "Free+ (account)",
+      "source": [
+        "https://learning.postman.com/docs/getting-started/installation/install-app/",
+        "https://learning.postman.com/docs/getting-started/installation/system-requirements/"
+      ],
+      "confidence": "high"
+    },
+    {
+      "name": "Postman Agents for the web app",
+      "detail": "Desktop Agent: all request types, bypasses CORS, reaches local and private networks, does not work in Safari. Cloud Agent: HTTP only, monthly cap set by plan, cannot reach local networks. Browser Agent: HTTP only and subject to CORS. Interceptor Agent: HTTP only, no CA or client certificates, 'available with Postman Free plans while we gather feedback'. Auto-select order: Desktop, Cloud, Interceptor, Browser.",
+      "plan": "Free+ (Cloud Agent usage capped per plan)",
+      "source": [
+        "https://learning.postman.com/docs/getting-started/basics/about-postman-agent/",
+        "https://www.postman.com/downloads/postman-agent/"
+      ],
+      "confidence": "high"
+    },
+    {
+      "name": "Lightweight API Client (no-login mode)",
+      "detail": "Desktop only, used when not signed in. Supports HTTP, WebSocket, Socket.IO, GraphQL, gRPC and MQTT requests, plus send, history, post-response scripts and the visualizer. Everything is stored locally and never synced. Collections, environments and variables are not available until you sign in; after sign-in the data can move into a workspace. It replaced the Scratch Pad, which was removed in v10.18+ and used to offer offline collections, environments and export.",
+      "plan": "no account",
+      "source": [
+        "https://learning.postman.com/docs/getting-started/basics/using-api-client/",
+        "https://learning.postman.com/docs/getting-started/basics/using-scratch-pad/",
+        "https://learning.postman.com/docs/getting-started/basics/syncing/"
+      ],
+      "confidence": "high"
+    },
+    {
+      "name": "Postman CLI ('postman')",
+      "detail": "Official signed binary. Install: npm (on npm since 11.63.3, 2025-09-17), a curl script for macOS/Linux/WSL (not Alpine), or PowerShell. Bundled with the app since 12.31.7. Commands: init (Native Git layout plus agent skills SKILL.md and AGENTS.md), login/signup (supports guest sessions), workspace prepare/push/lint/connect-git, collection run/lint/migrate (v2.1 to v3), environment, globals, spec lint, dependency, dataset, request, search, mock, simulation, monitor, performance, runner, app, flows, webhook, sdk, describe, context-graph, skills. Supports --json output and the EU region. Local file paths need no auth; cloud IDs need login or an API key.",
+      "plan": "Free+ (some commands depend on plan)",
+      "source": [
+        "https://learning.postman.com/docs/postman-cli/postman-cli-overview/",
+        "https://learning.postman.com/docs/postman-cli/postman-cli-installation/",
+        "https://learning.postman.com/docs/postman-cli/postman-cli-authenticate-and-configure/",
+        "https://www.postman.com/pricing/"
+      ],
+      "confidence": "high"
+    },
+    {
+      "name": "Newman",
+      "detail": "Legacy Node.js collection runner, 'no longer maintained'. Runs only v2.1 JSON collections, not the v3 YAML used by Native Git. Postman publishes a migration mapping from 'newman run' to 'postman collection run'.",
+      "plan": "n/a (open source)",
+      "source": [
+        "https://learning.postman.com/docs/reference/newman-cli/command-line-integration-with-newman/",
+        "https://learning.postman.com/docs/reference/newman-cli/migrate-to-postman-cli/"
+      ],
+      "confidence": "high"
+    },
+    {
+      "name": "VS Code extension",
+      "detail": "Runs in VS Code, VS Code Insiders and VSCodium 1.74+, plus Antigravity, Cursor, Kiro and Windsurf. Sign-in required. Supports HTTP, raw WebSocket and gRPC requests, collections, environments (with .env import and sync), cookies, CA and client certs, docs, scripts/tests/runner, sharing and Postman MCP server integration.",
+      "plan": "Free+ ('IDE extension (VS Code)' on all plans)",
+      "source": [
+        "https://learning.postman.com/docs/reference/vs-code-extension/overview/",
+        "https://learning.postman.com/docs/reference/vs-code-extension/install/",
+        "https://www.postman.com/pricing/"
+      ],
+      "confidence": "high"
+    },
+    {
+      "name": "Postman plugin for coding agents",
+      "detail": "Released in 12.30.4 (2026-09-30). Works with Claude Code, Codex, Cursor, OpenCode, Factory, Kimi Code and Pi. Install with 'npx @postman/postman-plugin' or each agent's marketplace. It routes tasks to the Postman CLI and falls back to the MCP server.",
+      "plan": "not stated",
+      "source": [
+        "https://learning.postman.com/docs/reference/developer-resources/postman-plugin/",
+        "https://www.postman.com/downloads/?forceOS=mac",
+        "https://www.postman.com/release-notes/postman-app/"
+      ],
+      "confidence": "high"
+    },
+    {
+      "name": "Postman MCP Server",
+      "detail": "Lets AI agents manage workspaces, collections, specs, mocks and monitors through the Postman API. Remote option: streamable HTTP, OAuth in the US, API key only in the EU. Local option: STDIO via npm @postman/postman-mcp-server or Docker. Tool sets: Minimal (default), Code, Full (100+ tools), Learn, Context Graph. A separate docs MCP endpoint is at learning.postman.com/_mcp/server.",
+      "plan": "account required; plan not stated",
+      "source": [
+        "https://learning.postman.com/docs/reference/postman-api/postman-mcp-server/overview/",
+        "https://learning.postman.com/llms.txt"
+      ],
+      "confidence": "high"
+    },
+    {
+      "name": "Agent Mode",
+      "detail": "In-app AI agent, GA in 11.74.1 (2025-12-02). It can create and manage requests, flows and mocks, debug failures ('Debug with AI'), write tests, generate API artifacts from code in a Git folder, and drive the Browser Tool. Context is added with '@'. Has a model picker (default Auto), an Auto-run toggle and MCP server config. Slash Skills include Create Prototype, Clone Workspace, Test Coverage Report, Export Documentation, Scan For Conflicts and Run Health Check. Requires AI consent and spends AI credits. Enterprise adds access control, secret redaction, AWS PII guardrails and MCP allow/block lists.",
+      "plan": "Free+ (credits: Free 50/mo, Solo 400/mo, Team 400/user/mo, Enterprise 800/user/mo pooled)",
+      "source": [
+        "https://learning.postman.com/docs/getting-started/basics/about-agent-mode/",
+        "https://learning.postman.com/docs/use/agent-mode/overview/",
+        "https://learning.postman.com/docs/use/agent-mode/get-started/",
+        "https://learning.postman.com/docs/use/agent-mode/enterprise/",
+        "https://learning.postman.com/docs/billing/agent-mode-usage/",
+        "https://www.postman.com/pricing/",
+        "https://www.postman.com/release-notes/postman-app/"
+      ],
+      "confidence": "high"
+    },
+    {
+      "name": "Agent Mode on Cloud and Agent Automations",
+      "detail": "Agent Mode on Cloud arrived in 12.13.0 (2026-06-01): a long-running coding agent in an isolated cloud sandbox. Internet is off by default, no production credentials are issued, and it can reach only APIs registered in the API Catalog. It can be started from Slack ('@Postman') or the app. Agent Automations (beta, 12.23.0, 2026-08-10) trigger on GitHub PR or branch activity.",
+      "plan": "not stated; likely Enterprise-oriented because it depends on API Catalog (inference)",
+      "source": [
+        "https://learning.postman.com/docs/use/agent-mode-cloud/overview/",
+        "https://www.postman.com/release-notes/postman-app/"
+      ],
+      "confidence": "medium"
+    },
+    {
+      "name": "Postbot (legacy)",
+      "detail": "'No longer available in Postman v12'; Agent Mode replaces it. In v11 it was an Enterprise add-on.",
+      "plan": "removed",
+      "source": [
+        "https://www.postman.com/release-notes/postman-app/",
+        "https://learning.postman.com/v11/docs/getting-started/basics/about-postbot/"
+      ],
+      "confidence": "high"
+    },
+    {
+      "name": "Built-in capture proxy",
+      "detail": "Desktop only. Start it from Tools > Proxy > Start Proxy Session; default port 5559 (the older flow used 5555). The Postman CA is auto-installed on macOS v10.17+ and Windows v10.18+, with manual CA steps for Ubuntu, CentOS, iOS and Android. Android apps need a network-security-config to trust the CA. Sessions can be paused, resumed and stopped. Filters: status, method, URL (regex), type. Captures requests, responses (optional) and cookies; image, audio and video responses keep only headers, timing and status. An Overview chart groups traffic by method, host, media type or status. 'Save Requests' writes to a collection, foldered by domain and/or endpoint. Only one proxy or Interceptor session can run at a time.",
+      "plan": "not stated (no gating found)",
+      "source": [
+        "https://learning.postman.com/docs/use/capturing-request-data/capture-with-proxy/",
+        "https://learning.postman.com/docs/use/capturing-request-data/capturing-https-traffic/",
+        "https://learning.postman.com/docs/use/capturing-request-data/capturing-http-requests/"
+      ],
+      "confidence": "high"
+    },
+    {
+      "name": "Postman Interceptor (browser extension)",
+      "detail": "Available for Chrome, Safari, Firefox and Edge. Time-bound capture sessions with method and URL-regex filters. Results open in Postman History and can be saved to a collection. Also syncs cookies continuously into the Postman cookie jar. Linux and older app versions need Interceptor Bridge. Communication with the app is encrypted.",
+      "plan": "not stated",
+      "source": [
+        "https://learning.postman.com/docs/use/capturing-request-data/interceptor/",
+        "https://learning.postman.com/docs/use/capturing-request-data/syncing-cookies/",
+        "https://www.postman.com/product/postman-interceptor/"
+      ],
+      "confidence": "high"
+    },
+    {
+      "name": "Browser Tool",
+      "detail": "Added in 12.15.0 (2026-06-15), desktop only, opened with Cmd/Ctrl+Shift+B. An embedded browser with its own cookies and session. Network tab shows method, URL, status and duration, with URL and method filters. Any request can be opened as an HTTP request, or several can become a new collection via 'Create Collection'. Includes DevTools. An Interactions tab (12.20.1) records clicks, forms and navigation with Playwright locators. Agent Mode can drive it and generate Playwright tests.",
+      "plan": "not stated",
+      "source": [
+        "https://learning.postman.com/docs/use/capturing-request-data/browser-tool/overview/",
+        "https://learning.postman.com/docs/use/capturing-request-data/browser-tool/inspect-traffic/",
+        "https://www.postman.com/release-notes/postman-app/"
+      ],
+      "confidence": "high"
+    },
+    {
+      "name": "Application Inventory ('postman app test')",
+      "detail": "Added in 12.9.7 (2026-05-08). Runs your Playwright UI tests with network capture (needs the 'postman-playwright' plugin) and validates observed API calls against collection tests. Reports unmatched calls and coverage gaps. '--capture-only' builds a draft collection from the observed traffic. Requires a Git-connected workspace.",
+      "plan": "Solo/Team/Enterprise",
+      "source": [
+        "https://learning.postman.com/docs/postman-cli/postman-cli-application/",
+        "https://www.postman.com/release-notes/postman-app/"
+      ],
+      "confidence": "high"
+    },
+    {
+      "name": "Webhook listeners",
+      "detail": "Added in 12.10.5. Each listener gets a public URL (https://<id>.webhook.pstmn.io) and logs raw headers and body. Events can be forwarded to localhost or any URL, or answered with a templated status, headers and body. Supports replay, scripts and auth verification. Limit: 100 requests/min per IP.",
+      "plan": "Solo/Team/Enterprise",
+      "source": [
+        "https://learning.postman.com/docs/use/send-requests/protocols/webhooks/"
+      ],
+      "confidence": "high"
+    },
+    {
+      "name": "Spec Hub (replaced API Builder)",
+      "detail": "Formats: OpenAPI 2.0/3.0/3.1, AsyncAPI 2.0/3.0, protobuf 2/3, GraphQL, Smithy 2.0. Visual editor added in 12.22.2. Supports multi-file specs, Spectral-based linting, a live docs preview, generating collections with two-way sync, fork, changelog, version tags, comments and tags.",
+      "plan": "Free+ ('Specs'); Component Library and governance are Enterprise",
+      "source": [
+        "https://learning.postman.com/docs/design-apis/specifications/overview/",
+        "https://www.postman.com/pricing/",
+        "https://www.postman.com/release-notes/postman-app/"
+      ],
+      "confidence": "high"
+    },
+    {
+      "name": "Mock servers, code mocks, simulations",
+      "detail": "Example-based cloud mocks; mock usage became unlimited on all plans in March 2026. Code mocks are JavaScript handlers using pm.mock, pm.state and pm.datasets, with scenarios and packages; run locally or with 'postman mock'. Simulations inject delays, rate limits and errors across mocks.",
+      "plan": "Mock usage Free+; code mocks Local View Free+, Cloud View Solo+; simulations Solo+ (beta)",
+      "source": [
+        "https://learning.postman.com/docs/billing/about-plans/",
+        "https://learning.postman.com/docs/design-apis/mock-apis/local-mock-servers/",
+        "https://www.postman.com/release-notes/postman-app/"
+      ],
+      "confidence": "high"
+    },
+    {
+      "name": "Collection Runner, scripts, tests",
+      "detail": "Pre-request and post-response JavaScript with pm.* and pm.test, npm/JSR external packages and a Package Library. Collection runs are unlimited. Run export to JSON is desktop only.",
+      "plan": "Runs Free+; data files, GraphQL/gRPC runs, test result exports and Playwright integration Solo+",
+      "source": [
+        "https://learning.postman.com/docs/tests-and-scripts/running-collections/intro-to-collection-runs/",
+        "https://www.postman.com/pricing/",
+        "https://learning.postman.com/docs/billing/about-plans/"
+      ],
+      "confidence": "high"
+    },
+    {
+      "name": "Performance testing",
+      "detail": "Virtual-user load tests built from collections, with a Tests-vs-VU heatmap and setup/teardown collections. Can run locally, in CI via the CLI, or in Postman Cloud.",
+      "plan": "Local Free+ (unlimited); cloud runs paid at $0.04 per VU-hour; static-IP egress Enterprise",
+      "source": [
+        "https://learning.postman.com/docs/tests-and-scripts/performance-testing/testing-api-performance/",
+        "https://www.postman.com/pricing/"
+      ],
+      "confidence": "high"
+    },
+    {
+      "name": "Monitors",
+      "detail": "Scheduled collection runs from multiple regions. Published monitor reports need no login to view.",
+      "plan": "Free 1,000 requests/mo; paid plans 10,000; add-on $20 per 50k; reports Solo+; private runners Enterprise",
+      "source": [
+        "https://www.postman.com/pricing/",
+        "https://www.postman.com/release-notes/postman-app/"
+      ],
+      "confidence": "high"
+    },
+    {
+      "name": "Flows",
+      "detail": "Low-code canvas. Flows can be deployed as cloud endpoints or as MCP servers (12.7.1). AI Agent block with MCP tools and evals (12.26.0). Supports TypeScript and FQL, and Native Git.",
+      "plan": "Credits per month: Free 25, Solo 50, Team 100, Enterprise 500; extra $1 per 1,000 on paid plans",
+      "source": [
+        "https://learning.postman.com/flows/overview/",
+        "https://learning.postman.com/docs/billing/flows-usage/",
+        "https://www.postman.com/pricing/"
+      ],
+      "confidence": "high"
+    },
+    {
+      "name": "Datasets and data requests",
+      "detail": "Datasets (12.25.6) are reusable test data backed by CSV/JSON/Excel, MySQL/PostgreSQL or JDBC, with SSH tunnel support. Data requests are an interactive SQL client for PostgreSQL, MySQL and files.",
+      "plan": "Datasets Solo+ (DB sources Team+, JDBC Enterprise); data requests not stated",
+      "source": [
+        "https://www.postman.com/release-notes/postman-app/",
+        "https://learning.postman.com/docs/use/send-requests/protocols/data/data-overview/"
+      ],
+      "confidence": "medium"
+    },
+    {
+      "name": "Postman Vault and secure variables",
+      "detail": "Local Vault keeps secrets on the device and never syncs them. Shared Vault is end-to-end encrypted with Postman-managed keys (12.16.1). External integrations: 1Password, AWS Secrets Manager, Azure Key Vault, HashiCorp (desktop only). Secure (encrypted) variables arrived in 12.16.1. Local vault secrets can be exported and imported.",
+      "plan": "Local Free+; Shared Solo+; integrations Enterprise + Advanced Security Administration add-on",
+      "source": [
+        "https://learning.postman.com/docs/use/postman-vault/postman-vault-secrets/",
+        "https://learning.postman.com/docs/use/postman-vault/postman-vault-integrations/",
+        "https://www.postman.com/release-notes/postman-app/"
+      ],
+      "confidence": "high"
+    },
+    {
+      "name": "Secret Scanner",
+      "detail": "Local Secret Protection catches secrets before they sync to cloud or get committed to Git. Cloud Secret Detection scans public workspaces by default.",
+      "plan": "Both Free+; scanning internal and partner workspaces, the dashboard and custom patterns need Enterprise (+ASA add-on)",
+      "source": [
+        "https://learning.postman.com/docs/administration/managing-your-team/secret-scanner/overview/",
+        "https://www.postman.com/pricing/"
+      ],
+      "confidence": "high"
+    },
+    {
+      "name": "Native Git",
+      "detail": "Desktop only. Connecting a folder creates .postman/resources.yaml plus a postman/ directory holding collections, environments, specs, mocks, flows, globals and datasets as Collection v3 YAML. Local View and Cloud View with push/pull. Built-in terminal and file editor. Tracks the current branch. An Issues tab lints files (rules FMT001-FMT209) and can 'Fix with AI'. CI uses 'postman workspace push/lint'.",
+      "plan": "Free+ ('Native Git' on all plans)",
+      "source": [
+        "https://learning.postman.com/docs/use/native-git/overview/",
+        "https://learning.postman.com/docs/use/native-git/setup/",
+        "https://learning.postman.com/docs/use/native-git/sync/",
+        "https://learning.postman.com/docs/use/native-git/automation/",
+        "https://www.postman.com/pricing/"
+      ],
+      "confidence": "high"
+    },
+    {
+      "name": "Workspaces and collaboration",
+      "detail": "Workspace types: internal, public, partner, and invite-only private. Also: roles, comments, watch, fork/pull request/merge for collections, environments and specs, Live Sessions for real-time HTTP collaboration, share links for a request plus its response, and Slack/Teams/Jira integrations.",
+      "plan": "Free is 1 user and cannot create a team (since 2026-03); team collaboration Team+; guests Team+; partner and private workspaces Enterprise; Live Sessions all plans (11.64.3)",
+      "source": [
+        "https://learning.postman.com/docs/billing/about-plans/",
+        "https://learning.postman.com/docs/collaborating-in-postman/using-workspaces/overview/",
+        "https://learning.postman.com/docs/collaborating-in-postman/using-version-control/version-control-overview/",
+        "https://learning.postman.com/docs/collaborating-in-postman/live-sessions/",
+        "https://www.postman.com/pricing/"
+      ],
+      "confidence": "high"
+    },
+    {
+      "name": "API Network, MCP Server Catalog, Private API Network",
+      "detail": "Public catalog of workspaces, collections and flows. Includes an MCP server catalog and an MCP Generator that builds an MCP server from public APIs.",
+      "plan": "Public Free+; Private API Network Enterprise",
+      "source": [
+        "https://learning.postman.com/docs/postman-api-network/overview/",
+        "https://learning.postman.com/docs/getting-started/basics/about-ai/",
+        "https://www.postman.com/pricing/"
+      ],
+      "confidence": "high"
+    },
+    {
+      "name": "API documentation, Fern, Run in Postman",
+      "detail": "Docs are auto-generated from collections (request details, auth, sample code) and can be published. The Run in Postman button lets others import a collection. Fern docs-as-code sites can be published from a collection (12.1.1, 2026-03-10).",
+      "plan": "Free: Postman-branded docs; Solo+: custom-branded with unlimited custom domains",
+      "source": [
+        "https://learning.postman.com/docs/publishing-your-api/api-documentation-overview/",
+        "https://www.postman.com/pricing/",
+        "https://www.postman.com/release-notes/postman-app/"
+      ],
+      "confidence": "high"
+    },
+    {
+      "name": "SDK Generator and CLI Generator",
+      "detail": "SDKs in TypeScript, Python, Java, Kotlin, C#, Go, PHP, Ruby and Rust, plus TypeScript SDKs from AsyncAPI. Auto-PR to GitHub is Enterprise only. CLI generation from collections or OpenAPI added in 12.5.2.",
+      "plan": "Team/Enterprise",
+      "source": [
+        "https://learning.postman.com/docs/sdk-generator/overview/",
+        "https://www.postman.com/release-notes/postman-app/"
+      ],
+      "confidence": "high"
+    },
+    {
+      "name": "API Catalog and API Governance",
+      "detail": "Built from Git and cloud connectors, CLI/CI runs and lint results. Adds scorecards, Wiz security insights (12.21.9), and governance groups using Spectral rulesets, including a Postman OWASP ruleset (12.26.0).",
+      "plan": "Enterprise",
+      "source": [
+        "https://learning.postman.com/docs/api-catalog/overview/",
+        "https://www.postman.com/release-notes/postman-app/"
+      ],
+      "confidence": "high"
+    },
+    {
+      "name": "Insights",
+      "detail": "An Insights Agent watches production API traffic on Kubernetes, ECS, EC2 or Elastic Beanstalk. Endpoints are inferred automatically, with per-endpoint errors and latency. Repro Mode recreates failing calls.",
+      "plan": "Enterprise",
+      "source": [
+        "https://learning.postman.com/docs/insights/overview/",
+        "https://www.postman.com/pricing/"
+      ],
+      "confidence": "high"
+    },
+    {
+      "name": "Context Graph",
+      "detail": "Added in 12.29.1 (2026-09-22). A dependency graph of APIs, deployments, DB schemas, external services and teams, built from Git-connected workspaces, GitHub and New Relic. Queried via Agent Mode, Agent Tasks, the API, the CLI or MCP.",
+      "plan": "Free+ (ingestion free with 24h refresh; queries Free 1,000/mo, paid 5,000/mo, then $0.01 each)",
+      "source": [
+        "https://learning.postman.com/docs/use/context-graph/get-started/",
+        "https://www.postman.com/pricing/",
+        "https://www.postman.com/release-notes/postman-app/"
+      ],
+      "confidence": "high"
+    },
+    {
+      "name": "Passport Lens / Passport CLI Community Edition",
+      "detail": "npm @postman/postman-passport 0.5.6, first published 2026-08-05; the npm metadata has no license field. A local proxy for agent and CLI traffic, used via 'passport lens run -- <cmd>' or the 'passport lens env' shell variables; default port 30914. It uses CA files ('passport lens clean' removes them). Detects and redacts secrets in headers and URLs, and in bodies with --show-body, and shows them in browser and terminal dashboards. 'Never stores or sends your secrets anywhere'. A more advanced paid edition is mentioned.",
+      "plan": "free Community Edition",
+      "source": [
+        "https://www.postman.com/downloads/?forceOS=mac",
+        "https://registry.npmjs.org/@postman%2fpostman-passport",
+        "https://docs.usepassport.ai/passport/reference/passport-cli-ce/overview/"
+      ],
+      "confidence": "medium"
+    },
+    {
+      "name": "Sister brands",
+      "detail": "Fern: docs and SDK generator, acquired 2026-01, with 200+ customers including Square, Auth0 and Twilio. Fabric Gateway: 'Route, govern, and observe your AI traffic', GA reported around 2026-09-29. Astro AI: 'Manage and control AI agents in production'. Orbit: 'Turn any task into the right API calls'. Passport: 'Secure API access for agents and humans'.",
+      "plan": "separate products",
+      "source": [
+        "https://www.postman.com/release-notes/postman-app/",
+        "https://www.businesswire.com/news/home/20260107174767/en",
+        "https://sdtimes.com/postman-acquires-fern-to-help-businesses-deliver-world-class-developer-experiences/",
+        "https://vmblog.com/news/postman-introduces-the-control-plane-for-the-agentic-world-with-general-availability-of-fabric-gateway/"
+      ],
+      "confidence": "medium"
+    },
+    {
+      "name": "Free no-signup browser tools (32)",
+      "detail": "Clients for REST (including SOAP and SSE), GraphQL, gRPC, WebSocket, Socket.IO and MCP. Also cURL-to-code, JSON-to-types, an AI unit test generator, a test data generator, an API designer, an OpenAPI editor/validator/explainer, three mock tools, monitors, health/uptime/SSL/header checks, a load test, an RPS calculator, webhook explainer/sender/tester, an AI/MCP tool designer and a secret redactor. No HAR, JWT or MQTT tool.",
+      "plan": "no account",
+      "source": [
+        "https://www.postman.com/tools"
+      ],
+      "confidence": "high"
+    },
+    {
+      "name": "Integrations hub and Postman API",
+      "detail": "Integrations include Slack, Teams, Jira, GitHub, New Relic, Wiz, Datadog, PagerDuty and Splunk (unified hub in 12.30.4). Integration limit per plan: 5 / 10 / 50 / 100. Postman API calls per month: 10k / 100k / 1M / 10M.",
+      "plan": "per-plan limits",
+      "source": [
+        "https://www.postman.com/release-notes/postman-app/",
+        "https://www.postman.com/pricing/"
+      ],
+      "confidence": "high"
+    }
+  ],
+  "api_client_features": {
+    "protocols": [
+      {
+        "feature": "HTTP/REST",
+        "detail": "Standard and custom methods. HTTP/1.0, 1.1 or 2 can be set globally or per request; HTTP/2 needs https and falls back to 1.x via the Cloud Agent or when a proxy is configured. HTTP/2 arrived in v11.8 (2024-08, older than the research window).",
+        "plan": "Free+",
+        "source": [
+          "https://learning.postman.com/docs/use/send-requests/create-requests/request-basics/",
+          "https://learning.postman.com/docs/use/send-requests/response-data/troubleshooting-api-requests/",
+          "https://www.postman.com/release-notes/postman-app/"
+        ],
+        "confidence": "high"
+      },
+      {
+        "feature": "Server-Sent Events",
+        "detail": "Uses a normal HTTP request. The event stream can be searched, cleared and saved.",
+        "plan": "Free+",
+        "source": [
+          "https://learning.postman.com/docs/use/send-requests/response-data/responses/"
+        ],
+        "confidence": "high"
+      },
+      {
+        "feature": "SOAP",
+        "detail": "No dedicated client: an HTTP POST with a raw XML envelope and manual Content-Type text/xml and SOAPAction headers. SoapUI/ReadyAPI projects can be migrated. No WSDL import found in the v12 docs.",
+        "plan": "Free+",
+        "source": [
+          "https://learning.postman.com/docs/use/send-requests/protocols/soap/making-soap-requests/",
+          "https://learning.postman.com/docs/getting-started/importing-and-exporting/migrate-from-other-clients/"
+        ],
+        "confidence": "high"
+      },
+      {
+        "feature": "GraphQL",
+        "detail": "Dedicated client with schema introspection, a field-picker query builder, queries, mutations and subscriptions, and scripts. GraphQL can also be sent as a plain HTTP request.",
+        "plan": "Free+ (GraphQL collection runs need a paid plan)",
+        "source": [
+          "https://learning.postman.com/docs/use/send-requests/protocols/graphql/graphql-overview/",
+          "https://learning.postman.com/docs/tests-and-scripts/running-collections/intro-to-collection-runs/"
+        ],
+        "confidence": "high"
+      },
+      {
+        "feature": "gRPC",
+        "detail": "Unary, client, server and bidirectional streaming. Uses protobuf service definitions, with saved examples, mocks and scripts. gRPCurl import/export added in 11.74.5 (2025-12-05).",
+        "plan": "Free+ (gRPC collection runs need a paid plan)",
+        "source": [
+          "https://learning.postman.com/docs/use/send-requests/protocols/grpc/grpc-client-overview/",
+          "https://www.postman.com/release-notes/postman-app/"
+        ],
+        "confidence": "high"
+      },
+      {
+        "feature": "WebSocket and Socket.IO",
+        "detail": "Raw WebSocket messaging and Socket.IO events. Socket.IO's long-polling fallback is not supported.",
+        "plan": "Free+",
+        "source": [
+          "https://learning.postman.com/docs/use/send-requests/protocols/websocket/websocket-overview/",
+          "https://learning.postman.com/docs/use/send-requests/protocols/websocket/create-a-socketio-request/"
+        ],
+        "confidence": "high"
+      },
+      {
+        "feature": "MQTT",
+        "detail": "Connect to a broker, subscribe, publish and view messages. Requests can be saved, documented and shared.",
+        "plan": "Free+",
+        "source": [
+          "https://learning.postman.com/docs/use/send-requests/protocols/mqtt-client/mqtt-client-overview/"
+        ],
+        "confidence": "high"
+      },
+      {
+        "feature": "AI (LLM) requests",
+        "detail": "Works with OpenAI, Anthropic, Google, and any OpenAI-compatible endpoint, including HuggingFace and local or self-hosted models (BYOM since 11.70.0, 2025-11-03). MCP tools can be attached (11.55.3). Compares responses, latency and tokens.",
+        "plan": "Free+",
+        "source": [
+          "https://learning.postman.com/docs/use/send-requests/protocols/ai-requests/overview/",
+          "https://www.postman.com/release-notes/postman-app/"
+        ],
+        "confidence": "high"
+      },
+      {
+        "feature": "MCP requests (Postman as an MCP client)",
+        "detail": "At launch (11.42.3, 2025-04-23) it supported STDIO and HTTP+SSE transports, with tools, prompts, resources and notifications. Later added sampling (11.63.0), elicitation (11.61.8) and MCP Apps UIs (11.79.5, 2026-01-09). Includes an OAuth 2.1 debugger and exports server config to Claude Desktop, VS Code and Cursor.",
+        "plan": "Free+ ('MCP Client' on all plans)",
+        "source": [
+          "https://learning.postman.com/docs/use/send-requests/protocols/mcp-requests/overview/",
+          "https://www.postman.com/release-notes/postman-app/",
+          "https://www.postman.com/pricing/"
+        ],
+        "confidence": "high"
+      },
+      {
+        "feature": "Unix domain sockets / Windows named pipes",
+        "detail": "URL form http://unix:/tmp/app.sock:/path. Added in 11.70.5 (2025-11-06).",
+        "plan": "Free+ (no gating found)",
+        "source": [
+          "https://learning.postman.com/docs/use/send-requests/protocols/uds-named-pipes/send-uds-named-pipes-requests/"
+        ],
+        "confidence": "high"
+      },
+      {
+        "feature": "Collection v3 request kinds",
+        "detail": "http, graphql, grpc, websocket, socket.io, mqtt, mcp and llm requests can share one collection. Auth can be set per route in multi-protocol collections.",
+        "plan": "Free+",
+        "source": [
+          "https://learning.postman.com/docs/use/native-git/setup/",
+          "https://www.postman.com/release-notes/postman-app/"
+        ],
+        "confidence": "high"
+      }
+    ],
+    "request_building": [
+      {
+        "feature": "Params, headers, body",
+        "detail": "Query and path params. Auto-generated hidden headers. Body types: json, formdata, urlencoded, text, xml, html, javascript, file, graphql, none. URL autocomplete from workspace history and collections, and endpoint suggestions for verified public APIs. http:// is added automatically. Autosave is optional.",
+        "plan": "Free+",
+        "source": [
+          "https://learning.postman.com/docs/use/send-requests/create-requests/request-basics/",
+          "https://learning.postman.com/docs/use/native-git/setup/"
+        ],
+        "confidence": "high"
+      },
+      {
+        "feature": "Per-request settings",
+        "detail": "SSL verification, server cipher suite, disabled TLS protocols, cipher selection, automatic URL encoding (plus EncodeURIComponent on a selection), HTTP version, and an option to disable the cookie jar.",
+        "plan": "Free+",
+        "source": [
+          "https://learning.postman.com/docs/use/send-requests/create-requests/request-settings/",
+          "https://learning.postman.com/docs/getting-started/basics/about-postman-agent/",
+          "https://learning.postman.com/docs/use/send-requests/response-data/cookies/"
+        ],
+        "confidence": "high"
+      },
+      {
+        "feature": "Reuse",
+        "detail": "Linked request copies (11.82.4); customizing a linked copy is Enterprise only. pm.execution.runRequest runs saved requests from scripts (11.64.0). Command palette (12.3.7). Find and replace (desktop only).",
+        "plan": "Free+ (linked-copy customization Enterprise)",
+        "source": [
+          "https://learning.postman.com/docs/use/send-requests/create-requests/request-basics/",
+          "https://www.postman.com/release-notes/postman-app/"
+        ],
+        "confidence": "high"
+      }
+    ],
+    "collections": [
+      {
+        "feature": "Collections and folders",
+        "detail": "Folders, saved examples, auth/scripts/variables at collection and folder level, docs, types, status tags, comments, watch, view counters, an Overview tab with changelog, and templates. Deleted collections can be recovered for 1, 30, 90 or 90 days depending on plan.",
+        "plan": "Free+ (recovery window by plan)",
+        "source": [
+          "https://learning.postman.com/docs/use/use-collections/overview/",
+          "https://www.postman.com/pricing/"
+        ],
+        "confidence": "high"
+      },
+      {
+        "feature": "Collection format",
+        "detail": "Schema 3.0.0 is multi-file YAML (*.request.yaml files, .resources/ directories, definition.yaml) designed to diff well. v2.1 JSON is still exported. v1 imports are rejected (convert with postman-collection-transformer).",
+        "plan": "Free+",
+        "source": [
+          "https://learning.postman.com/docs/use/use-collections/collections-schemas/",
+          "https://learning.postman.com/docs/getting-started/importing-and-exporting/importing-data/"
+        ],
+        "confidence": "high"
+      }
+    ],
+    "variables_environments": [
+      {
+        "feature": "Variable scopes and environments",
+        "detail": "Scopes from widest to narrowest: global, collection, environment, data (CSV/JSON), local; the narrowest wins. Values are local by default and not synced unless shared, and monitors and the CLI use the shared values. Secure encrypted variables arrived in 12.16.1. Vault secrets are referenced as {{vault:name}}. Environments can be colored and pinned, with one active at a time.",
+        "plan": "Free+",
+        "source": [
+          "https://learning.postman.com/docs/use/send-requests/variables/variables/",
+          "https://learning.postman.com/docs/use/send-requests/variables/managing-environments/",
+          "https://www.postman.com/release-notes/postman-app/"
+        ],
+        "confidence": "high"
+      }
+    ],
+    "auth_helpers": [
+      {
+        "feature": "Auth types",
+        "detail": "No Auth, Inherit, API Key (header or query), Bearer, JWT Bearer (signs HS/RS/ES/PS from a payload editor), Basic, Digest, OAuth 1.0, OAuth 2.0, Hawk, AWS Signature v4, NTLM, Akamai EdgeGrid, Atlassian. Set at request, folder or collection level. Guided Auth for public APIs.",
+        "plan": "Free+",
+        "source": [
+          "https://learning.postman.com/docs/use/send-requests/authorization/authorization/",
+          "https://learning.postman.com/docs/use/send-requests/authorization/authorization-types/",
+          "https://learning.postman.com/v11/llms.txt",
+          "https://learning.postman.com/docs/use/native-git/setup/"
+        ],
+        "confidence": "medium"
+      }
+    ],
+    "code_generation": [
+      {
+        "feature": "Code snippets",
+        "detail": "35 language/library targets: C# HttpClient/RestSharp, cURL, Dart Dio/HTTP, Go, raw HTTP, Java OkHttp/Unirest, JS Fetch/jQuery/XHR, Kotlin, C libcurl, Node Axios/Native/Request/Unirest, Obj-C, OCaml, PHP x4, Postman CLI (since 11.71.7), PowerShell, Python http.client/Requests, R x2, Ruby, Rust reqwest, HTTPie, wget, Swift. Open in the right sidebar under 'Code'; the generators are open source (github.com/postmanlabs/postman-code-generators).",
+        "plan": "Free+",
+        "source": [
+          "https://learning.postman.com/docs/use/send-requests/create-requests/generate-code-snippets/",
+          "https://www.postman.com/release-notes/postman-app/"
+        ],
+        "confidence": "high"
+      }
+    ],
+    "cookies": [
+      {
+        "feature": "Cookie manager",
+        "detail": "Per-domain jar with create, edit and delete. Attributes: Domain, Path, HttpOnly, Secure, Expires. SameSite and the __Secure-/__Host- prefixes are not supported. Cookies are auto-added to requests and can be disabled per request. Scripts use pm.cookies.jar() with a domain allowlist. Cookies sync continuously from a browser or client via Interceptor or the proxy.",
+        "plan": "Free+",
+        "source": [
+          "https://learning.postman.com/docs/use/send-requests/response-data/cookies/",
+          "https://learning.postman.com/docs/use/capturing-request-data/syncing-cookies/"
+        ],
+        "confidence": "high"
+      }
+    ],
+    "certificates": [
+      {
+        "feature": "Client and CA certificates",
+        "detail": "Client certs per host (wildcard hosts, optional port), as CRT+KEY or PFX with a passphrase. Custom CA as PEM (can hold several). Stored locally and never synced. SSL verification can be toggled per request or globally. The web app needs the Desktop Agent.",
+        "plan": "Free+",
+        "source": [
+          "https://learning.postman.com/docs/use/send-requests/authorization/certificates/"
+        ],
+        "confidence": "high"
+      }
+    ],
+    "outbound_proxy": [
+      {
+        "feature": "Proxy for sending requests",
+        "detail": "Uses the system proxy by default (with proxy auth). Custom proxies: HTTP, SOCKS4/4A/5/5H (SOCKS since 11.56.4), with a bypass list and HTTP_PROXY/HTTPS_PROXY/NO_PROXY support. The web app cannot use the system proxy for online services.",
+        "plan": "Free+",
+        "source": [
+          "https://learning.postman.com/docs/getting-started/installation/proxy/",
+          "https://www.postman.com/release-notes/postman-app/"
+        ],
+        "confidence": "high"
+      }
+    ],
+    "history_console_response": [
+      {
+        "feature": "History",
+        "detail": "Sidebar history synced across devices when signed in. Also lists collection runs, mocks, simulations, and proxy/Interceptor sessions. Responses are saved only with the 'Save Responses' toggle on. History is private to each user in shared workspaces.",
+        "plan": "Free+",
+        "source": [
+          "https://learning.postman.com/docs/getting-started/basics/navigating-postman/"
+        ],
+        "confidence": "high"
+      },
+      {
+        "feature": "Console",
+        "detail": "Logs the actual request (headers, resolved variables, redirects), proxy and certificate details, IPs, ciphers and protocols, script logs, and the raw response. Stored locally; keeps the last 5,000 messages and 24 hours.",
+        "plan": "Free+",
+        "source": [
+          "https://learning.postman.com/docs/use/send-requests/response-data/troubleshooting-api-requests/"
+        ],
+        "confidence": "high"
+      },
+      {
+        "feature": "Response viewer",
+        "detail": "Views: JSON, XML, HTML, YAML, JS, Markdown, Raw, Hex, Base64, plus a preview for images, audio, video and HTML. Search, JSONPath/XPath filters, a Visualizer and SSE streams. Headers come with spec descriptions. Also shows test results, network info (IPs, HTTP version, certificate), timing and size breakdowns, and can save the response as an example or a file.",
+        "plan": "Free+",
+        "source": [
+          "https://learning.postman.com/docs/use/send-requests/response-data/responses/"
+        ],
+        "confidence": "high"
+      }
+    ],
+    "import_export": [
+      {
+        "feature": "Import",
+        "detail": "Sources: files, folders, cURL (including paste into the URL bar), raw text, URLs, and Git repos (GitHub, Bitbucket, GitLab, Azure DevOps). Postman data: collections, environments, globals, data dumps. Specs: OpenAPI (as a collection or spec plus collection), AsyncAPI, protobuf, GraphQL, Smithy. A migration wizard covers SoapUI, Hoppscotch, Insomnia and Thunder Client (auto-detects their folders on desktop); ReadyAPI goes through a conversion API. Free plan throttle: 5 collections per minute when each is over 500 KB.",
+        "plan": "Free+",
+        "source": [
+          "https://learning.postman.com/docs/getting-started/importing-and-exporting/importing-data/",
+          "https://learning.postman.com/docs/getting-started/importing-and-exporting/migrate-from-other-clients/"
+        ],
+        "confidence": "high"
+      },
+      {
+        "feature": "HAR import",
+        "detail": "Announced for v9.6+ in a 2022-01-11 blog post with options for cookies, responses and organization. Not mentioned in the current v12 import docs, so v12 status is unverified.",
+        "plan": "unknown",
+        "source": [
+          "https://blog.postman.com/postman-now-supports-importing-har-files/",
+          "https://learning.postman.com/docs/getting-started/importing-and-exporting/importing-data/"
+        ],
+        "confidence": "low"
+      },
+      {
+        "feature": "Export",
+        "detail": "Collections (v2.1 JSON), environments and globals. A bulk data dump of collections and environments is emailed as a link valid for 2 days; on teams only Admin or Super Admin can request it. Collection run results export to JSON (desktop only). Responses save to file. Native Git YAML files. Agent Mode skill exports docs to markdown.",
+        "plan": "Free+",
+        "source": [
+          "https://learning.postman.com/docs/getting-started/importing-and-exporting/exporting-data/",
+          "https://learning.postman.com/docs/tests-and-scripts/running-collections/intro-to-collection-runs/",
+          "https://www.postman.com/release-notes/postman-app/"
+        ],
+        "confidence": "high"
+      }
+    ],
+    "offline_and_no_login": [
+      {
+        "feature": "No-login / offline paths",
+        "detail": "The lightweight client is the documented no-account mode (local only, no collections or environments). The docs point organizations that cannot sync to it. Native Git workspaces run in 'Local mode' until Git is set up, and v12 notes say the Git-native design 'enables Postman to work in offline conditions too'. CLI local operations need no sign-in; 'postman init' creates a guest workspace unless '--no-cloud' is passed. Signing out removes synced data from local storage; at most 3 devices can be signed in at once.",
+        "plan": "Free+",
+        "source": [
+          "https://learning.postman.com/docs/getting-started/basics/using-api-client/",
+          "https://learning.postman.com/docs/getting-started/basics/syncing/",
+          "https://learning.postman.com/docs/use/native-git/sync/",
+          "https://learning.postman.com/docs/postman-cli/postman-cli-authenticate-and-configure/",
+          "https://www.postman.com/release-notes/postman-app/"
+        ],
+        "confidence": "medium"
+      }
+    ]
+  },
+  "plans_pricing": {
+    "tiers": [
+      {
+        "tier": "Free",
+        "price": "$0",
+        "users": "1, cannot create a team",
+        "source": [
+          "https://www.postman.com/pricing/",
+          "https://learning.postman.com/docs/billing/about-plans/"
+        ]
+      },
+      {
+        "tier": "Solo",
+        "price": "$9/month billed annually",
+        "users": "1",
+        "source": [
+          "https://www.postman.com/pricing/"
+        ]
+      },
+      {
+        "tier": "Team",
+        "price": "$19/user/month billed annually (also sold on AWS Marketplace)",
+        "users": "unlimited",
+        "source": [
+          "https://www.postman.com/pricing/"
+        ]
+      },
+      {
+        "tier": "Enterprise",
+        "price": "contact sales (third parties quote $49/user/month, unverified)",
+        "users": "unlimited",
+        "source": [
+          "https://www.postman.com/pricing/",
+          "https://apidog.com/blog/postman-free-plan-2026-one-user-limit/"
+        ]
+      }
+    ],
+    "meters_free_solo_team_enterprise": "AI credits 50 / 400 / 400 per user / 800 per user pooled (overage $0.05 / $0.04 / $0.035 per credit; none on Free). Flows credits 25 / 50 / 100 / 500. Monitor requests 1k / 10k / 10k / 10k. Postman API calls 10k / 100k / 1M / 10M. Integrations 5 / 10 / 50 / 100. Context Graph queries 1k / 5k / 5k / 5k. Cloud performance tests $0.04 per VU-hour on paid plans. Support: community and email, except Enterprise 24x5 with 24h SLA. Source: https://www.postman.com/pricing/",
+    "add_ons": "Simple Security (SSO/SAML, no SCIM): $6/user/month on Team. Advanced Security Administration: Enterprise, contact sales. Premium Support: Enterprise. Monitoring: $20 per 50k requests. Flows: $1 per 1,000 credits. Source: https://www.postman.com/pricing/",
+    "march_2026_changes": "Basic and Professional closed to new buyers. Basic customers move to Team; Professional customers can renew on their current plan. Collection runs and mock usage are unlimited on all plans. Partner workspaces come with Enterprise, and partner seats are free. The Free plan lost team collaboration (it previously allowed up to 3 users). Sources: https://learning.postman.com/docs/billing/about-plans/ and https://www.postman.com/pricing/"
+  },
+  "timeline_2025_2026": {
+    "source": [
+      "https://www.postman.com/release-notes/postman-app/"
+    ],
+    "items": [
+      "2025-04-17 11.41.4 Spec Hub",
+      "2025-04-23 11.42.3 MCP requests, Flows actions",
+      "2025-06-02 11.48.0 GitHub collection collaboration",
+      "2025-07-23 11.55.3 MCP tools in AI requests",
+      "2025-08-01 11.56.4 SOCKS proxy",
+      "2025-09-17 11.63.3 CLI on npm",
+      "2025-09-24 11.64.3 Live Sessions on all plans",
+      "2025-10-22 11.68.2 Agent Mode Skills",
+      "2025-11-03 11.70.0 BYOM",
+      "2025-11-06 11.70.5 Unix sockets / named pipes",
+      "2025-11-14 11.71.7 CLI code snippets",
+      "2025-12-02 11.74.1 Agent Mode GA",
+      "2025-12-05 11.74.5 gRPCurl import/export",
+      "2026-01-07 Fern acquisition (press)",
+      "2026-01-09 11.79.5 MCP Apps",
+      "2026-01-30 11.82.5 vault export/import",
+      "2026-03-01 12.0.1 v12 GA and new plans",
+      "2026-03-10 12.1.1 Fern docs",
+      "2026-03-27 12.3.7 command palette",
+      "2026-04-07 12.5.2 CLI generator",
+      "2026-04-20 12.7.1 Flows as MCP servers",
+      "2026-05-08 12.9.7 Application Inventory + Playwright",
+      "2026-05-14 12.10.5 webhooks",
+      "2026-06-01 12.13.0 Agent Mode on Cloud",
+      "2026-06-15 12.15.0 Browser Tool",
+      "2026-06-23 12.16.1 Shared Vault, Local Secret Protection, secure variables",
+      "2026-07-21 12.20.1 cloud code mocks, simulations, Browser Tool interactions",
+      "2026-08-04 12.22.2 Spec Hub visual editor",
+      "2026-08-10 12.23.0 agent automations (beta)",
+      "2026-08-27 12.25.6 Datasets, cloud performance tests",
+      "2026-09-22 12.29.1 Context Graph",
+      "2026-09-30 12.30.4 coding-agent plugin",
+      "2026-10-09 12.31.7 CLI bundled with app"
+    ]
+  },
+  "deprecations": [
+    {
+      "item": "Postbot removed in v12, replaced by Agent Mode",
+      "source": [
+        "https://www.postman.com/release-notes/postman-app/"
+      ]
+    },
+    {
+      "item": "API Builder deprecated; reachable only from the v11 app; migration to Spec Hub excludes OpenAPI 1.0, RAML and WSDL",
+      "source": [
+        "https://learning.postman.com/docs/design-apis/migrate-to-spec-hub/"
+      ]
+    },
+    {
+      "item": "Legacy Git and CI/CD integrations dropped in v12, replaced by Native Git and the CLI",
+      "source": [
+        "https://www.postman.com/release-notes/postman-app/"
+      ]
+    },
+    {
+      "item": "Newman unmaintained and incompatible with v3 collections",
+      "source": [
+        "https://learning.postman.com/docs/reference/newman-cli/migrate-to-postman-cli/"
+      ]
+    },
+    {
+      "item": "Scratch Pad removed in v10.18+",
+      "source": [
+        "https://learning.postman.com/docs/getting-started/basics/using-scratch-pad/"
+      ]
+    },
+    {
+      "item": "Collection v1 import rejected",
+      "source": [
+        "https://learning.postman.com/docs/getting-started/importing-and-exporting/importing-data/"
+      ]
+    },
+    {
+      "item": "PDF/HTML performance reports deprecated",
+      "source": [
+        "https://www.postman.com/release-notes/postman-app/"
+      ]
+    }
+  ],
+  "counter_evidence": [
+    {
+      "point": "The Free tier shrank to 1 user with no team. Reports of developer backlash come only from competitor content (Apidog blog dated 2026-09-08, a Barchart press piece); no independent survey was found.",
+      "source": [
+        "https://learning.postman.com/docs/billing/about-plans/",
+        "https://apidog.com/blog/postman-free-plan-2026-one-user-limit/",
+        "https://www.barchart.com/story/news/1207778/best-postman-alternatives-2026-where-to-go-after-postman-changes-pricing"
+      ],
+      "confidence": "medium"
+    },
+    {
+      "point": "Postman depends on an account and the cloud: the no-login client is limited, the VS Code extension needs sign-in, sign-out wipes local synced data, and only 3 devices can be signed in.",
+      "source": [
+        "https://learning.postman.com/docs/getting-started/basics/syncing/",
+        "https://learning.postman.com/docs/reference/vs-code-extension/install/"
+      ],
+      "confidence": "high"
+    },
+    {
+      "point": "CloudSEK (2024-12, older than the window) found 30,000+ public workspaces leaking live secrets; Postman responded with secret scanning.",
+      "source": [
+        "https://www.techradar.com/pro/security/thousands-of-widely-used-public-workspaces-are-leaking-data",
+        "https://securitybrief.co.uk/story/30-000-postman-workspaces-leak-api-keys-credentials"
+      ],
+      "confidence": "medium"
+    },
+    {
+      "point": "Capture is shallow next to Proxyman or HTTP Toolkit: one session at a time, desktop only, media bodies dropped, manual CA and proxy setup per device, and no documented rewrite, breakpoints, map-local, throttling or certificate-pinning handling.",
+      "source": [
+        "https://learning.postman.com/docs/use/capturing-request-data/capture-with-proxy/",
+        "https://learning.postman.com/docs/use/capturing-request-data/capturing-https-traffic/"
+      ],
+      "confidence": "medium"
+    },
+    {
+      "point": "Too many usage meters make costs hard to predict, and AI pay-as-you-go is on by default on paid plans.",
+      "source": [
+        "https://www.postman.com/pricing/",
+        "https://learning.postman.com/docs/billing/agent-mode-usage/"
+      ],
+      "confidence": "high"
+    },
+    {
+      "point": "Bruno (MIT licensed, local files, no login) is promoted as an alternative, but only by third-party sources.",
+      "source": [
+        "https://blogs.perficient.com/2026/01/02/bruno-the-developer-friendly-alternative-to-postman",
+        "https://toolradar.com/compare/bruno-vs-postman"
+      ],
+      "confidence": "low"
+    },
+    {
+      "point": "No independent hands-on review of v12 was found; heise repeats vendor claims without testing them.",
+      "source": [
+        "https://heise.de/-11198271"
+      ],
+      "confidence": "medium"
+    }
+  ],
+  "contradictions": [
+    {
+      "topic": "Enterprise price",
+      "side_a": "Postman: 'Contact sales'",
+      "side_b": "Apidog: $49/user/month",
+      "better_supported": "Postman, the official source",
+      "source": [
+        "https://www.postman.com/pricing/",
+        "https://apidog.com/blog/postman-free-plan-2026-one-user-limit/"
+      ]
+    },
+    {
+      "topic": "Free plan collection runs",
+      "side_a": "Official: unlimited",
+      "side_b": "CostBench (via search): 25 per month, likely legacy data",
+      "better_supported": "Official",
+      "source": [
+        "https://learning.postman.com/docs/billing/about-plans/"
+      ]
+    },
+    {
+      "topic": "Desktop Agent OS support",
+      "side_a": "Agent download page: macOS 10.11+, Windows 7+, Ubuntu 14.04+",
+      "side_b": "App requirements: macOS 11+, Windows 10+, Ubuntu 18.04+",
+      "better_supported": "The docs; the agent page looks stale",
+      "source": [
+        "https://www.postman.com/downloads/postman-agent/",
+        "https://learning.postman.com/docs/getting-started/installation/system-requirements/"
+      ]
+    },
+    {
+      "topic": "Offline use",
+      "side_a": "Release notes say v12 works offline",
+      "side_b": "Docs: sync stops without internet, and the lightweight client is the only no-account mode",
+      "better_supported": "Unresolved; whether the full app works without ever signing in is unverified",
+      "source": [
+        "https://www.postman.com/release-notes/postman-app/",
+        "https://learning.postman.com/docs/getting-started/basics/syncing/"
+      ]
+    },
+    {
+      "topic": "HAR import",
+      "side_a": "2022 blog: supported",
+      "side_b": "v12 import docs do not mention it",
+      "better_supported": "Unresolved",
+      "source": [
+        "https://blog.postman.com/postman-now-supports-importing-har-files/",
+        "https://learning.postman.com/docs/getting-started/importing-and-exporting/importing-data/"
+      ]
+    },
+    {
+      "topic": "Auth types",
+      "side_a": "Docs have pages for Akamai EdgeGrid and Atlassian auth",
+      "side_b": "The Collection v3 auth.type enum lacks both",
+      "better_supported": "Unresolved, low importance",
+      "source": [
+        "https://learning.postman.com/v11/llms.txt",
+        "https://learning.postman.com/docs/use/native-git/setup/"
+      ]
+    },
+    {
+      "topic": "Proxy port",
+      "side_a": "Current proxy flow: 5559",
+      "side_b": "Older flow: 5555",
+      "better_supported": "Depends on app version; 5559 is current",
+      "source": [
+        "https://learning.postman.com/docs/use/capturing-request-data/capture-with-proxy/",
+        "https://learning.postman.com/docs/use/capturing-request-data/capturing-http-requests/"
+      ]
+    }
+  ],
+  "fit_for_our_app": {
+    "context": "Wirepane is an HTTP Toolkit fork (AGPL-3.0, mockttp proxy). The README says Pro features are unlocked (map local/remote, mock, rewrite, delay, block, saved rules, HAR import/export, MCP/CLI) and no account is needed. The repo has a Send page (httptoolkit-ui/src/components/send, src/model/send), snippet export (src/model/ui/snippet-formats.ts, httpsnippet referenced), an MCP modal, and the graphql, har-validator, monaco-editor and openapi-directory dependencies. The capabilities of the existing Send page were not verified in this run.",
+    "positioning_4_5x": "Postman is an API platform with a recorder bolted on and a shrinking free tier; Proxyman is a paid interceptor. Wirepane can win by being interceptor-first, with a Postman-compatible client and AI-era traffic intelligence, all local, free and account-free.",
+    "borrow_high_P1": [
+      "Import Postman collections (v2.1 JSON first, then v3 YAML folders) plus environments and globals into Send. Postman's own migration wizard shows that import is a growth lever, and Newman's v3 incompatibility plus the 1-user Free plan create users looking to leave.",
+      "'Save selected exchanges as collection', grouped by host or endpoint, with responses saved as examples. Export as a Postman v2.1 collection alongside the existing HAR and snippet exports (src/model/ui/export.ts).",
+      "Variables and environments (global, collection, environment) and local-only secret storage that never syncs (the Local Vault model).",
+      "Auth helpers with inheritance: Bearer, Basic, API key, OAuth 2.0, Digest, AWS SigV4, JWT signing.",
+      "A cookie jar shared by Send and capture, with sync from the intercepted browser (the Postman Interceptor/proxy cookie-sync idea).",
+      "Paste cURL into the URL bar. Per-host client certificates (CRT+KEY or PFX) and a custom CA for Send. Per-request TLS and HTTP-version toggles."
+    ],
+    "borrow_medium_P2": [
+      "Multi-protocol Send: WebSocket, Socket.IO and SSE first, then GraphQL (introspection), gRPC, MQTT and MCP client requests.",
+      "pm.test-style scripts and a simple runner with data files. Postman gates data files and GraphQL/gRPC runs behind paid plans.",
+      "Stateful JS mock scenarios and simulations (delay, rate limit, error injection), building on the existing mock rules and the 'Network Conditions' roadmap item.",
+      "Contract check that validates captured traffic against a user's OpenAPI spec. Postman sells this as Application Inventory (Solo+) and API Catalog (Enterprise).",
+      "Git-friendly YAML files for rules and collections, inspired by Collection v3 and Native Git.",
+      "A traffic overview chart grouped by method, host, media type and status. A local webhook inbox would need an optional tunnel."
+    ],
+    "differentiators": [
+      "No account, no cloud, no seat or credit meters. Compare Postman Free: 1 user, 50 AI credits, cloud sync by default.",
+      "Interception depth: rules, breakpoints, Android ADB/QR, iOS, Docker. Postman has manual device setup, one session at a time and no rewrite.",
+      "A secret-leak lens on all captured traffic (the Passport Lens / Secret Scanner idea, fully local), plus a 'run a command through Wirepane' mode for auditing AI coding agents.",
+      "An MCP and LLM traffic inspector that decodes JSON-RPC tools/list and tools/call, SSE and streamable HTTP, and token usage. Postman acts as an MCP client but does not debug MCP or agent traffic.",
+      "Record a browser flow and turn it into a Playwright test with API assertions (the Browser Tool / Application Inventory idea), using the existing intercepted-browser launch.",
+      "Optional AI with your own key or a local model (explain an exchange, generate a test or mock) with no credit meter."
+    ],
+    "skip": "Cloud workspaces and teams, Flows, monitors, cloud load tests, API Catalog, Insights, governance, SDK/CLI generators, the Spec Hub designer, docs hosting, the API Network and Agent Mode on Cloud. They are infrastructure-heavy, Enterprise-oriented and off-mission.",
+    "risks": "Verify the licenses of postman-code-generators, the collection schema and SDK libraries before reusing them in an AGPL app (not checked). Use 'Import from Postman' wording only, for trademark reasons. Collection v3 is new (2026-03) and may change, so support v2.1 first. Avoid scope creep."
+  },
+  "sources": [
+    {
+      "title": "Download Postman (macOS)",
+      "url": "https://www.postman.com/downloads/?forceOS=mac",
+      "why": "user's link; product menu"
+    },
+    {
+      "title": "Downloads (markdown)",
+      "url": "https://www.postman.com/downloads.md",
+      "why": "all OS builds"
+    },
+    {
+      "title": "Pricing",
+      "url": "https://www.postman.com/pricing/",
+      "why": "tiers, meters, add-ons"
+    },
+    {
+      "title": "Release notes v12/v11",
+      "url": "https://www.postman.com/release-notes/postman-app/",
+      "why": "timeline (rendered via browser)"
+    },
+    {
+      "title": "What's New",
+      "url": "https://www.postman.com/new-postman/",
+      "why": "positioning"
+    },
+    {
+      "title": "March 2026 announcement",
+      "url": "https://blog.postman.com/new-capabilities-march-2026/",
+      "why": "v12 and plans"
+    },
+    {
+      "title": "Docs index",
+      "url": "https://learning.postman.com/llms.txt",
+      "why": "docs map"
+    },
+    {
+      "title": "About plans",
+      "url": "https://learning.postman.com/docs/billing/about-plans/",
+      "why": "March 2026 changes"
+    },
+    {
+      "title": "Install / web limitations",
+      "url": "https://learning.postman.com/docs/getting-started/installation/install-app/",
+      "why": "desktop vs web"
+    },
+    {
+      "title": "Lightweight API Client",
+      "url": "https://learning.postman.com/docs/getting-started/basics/using-api-client/",
+      "why": "no-login mode"
+    },
+    {
+      "title": "Postman Agents",
+      "url": "https://learning.postman.com/docs/getting-started/basics/about-postman-agent/",
+      "why": "web request routing"
+    },
+    {
+      "title": "Capture overview / proxy / HTTPS / Interceptor / Browser Tool",
+      "url": "https://learning.postman.com/docs/use/capturing-request-data/capture-overview/",
+      "why": "capture features"
+    },
+    {
+      "title": "Protocols",
+      "url": "https://learning.postman.com/docs/use/send-requests/protocols/protocols/",
+      "why": "protocol list"
+    },
+    {
+      "title": "Code snippets",
+      "url": "https://learning.postman.com/docs/use/send-requests/create-requests/generate-code-snippets/",
+      "why": "codegen targets"
+    },
+    {
+      "title": "Certificates",
+      "url": "https://learning.postman.com/docs/use/send-requests/authorization/certificates/",
+      "why": "mTLS and CA"
+    },
+    {
+      "title": "Proxy settings",
+      "url": "https://learning.postman.com/docs/getting-started/installation/proxy/",
+      "why": "outbound proxy"
+    },
+    {
+      "title": "Cookies",
+      "url": "https://learning.postman.com/docs/use/send-requests/response-data/cookies/",
+      "why": "cookie jar"
+    },
+    {
+      "title": "Import data",
+      "url": "https://learning.postman.com/docs/getting-started/importing-and-exporting/importing-data/",
+      "why": "formats"
+    },
+    {
+      "title": "Native Git sync",
+      "url": "https://learning.postman.com/docs/use/native-git/sync/",
+      "why": "Git model"
+    },
+    {
+      "title": "Postman CLI overview",
+      "url": "https://learning.postman.com/docs/postman-cli/postman-cli-overview/",
+      "why": "CLI commands"
+    },
+    {
+      "title": "Newman",
+      "url": "https://learning.postman.com/docs/reference/newman-cli/command-line-integration-with-newman/",
+      "why": "deprecation"
+    },
+    {
+      "title": "MCP server",
+      "url": "https://learning.postman.com/docs/reference/postman-api/postman-mcp-server/overview/",
+      "why": "MCP products"
+    },
+    {
+      "title": "Passport CLI README (npm registry)",
+      "url": "https://registry.npmjs.org/@postman%2fpostman-passport",
+      "why": "Passport Lens"
+    },
+    {
+      "title": "heise: Postman 12 (2026-03-04)",
+      "url": "https://heise.de/-11198271",
+      "why": "independent coverage"
+    },
+    {
+      "title": "Apidog: Postman Free 2026 (competitor)",
+      "url": "https://apidog.com/blog/postman-free-plan-2026-one-user-limit/",
+      "why": "counter-evidence, biased"
+    },
+    {
+      "title": "TechRadar: leaking workspaces",
+      "url": "https://www.techradar.com/pro/security/thousands-of-widely-used-public-workspaces-are-leaking-data",
+      "why": "security counter-evidence"
+    },
+    {
+      "title": "Free tools",
+      "url": "https://www.postman.com/tools",
+      "why": "no-signup tools"
+    }
+  ],
+  "cache_dir": "/Users/codingtech/.claude/cache/deep-researcher/dffcd3a2325c7034/raw-product-map/ (about 100 raw docs pages, npm JSON, release-notes HTML; no secrets seen)",
+  "errors": [
+    "StructuredOutput tool was not available to this worker, so the result is JSON text.",
+    "Stopped on the time limit. Not verified: Postman desktop tech stack; plan gating for proxy capture, Interceptor, Browser Tool, data requests, MCP server and plugin; Agent Mode on Cloud pricing; monthly (non-annual) prices; HAR/RAML/WSDL import in v12; gRPC reflection; whether the Postman proxy captures HTTP/2 or WebSocket; auth-type sub-pages (only titles and the schema enum were seen); AI Engineer, Fabric, Astro and Orbit details; licenses of Postman's open-source libraries.",
+    "Used the shared Playwright browser for the JS-only release notes page and did not close it, per the worker rule. Playwright MCP wrote snapshot and console files into /Users/codingtech/Documents/GitHub/httptoolkit/.playwright-mcp/, inside the repo we were told not to modify. I left them in place because sibling workers may share the folder; the orchestrator should delete or gitignore it.",
+    "Pricing backlash and Fabric GA date come from third-party sources only."
+  ]
+}

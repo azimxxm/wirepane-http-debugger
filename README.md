@@ -69,7 +69,10 @@ O'zgartirgan kodingiz saqlanib qoladi. Conflict chiqsa, uni oddiy `git merge`dag
 - [ ] O'z brendimiz — **Wirepane**:
   - [x] Nom, GitHub repo (`azimxxm/wirepane`), bundle ID (`com.wirepane.app`), `productName`, oyna va menu sarlavhalari, UI, terminal va CLI/MCP matnlari.
   - [x] Logo va ikonka. Manbasi `brand/icon.svg`. `./brand/build-icons.sh` undan barcha fayllarni (`.icns`, `.ico`, PNG, UI logosi, loading wordmark) qayta yasaydi.
-  - [ ] UI'ning asosiy rangi hali HTTP Toolkit'ning to'q sariq rangi. Uni logodagi teal rangga o'tkazish kerak.
+  - [ ] UI redesign ([reja](docs/design-plan.md), [tahlil](docs/design/critique-2026-10-10.md)). Rejada 3 bosqich bor:
+    1. Logoga mos ranglar va shriftlar.
+    2. Status bar, sahifa sarlavhalari, Intercept'ni qadamli boshlash ekraniga aylantirish va bo'sh holatlar.
+    3. Menu bar, ⌘K va ⌘,.
   - [ ] `wirepane.com`, `wirepane.dev` va `wirepane.app` domenlarini olish (2026-10-10 holatida bo'sh edi). Trademark tekshiruvi (USPTO, WIPO).
   - "HTTP Toolkit" nomi original loyihaga tegishli. AGPL kodni ishlatishga ruxsat beradi, lekin nomni ishlatishga emas. `LICENSE` va "based on HTTP Toolkit" degan attribution saqlanib qoladi.
   - Faqat foydalanuvchi ko'radigan joylar o'zgaradi. Quyidagilar ataylab "HTTP Toolkit"ligicha qoladi:
@@ -93,6 +96,21 @@ O'zgartirgan kodingiz saqlanib qoladi. Conflict chiqsa, uni oddiy `git merge`dag
     - P1: Access Control (LAN'dan kim ulana olishi), macOS system proxy toggle, iOS Simulator auto-setup, telefon ulash uchun QR.
     - P2: Highlight/Comment, Diff, Network Conditions, DNS Spoofing.
     - P3: Scripting, Reverse Proxy, native Swift + SwiftNIO versiya.
+- [ ] Postman'dan olinadigan feature'lar ([tadqiqot](docs/research/postman.md)):
+  - P1:
+    - Ushlangan trafikni collection sifatida saqlash.
+    - `pm.test` bilan mos assertion'lar, jonli trafik uchun ham.
+    - Postman v2.1 import va export.
+    - Variables va environments, secret'larni lokal saqlash bilan.
+    - Export'larda secret'larni yashirish.
+    - Auth helper'lar.
+  - P2:
+    - Aqlliroq mock'lar.
+    - OpenAPI kontrakt tekshiruvi.
+    - Collection runner.
+    - CLI va MCP orqali yozish operatsiyalari.
+    - `.http`, Hurl va Playwright export.
+    - Umumiy cookie jar.
 
 ## Eslatmalar
 

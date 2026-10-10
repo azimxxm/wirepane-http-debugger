@@ -1,0 +1,448 @@
+{
+  "angle": "How QA engineers and developers test with Postman in late 2026, and where it overlaps with a traffic debugger. Testing side: pm.* scripts and Chai assertions, Test Results, Collection Runner, data files and datasets, performance tests, monitors, mocks and simulations, contract/schema checks, Postman CLI vs Newman in CI, Visualizer, Flows and request chaining. Capture side: proxy, Interceptor, cookie sync, Browser Tool and Application Inventory, compared with Proxyman, Charles and HTTP Toolkit. Each item is judged for fit with our AGPL HTTP Toolkit fork.",
+  "summary": "Postman v12 (12.0.1, released 1 March 2026) is a test-automation platform. Its traffic capture only feeds requests into collections; it is not a debugger.\n\n**How QA engineers use Postman**\n- Exploratory API testing.\n- pm.* scripts run in a Node-like sandbox. Pre-request and post-response scripts can sit on the collection, folder or request, and run in that order.\n- Assertions use pm.test and pm.expect (Chai BDD). Schema checks use pm.response.to.have.jsonSchema, which is built on Ajv.\n- Requests are chained through scoped variables (global, collection, environment, data, local), plus pm.sendRequest and pm.execution.runRequest.\n- The Collection Runner handles iterations, delays, run order, CSV/JSON data and setNextRequest branching.\n- CI runs through Newman (htmlextra and JUnit reporters) or the Postman CLI.\n- Supporting features: example-matching and JavaScript mocks, Simulator chaos testing on mocks, monitors, VU-based performance tests, the Visualizer and Flows.\n\n**What Postman's capture can and cannot do**\n- Capture tools: a desktop proxy on port 5559, the Interceptor browser extension, cookie sync to the cookie jar, and the new Browser Tool (June 2026).\n- They record HTTP(S) into time-boxed sessions, filter traffic and save it to collections grouped by domain or endpoint.\n- They cannot pause, edit, rewrite, map local/remote, throttle or script live traffic. No v12 doc describes any of this, and users have asked for it since 2021.\n- Phones need a manual CA install. Android apps also need a network_security_config change.\n- Only one capture session can run at a time. Interceptor needs a signed-in workspace.\n- Proxyman, Charles and HTTP Toolkit cover the live-manipulation work that mobile QA relies on. TestDevLab's examples: Map Local for hard-to-reach error codes, Rewrite to turn 200 into 500, throttling, breakpoints and session export.\n\n**Market context**\n- The March 2026 plans made Free single-user.\n- Free no longer includes custom data files in the GUI Collection Runner, packages, datasets, Simulator, webhooks or Application Inventory.\n- Newman is officially 'no longer maintained' and cannot run v3 YAML collections. Its replacement, the Postman CLI, is closed source.\n- Cloud dependence and secret leaks keep pushing users toward local-first tools (Bruno, Yaak, Hurl):\n  - the AWS outage on 20 Oct 2025;\n  - CloudSEK's report of 30,000+ public workspaces leaking secrets (Dec 2024).\n\n**The two sides are converging**\n- Postman is moving into capture: Browser Tool with Agent Mode generating Playwright tests, and Application Inventory ('postman app test', May 2026), which runs pm.test assertions on captured Playwright traffic.\n- Debuggers are adding clients: HTTP Toolkit's Send page, and Reqable, which markets itself as 'Fiddler + Charles + Postman'.\n- No tool yet offers free, local assertions on live captured traffic from any device. That is the clearest 4–5x opening.\n\n**High-fit work for our fork (best first)**\n1. Embed Postman's Apache-2.0 libraries (postman-sandbox, chai-postman, postman-runtime) to run pm.test on Send requests and, passively, on captured exchanges, with a 'rerun tests on stored response' action. ASF confirms Apache-2.0 code can go into GPLv3 works; AGPL specifics need a legal check.\n2. Add environments and variables, with click-to-extract chaining in Send.\n3. Build a light runner with free CSV/JSON iterations, plus a headless CLI that writes JUnit/HTML.\n4. Export captured sessions for free as Postman v2.1/v3 collections and as HAR.\n5. Unlock the existing mockttp rules (mock, map, rewrite, delay, block) and expose chaos and network conditions on live traffic. Postman only offers this on paid mocks.\n6. Run OpenAPI/JSON-schema contract checks on captured traffic. The fork already has Ajv-based OpenAPI validation.\n\nLow fit: monitors, Flows, Insights and cloud load testing.\n\n**Contradictions**\n- Newman: the docs say 'no longer maintained', but npm shows 6.2.2 (Jan 2026) and 6.2.3 (Oct 2026). The best reading is maintenance patches only.\n- Newman and v12: the FAQ says it 'can't run v12 collections', but the schemas page says it can run 2.1 exports. Only v3 YAML is unsupported.\n- Medium post (May 2025) claims Postman logs secrets; Postman staff call it misleading. Shared values do sync to the cloud encrypted, by design.\n- Interceptor responses: 2021 complaints say they were missing; the 2026 docs say they are captured.\n- In ~2019 HTTP Toolkit's maker called the two tools 'complementary'; 2026 evidence shows them converging.\n\nReddit was blocked, so practitioner evidence comes from HN, Ministry of Testing, the Postman community, Stack Overflow and blogs. Raw doc snapshots are in /tmp/pm-research/docs/.",
+  "features": [
+    {
+      "name": "Pre-request & post-response scripts (Postman Sandbox, pm.*)",
+      "area": "Scripting & assertions",
+      "what_it_does": "JavaScript runs before a request and after its response in a Node-based sandbox. Scripts can sit on the collection, folder or request and run in that order. GraphQL, gRPC and webhook listeners have their own hooks (Before query, On message, On event). Snippets and Console logging are built in.",
+      "plan": "Free (also works in the signed-out lightweight client)",
+      "qa_value": "Core of Postman QA: test-data setup, auth tokens, assertions, debugging. Fit: HIGH. Our fork has no scripting (README lists it as P3). Embedding Apache-2.0 postman-sandbox would let existing pm.* suites run unchanged.",
+      "source": "https://learning.postman.com/docs/tests-and-scripts/write-scripts/intro-to-scripts/"
+    },
+    {
+      "name": "pm.test / pm.expect (Chai BDD) and pm.response.to.* helpers",
+      "area": "Scripting & assertions",
+      "what_it_does": "pm.test(name, fn) groups assertions and supports async tests (done callback) and pm.test.skip. pm.expect uses ChaiJS expect BDD syntax. Helpers include pm.response.to.have.status/header/jsonBody, to.be.ok/json, responseTime checks and pm.cookies assertions.",
+      "plan": "Free",
+      "qa_value": "Readable assertions QA engineers already know. Fit: HIGH. Show pass/fail on Send results and on captured exchanges as passive assertions on live app traffic; Postman cannot run tests on proxied traffic.",
+      "source": "https://learning.postman.com/docs/tests-and-scripts/write-scripts/postman-sandbox-reference/pm-test-expect/ ; https://learning.postman.com/docs/tests-and-scripts/write-scripts/test-examples/"
+    },
+    {
+      "name": "JSON Schema contract checks (jsonSchema via Ajv)",
+      "area": "Contract / schema validation",
+      "what_it_does": "pm.response.to.have.jsonSchema(schema) validates response JSON with Ajv, reporting all errors. The sandbox ships ajv (tv4 is deprecated in its favour). This is the main way practitioners do contract checks inside Postman tests.",
+      "plan": "Free",
+      "qa_value": "Catches contract drift on every run. Fit: HIGH. The fork already validates parameters against OpenAPI with Ajv for known APIs (Pro upstream); extend it to user specs and schemas applied to captured traffic.",
+      "source": "https://github.com/postmanlabs/chai-postman/blob/develop/lib/index.js ; https://learning.postman.com/docs/tests-and-scripts/write-scripts/postman-sandbox-reference/pm-require/ ; https://oneuptime.com/blog/post/2026-01-25-api-testing-with-postman/view"
+    },
+    {
+      "name": "Built-in libraries, Package Library and external npm/JSR packages (pm.require)",
+      "area": "Scripting & assertions",
+      "what_it_does": "Built-in libraries: ajv, chai, cheerio, csv-parse, lodash, moment, postman-collection, uuid, xml2js, plus Node modules (buffer, url, util, stream and others) and Web Crypto. The team Package Library holds reusable scripts. pm.require('npm:pkg@x.y.z') and 'jsr:' import public packages (exact versions only, 50 MB cap, no top-level await). Private npm packages need a paid plan. External packages are not supported in Newman.",
+      "plan": "Built-ins: Free. Package Library and private npm: Solo/Team/Enterprise, not available on Free.",
+      "qa_value": "Shared helpers across suites. Fit: MED. Supporting the built-ins covers most legacy scripts; npm import can come later.",
+      "source": "https://learning.postman.com/docs/tests-and-scripts/write-scripts/packages/external-package-registries/ ; https://learning.postman.com/docs/billing/resource-usage/"
+    },
+    {
+      "name": "Variables, scopes and request chaining",
+      "area": "Variables & chaining",
+      "what_it_does": "Scopes run global, collection, environment, data, local; the narrowest wins. Scripts use pm.globals, collectionVariables, environment, iterationData and variables get/set; requests use {{var}} templating. Vault holds secrets. Faker-based dynamic variables are included. Typical chain: login, save token, reuse it; create, save id, read and delete.",
+      "plan": "Needs a signed-in workspace; the signed-out client has no environments or variables.",
+      "qa_value": "Most-asked chaining workflow (Stack Overflow question with 176k views). Fit: HIGH. Our Send page has no variables; add environments plus click-to-extract from any captured JSON response.",
+      "source": "https://learning.postman.com/docs/tests-and-scripts/write-scripts/postman-sandbox-reference/pm-variables/ ; https://learning.postman.com/docs/getting-started/basics/using-api-client/ ; https://stackoverflow.com/questions/39551635/how-to-run-one-request-from-another-using-pre-request-script-in-postman"
+    },
+    {
+      "name": "pm.sendRequest and pm.execution.runRequest",
+      "area": "Variables & chaining",
+      "what_it_does": "pm.sendRequest sends ad-hoc HTTP from a script (await or callback). runRequest runs a saved collection request by ID with variable overrides, at most 10 calls per script; it is not supported in Newman or the VS Code extension.",
+      "plan": "Free",
+      "qa_value": "Token fetch, cleanup, delete verification (expect 404). Fit: MED, needed for compatibility.",
+      "source": "https://learning.postman.com/docs/tests-and-scripts/write-scripts/postman-sandbox-reference/pm-send-request/ ; https://learning.postman.com/docs/tests-and-scripts/write-scripts/postman-sandbox-reference/pm-execution/"
+    },
+    {
+      "name": "Test Results tab and rerun without resend",
+      "area": "Test results UI",
+      "what_it_does": "Shows passed/total with filters for Passed, Skipped and Failed. 'Refresh results' reruns post-response scripts against the last response without sending the request again, which is safe for POST/PUT/DELETE. Also offers snippets, Beautify and JSDoc hints, and Agent Mode can write or fix tests.",
+      "plan": "Free",
+      "qa_value": "Fast loop for writing tests. Fit: HIGH. Re-asserting against stored responses maps directly onto captured traffic: test any past exchange.",
+      "source": "https://learning.postman.com/docs/tests-and-scripts/write-scripts/test-scripts/"
+    },
+    {
+      "name": "Collection Runner (functional runs)",
+      "area": "Collection Runner",
+      "what_it_does": "Runs a collection or folder with iterations, a per-request delay in ms, drag-to-reorder and deselect, stop on error, keep variable values, cookie options and a mock redirect. Persisted bodies are capped below 300 KB, last only for the session and are visible only to whoever ran it. Results show per-iteration jumps, a Console log tab and an Errors tab with NETWORK/REQUEST/SCRIPT badges. Also: Run Again, share and comment, Jira issue creation, export (desktop only) and run history that includes CLI runs.",
+      "plan": "HTTP runs unlimited on all 2026 plans (was 25/month on Free in 2023); GraphQL/gRPC runs paid",
+      "qa_value": "Regression suites in a GUI. Fit: HIGH for a light, free, offline runner over saved Send requests and captured flows.",
+      "source": "https://learning.postman.com/docs/tests-and-scripts/running-collections/intro-to-collection-runs/ ; https://learning.postman.com/docs/billing/about-plans/"
+    },
+    {
+      "name": "Run-order control (setNextRequest / skipRequest)",
+      "area": "Collection Runner",
+      "what_it_does": "pm.execution.setNextRequest(name, id or null) branches or loops inside runs; it has no effect on a single Send. skipRequest() in a pre-request script skips a request. pm.execution.location gives the current path.",
+      "plan": "Free",
+      "qa_value": "Polling, retries, conditional flows. Fit: MED.",
+      "source": "https://learning.postman.com/docs/tests-and-scripts/running-collections/building-workflows/"
+    },
+    {
+      "name": "Data-driven runs (CSV/JSON data files) and Datasets",
+      "area": "Data-driven testing",
+      "what_it_does": "CSV (header row holds variable names, Unix line endings) or a JSON array drives one iteration per row; values resolve as data variables via pm.iterationData. Uploaded files must be under 5 MB, belong to one workspace, and don't work in scheduled runs, monitors, the CLI or Newman. Datasets are SQL-queryable views over CSV, JSON, spreadsheets or live MySQL/Postgres/SQL Server, reusable across runs, mocks and monitors.",
+      "plan": "GUI custom data files: paid only (Free shows 'Unavailable'). CLI -d with a local file has no plan restriction. Datasets: Solo/Team/Enterprise.",
+      "qa_value": "Negative and boundary cases at scale. Fit: HIGH. Postman paywalls this in the GUI in 2026, so free CSV/JSON iteration is a direct differentiator.",
+      "source": "https://learning.postman.com/docs/tests-and-scripts/running-collections/test-data/working-with-data-files/ ; https://www.postman.com/pricing/ ; https://learning.postman.com/docs/tests-and-scripts/datasets/overview/"
+    },
+    {
+      "name": "Performance testing (virtual users)",
+      "area": "Performance",
+      "what_it_does": "Reuses the functional collection as a load test: each VU loops the sequence. Load profiles: Fixed, Ramp-up, Spike, Peak. Pass criteria can be set on average, p90/p95/p99, error % or RPS. Runs locally (desktop app or 'postman performance run --pass-if') or in the cloud, billed per VU-hour. Includes a Tests-vs-VU heatmap, setup/teardown collections and CPU/memory metrics.",
+      "plan": "Local: unlimited on all plans. Cloud: paid, $0.04/VUh. Static IPs: Enterprise.",
+      "qa_value": "Finds correctness bugs that appear only under load, using the same pm.tests. Fit: LOW-MED. A simple 'repeat N times with concurrency' like Charles Repeat Advanced is cheap; full load testing is scope creep.",
+      "source": "https://learning.postman.com/docs/tests-and-scripts/performance-testing/performance-test-configuration/ ; https://www.charlesproxy.com/documentation/tools/repeat-advanced/"
+    },
+    {
+      "name": "Monitors and scheduled collection runs",
+      "area": "Monitors",
+      "what_it_does": "Runs collections or specs from the Postman Cloud on a schedule or via CLI trigger, across 20 regions. Options: retry on failure, timeout (10 min Free, 15 min paid), delays, email (up to 5 recipients), Slack or Teams alerts. Private runners cover internal APIs; static IPs are Enterprise-only. Usage counts one call per request per region.",
+      "plan": "Free: 1,000 monitoring requests/month, auto-paused at the limit. Paid: 10,000 plus overages. Minute-based schedules and multi-region need a paid plan; Enterprise can run every minute.",
+      "qa_value": "Synthetic checks on staging and prod. Fit: LOW. This is cloud infrastructure outside a local debugger's scope; local scheduled runs at most.",
+      "source": "https://learning.postman.com/docs/monitoring-your-api/setting-up-monitor/ ; https://learning.postman.com/docs/monitoring-your-api/monitor-usage/"
+    },
+    {
+      "name": "Mock servers from saved examples (matching algorithm)",
+      "area": "Mocks",
+      "what_it_does": "A cloud mock returns the best-matching saved example:\n- filters by HTTP method;\n- honours x-mock-response-code, -id and -name headers;\n- scores URL matches, deducting for trailing slash (−5), case (−10), wildcard (−20), IDs (−21) and document distance (−30);\n- applies a query-parameter match percentage and optional body/header matching (x-mock-match-request-body/headers);\n- echoes wildcard path variables into responses and can add a fixed delay.\nLimits: HTTP-only collections; mocks created from a collection are public unless set private.",
+      "plan": "Mock usage unlimited on all 2026 plans",
+      "qa_value": "Front-end and QA work before the backend is ready. Fit: HIGH. The fork has mockttp mock rules (Pro-gated upstream); add 'mock from captured response' and import of Postman examples, honouring x-mock-* headers.",
+      "source": "https://learning.postman.com/v11/docs/design-apis/mock-apis/matching-algorithm/ ; https://learning.postman.com/docs/design-apis/mock-apis/set-up-mock-servers/ ; https://learning.postman.com/docs/billing/about-plans/"
+    },
+    {
+      "name": "Code mocks (JavaScript) with scenarios and state",
+      "area": "Mocks",
+      "what_it_does": "Node-style request handlers using pm.mock (serve saved examples), pm.state (persistent state, isolated per session via the x-mock-session header or pm_mock_session cookie) and pm.datasets. Mocks can have multiple scenarios with conditions. Files live in postman/mocks/*.js plus config.yaml in Git; mocks can be deployed to the cloud, and Agent Mode can generate them (e.g. 'every third /charge fails with 500').",
+      "plan": "Local View: all plans. Cloud View: Solo/Team/Enterprise.",
+      "qa_value": "Stateful flows such as OTP, carts and polling jobs. Fit: MED. The fork's rules are stateless; a scriptable mock/rewrite step would cover this.",
+      "source": "https://learning.postman.com/docs/design-apis/mock-apis/local-mock-servers/"
+    },
+    {
+      "name": "Postman Simulator (simulations / chaos)",
+      "area": "Mocks",
+      "what_it_does": "Puts several code-mock servers behind one URL (routed by path or the x-mock-slug header). Conditions: fixed error status, response delay, rate limit (requests/min), and Chaos Mode (random 5xx at a set %). Logs filter by path, status and method. Starts from the app or 'postman collection run --simulate'.",
+      "plan": "Solo/Team/Enterprise",
+      "qa_value": "Resilience testing, but only against mocks, never real traffic. Fit: HIGH. The fork can apply delay, error and drop rules to live traffic (mockttp steps); expose them free as 'Network conditions / chaos' (README P2).",
+      "source": "https://learning.postman.com/docs/design-apis/simulate-conditions/"
+    },
+    {
+      "name": "Spec Hub validation and governance",
+      "area": "Contract / schema validation",
+      "what_it_does": "Live syntax validation of OpenAPI/AsyncAPI specs, governance-rule violations (Enterprise), and generation of collections from specs and specs from collections. The legacy v11 API Builder could validate requests, examples and responses against the linked OpenAPI definition.",
+      "plan": "Unlimited specs; governance: Enterprise",
+      "qa_value": "Design-first contract source of truth. Fit: MED. Let users attach an OpenAPI spec and flag non-conforming captured responses; the fork already has OpenAPI parsing and Ajv validation.",
+      "source": "https://learning.postman.com/docs/design-apis/specifications/validate-a-specification/ ; https://learning.postman.com/v11/docs/design-apis/api-builder/develop-apis/validating-elements-against-schema/"
+    },
+    {
+      "name": "Postman CLI ('postman collection run') in CI",
+      "area": "CLI & CI",
+      "what_it_does": "Signed, closed-source CLI (npm postman-cli has no license field), bundled with the app since 12.31.7. Runs a file path or cloud ID. Options include -e, -g, -n, -d (CSV/JSON), --iteration-data-dataset, --delay-request, --bail [folder|failure], -x/--suppress-exit-code, timeouts, --mock, --simulate (paid), SSL client certs and -i ordering. Reporters: cli, json, junit, html, plus a Newman-shaped JSON option. Uploads results when signed in and reports to API Catalog by default.",
+      "plan": "Free for HTTP; gRPC/GraphQL runs and Package Library: paid",
+      "qa_value": "Pipeline gate: exit 0 or non-zero; 'postman request' exits with the number of failed tests. Limits: v3 YAML collections get only the CLI reporter (no JUnit), no OAuth 2.0, no Alpine. Fit: MED. Ship an open headless runner (postman-runtime) that writes JUnit.",
+      "source": "https://learning.postman.com/docs/postman-cli/postman-cli-collections/ ; https://learning.postman.com/docs/postman-cli/postman-cli-reporters/ ; https://learning.postman.com/docs/postman-cli/postman-cli-options/ ; https://registry.npmjs.org/postman-cli"
+    },
+    {
+      "name": "Newman (legacy open-source runner)",
+      "area": "CLI & CI",
+      "what_it_does": "Apache-2.0 runner for v2.1 JSON collections. Reporters: cli, json, junit, progress, emojitrain, plus the community htmlextra reporter. Exits 0 on success; --bail stops on failure with exit 1; -x suppresses the exit code. Docs now say it is 'no longer maintained': it cannot run v3 collections and lacks external packages and runRequest. npm still shows patch releases in 2026.",
+      "plan": "Free / OSS",
+      "qa_value": "Still the most common CI recipe in blogs (GitHub Actions + htmlextra + JUnit artifacts). Fit: HIGH as a dependency. Embed newman/postman-runtime so users keep a free runner for exported v2.1 suites.",
+      "source": "https://learning.postman.com/docs/reference/newman-cli/command-line-integration-with-newman/ ; https://learning.postman.com/docs/reference/newman-cli/newman-options/ ; https://registry.npmjs.org/newman"
+    },
+    {
+      "name": "Visualizer",
+      "area": "Reporting / UX",
+      "what_it_does": "pm.visualizer.set(handlebarsTemplate, data) renders HTML, CSS and JS (e.g. Chart.js, D3) in the response's Visualization tab. pm.getData() is available inside the template, and Agent Mode can generate visualizations. Interactions that download resources are not supported.",
+      "plan": "Free (works signed out)",
+      "qa_value": "Turns large JSON into tables or charts for review and demos. Fit: LOW-MED. Nice to have; needs a secure render sandbox.",
+      "source": "https://learning.postman.com/docs/use/send-requests/response-data/visualizer/"
+    },
+    {
+      "name": "Postman Flows",
+      "area": "Automation",
+      "what_it_does": "Low-code canvas of blocks and connections for orchestrating API calls, with FQL or TypeScript for logic. Flows can be deployed as cloud endpoints, run from the CLI and built with Agent Mode.",
+      "plan": "Manual flows unlimited; automation credits 25 / 50 / 100 / 500 per month (Free / Solo / Team / Enterprise)",
+      "qa_value": "Mostly an automation and app builder; seldom central to QA. Fit: LOW, out of scope.",
+      "source": "https://learning.postman.com/flows/overview/ ; https://www.postman.com/pricing/"
+    },
+    {
+      "name": "Agent Mode: AI test generation and debugging",
+      "area": "AI",
+      "what_it_does": "Natural-language agent that writes and fixes post-response tests, visualizations, mocks and flows. Offers 'Debug with AI' on failed runner results. v12 release notes promise AI generation of contract, load, unit, integration and E2E tests.",
+      "plan": "AI credits: Free 50; Solo 400/month; Team 400/user/month; Enterprise 800/user/month",
+      "qa_value": "Speeds test writing for beginners. Fit: MED. The fork already ships an MCP integration so external agents can read traffic; add 'generate pm.tests from this exchange'.",
+      "source": "https://learning.postman.com/docs/tests-and-scripts/write-scripts/test-scripts/ ; https://www.postman.com/release-notes/postman-app/ ; https://www.postman.com/pricing/"
+    },
+    {
+      "name": "Built-in proxy capture sessions",
+      "area": "Traffic capture",
+      "what_it_does": "Desktop-only proxy (default port 5559; legacy builds 5555) with time-boxed sessions you can pause, resume and stop. Live filters cover status, method, URL (regex) and content type. 'Save responses' and 'Capture cookies' are optional toggles. Sessions get overview graphs and a History entry, can be renamed, and selected requests can be saved to a collection grouped by domain or endpoint. Limits: one proxy or Interceptor session at a time; image, audio and video bodies are not stored.",
+      "plan": "Free (desktop app only)",
+      "qa_value": "Bootstraps a test collection from real app traffic. Missing: breakpoints, rewrite, map local/remote, throttling, DNS spoofing and scripting on proxied traffic (community requests since 2021). Fit: the fork is already far ahead on capture; copy the 'save session to collection grouped by endpoint' step.",
+      "source": "https://learning.postman.com/docs/use/capturing-request-data/capture-with-proxy/ ; https://community.postman.com/t/modify-request-response-captured-via-proxy/26593"
+    },
+    {
+      "name": "HTTPS capture and device setup (postman-proxy-ca.crt)",
+      "area": "Traffic capture",
+      "what_it_does": "The CA is auto-installed on macOS (v10.17+) and Windows (v10.18+). Linux, iOS and Android need manual steps:\n- iOS: transfer the cert (e.g. AirDrop), install the profile and enable full trust;\n- Android: install the CA manually, and apps must ship a network_security_config to trust user CAs.\nOlder Windows builds needed OpenSSL 1.1.1. To regenerate the cert, delete the proxy folder.",
+      "plan": "Free",
+      "qa_value": "Works but is manual: no QR, ADB, Frida or simulator automation and no pinning bypass. Fit: the fork already has ADB, QR, Frida and automatic iOS setup interceptors, a major advantage to market.",
+      "source": "https://learning.postman.com/docs/use/capturing-request-data/capturing-https-traffic/"
+    },
+    {
+      "name": "Postman Interceptor (browser extension)",
+      "area": "Traffic capture",
+      "what_it_does": "Extension for Chrome, Safari, Firefox and Edge. Capture sessions with method and domain/URL regex filters; results open in Postman History (requests, responses, cookies) and can be saved to a collection. Requires being signed in to an internal workspace with edit access; Interceptor Bridge is needed on Linux and older apps. Communication with Postman is encrypted.",
+      "plan": "Free",
+      "qa_value": "Captures logged-in browser flows for replay and tests. About 700k Chrome users, rated 4.3. Fit: the fork intercepts browsers directly with no extension; add 'replay with captured cookies/auth'.",
+      "source": "https://learning.postman.com/docs/use/capturing-request-data/interceptor/ ; https://chromewebstore.google.com/detail/postman-interceptor/aicmkgpgakddgnaphhhpliifpcfhicfo"
+    },
+    {
+      "name": "Cookie sync to the cookie jar",
+      "area": "Traffic capture",
+      "what_it_does": "Continuously syncs cookies from the browser (via Interceptor) or from proxied clients into Postman's cookie jar for chosen domains, including subdomains; prefix the domain with https:// for an exact match. No capture session is needed, but the jar keeps only the latest value.",
+      "plan": "Free (proxy variant desktop-only)",
+      "qa_value": "Reuses real session cookies in API tests ('Sending cookies with postman' has 392k views on Stack Overflow). Fit: HIGH. 'Use cookies/auth from captured traffic in Send' is small and valuable.",
+      "source": "https://learning.postman.com/docs/use/capturing-request-data/syncing-cookies/ ; https://stackoverflow.com/questions/30890403/sending-cookies-with-postman"
+    },
+    {
+      "name": "Browser Tool (embedded browser with network and interactions)",
+      "area": "Traffic capture",
+      "what_it_does": "Browser tab inside the desktop app (Cmd+Shift+B) with its own cookie jar. A Network tab lists method, URL, status and duration with filters; devtools are included. 'Create Collection' turns selected requests into a collection. An Interactions tab logs clicks and navigation with Playwright locators, and Agent Mode can drive the app and generate Playwright and API tests.",
+      "plan": "Desktop; Agent Mode uses AI credits; file-writing workflows need a Git-connected workspace",
+      "qa_value": "Postman's 2026 move into capture plus test generation, a competitive threat. Fit: MED-HIGH. The fork already launches isolated Chrome and Firefox; add 'record flow, generate API test collection'.",
+      "source": "https://learning.postman.com/docs/use/capturing-request-data/browser-tool/inspect-traffic/ ; https://learning.postman.com/docs/use/capturing-request-data/browser-tool/agent-mode-web-apps/ ; https://www.postman.com/release-notes/postman-app/"
+    },
+    {
+      "name": "Application Inventory ('postman app test')",
+      "area": "Traffic capture + testing",
+      "what_it_does": "Runs your existing UI test command (Playwright via the postman-playwright plugin) and captures its network traffic. It matches calls to collection requests by method, path, query and body hints, then runs those requests' pm.test assertions on the observed responses. It reports unmatched calls and coverage gaps; --capture-only drafts a collection instead.",
+      "plan": "Solo/Team/Enterprise",
+      "qa_value": "This is tests on captured traffic; it catches contract drift and silent backend errors. Fit: HIGH. The fork's proxy could do this for any client (mobile, Docker, JVM), free and local.",
+      "source": "https://learning.postman.com/docs/postman-cli/postman-cli-application/ ; https://www.postman.com/release-notes/postman-app/"
+    },
+    {
+      "name": "Webhook listeners",
+      "area": "Inbound traffic",
+      "what_it_does": "Each listener gets a public https://<id>.webhook.pstmn.io URL. It records raw headers and body, can forward events to localhost or respond with a custom status, offers one-click replay and runs scripts on events. Limit: 100 requests/min per IP.",
+      "plan": "Solo/Team/Enterprise",
+      "qa_value": "Debugging Stripe or GitHub webhooks. Fit: MED. The fork could offer local inbound capture and a reverse proxy (README P3); public tunnelling would need infrastructure.",
+      "source": "https://learning.postman.com/docs/use/send-requests/protocols/webhooks/"
+    },
+    {
+      "name": "Postman Insights (production traffic agent)",
+      "area": "Observability",
+      "what_it_does": "An agent next to containers (Kubernetes, ECS, EC2, Beanstalk) infers endpoints, errors and latency. Repro Mode recreates failing calls from real traffic.",
+      "plan": "Enterprise",
+      "qa_value": "Production observability. Fit: LOW, out of scope for a desktop debugger.",
+      "source": "https://learning.postman.com/docs/insights/overview/"
+    },
+    {
+      "name": "Import/export bridges (HAR, cURL, Postman collections v2.1/v3)",
+      "area": "Interop",
+      "what_it_does": "'postman collection import' builds a collection from cURL or a HAR file. v12 uses the open Collection 3.0 multi-file YAML format; v2.1 JSON export still works for Newman. Proxyman exports 'Postman Collection 2'; Reqable imports Postman collections.",
+      "plan": "Free",
+      "qa_value": "The debugger-to-Postman handoff is a common workflow (e.g. Charles to cURL to Postman). Fit: HIGH. The fork should export Postman v2.1 and v3 YAML plus HAR for free; HAR export is Pro in upstream HTTP Toolkit.",
+      "source": "https://learning.postman.com/docs/postman-cli/postman-cli-collections/ ; https://learning.postman.com/docs/use/use-collections/collections-schemas/ ; https://docs.proxyman.com/basic-features/import-export"
+    },
+    {
+      "name": "Debugger capabilities Postman lacks (comparison)",
+      "area": "Traffic capture: gap analysis",
+      "what_it_does": "Debuggers offer:\n- Proxyman: Breakpoint, Map Local (file and directory), Map Remote, JavaScript scripting (onRequest/onResponse, 'Run as Mock API'), Network Conditions, DNS Spoofing, Access Control, Diff, Save Session, Reverse Proxy, simulator certificate helper.\n- Charles 5.2.1: Rewrite, Map Local/Remote, throttling, Repeat Advanced (iterations plus concurrency for load testing), Validate (W3C) and Auto Save.\n- HTTP Toolkit: breakpoints (free), mock/transform/error-injection rules (Pro), one-click Android interception including pinning bypass.\nPostman v12 documents none of these for proxy or Interceptor traffic.",
+      "plan": "n/a",
+      "qa_value": "Mobile QA recipes rely on these (TestDevLab): Map Local for hard-to-reach errors, long titles and localization; Rewrite 200 to 500; throttling for loading states; breakpoints for in-flight edits. Fit: our core moat; unlock and polish rather than imitate Postman.",
+      "source": "https://docs.proxyman.com/advanced-features ; https://www.charlesproxy.com/documentation/tools/repeat-advanced/ ; https://httptoolkit.com/pricing/ ; https://www.testdevlab.com/blog/mock-and-manipulate-network-traffic-to-test-your-mobile-application-via-charles-and-proxyman"
+    }
+  ],
+  "facts": [
+    {
+      "claim": "Postman 12.0.1 (v12) shipped with a Git-native Local View, the Collection 3.0 multi-file YAML format, local mock servers, a unified workbench and Agent Mode. [confidence: high]",
+      "date": "2026-03-01",
+      "source": "https://www.postman.com/release-notes/postman-app/"
+    },
+    {
+      "claim": "The March 2026 plans (Free/Solo/Team/Enterprise) replaced Free/Basic/Professional/Enterprise. Free is limited to 1 user and cannot create a team. Collection runs and mock-server usage are unlimited on all plans. [confidence: high]",
+      "date": "2026-03",
+      "source": "https://learning.postman.com/docs/billing/about-plans/"
+    },
+    {
+      "claim": "Pricing page snapshot: Solo $9/month and Team $19/user/month (billed annually). Free gets 1,000 monitoring requests/month and 50 AI credits; 'Custom data files (Collection Runner)' and the shared package library are Unavailable on Free; Insights is Enterprise-only; cloud performance tests cost $0.04/VUh. [confidence: high]",
+      "date": "2026-10-10",
+      "source": "https://www.postman.com/pricing/"
+    },
+    {
+      "claim": "Collection Runner custom data files are 'available on Postman paid plans'. Uploaded data files must be under 5 MB and don't work with scheduled runs, monitors, the Postman CLI or Newman; the CLI still accepts a local file via -d. [confidence: high]",
+      "date": "2026",
+      "source": "https://learning.postman.com/docs/tests-and-scripts/running-collections/test-data/working-with-data-files/"
+    },
+    {
+      "claim": "Postman's docs say 'Newman is no longer maintained'. It can't run v3 YAML collections, external npm/JSR packages or pm.execution.runRequest; the Postman CLI is the recommended replacement. [confidence: high]",
+      "date": "2026",
+      "source": "https://learning.postman.com/docs/reference/newman-cli/migrate-to-postman-cli/"
+    },
+    {
+      "claim": "[Contradiction] Despite the 'no longer maintained' notice, npm shows newman 6.2.2 (2026-01-16) and 6.2.3 (2026-10-09), so it is in maintenance-only mode. The FAQ says Newman can't run collections created or updated in v12, while the schemas page says it can run 2.1.0 exports; only v3 YAML is unsupported. [confidence: high]",
+      "date": "2026-10-09",
+      "source": "https://registry.npmjs.org/newman ; https://learning.postman.com/docs/use/use-collections/collections-schemas/ ; https://learning.postman.com/docs/postman-cli/postman-cli-troubleshooting/"
+    },
+    {
+      "claim": "postman-cli 1.73.0 on npm has no license or repository field, i.e. it is closed source. The CLI has been bundled with the desktop app since 12.31.7. [confidence: high]",
+      "date": "2026-10-09",
+      "source": "https://registry.npmjs.org/postman-cli ; https://www.postman.com/release-notes/postman-app/"
+    },
+    {
+      "claim": "postman-runtime, postman-sandbox, postman-collection, chai-postman and newman are Apache-2.0 and actively pushed (Sep–Oct 2026). The ASF states Apache-2.0 software can be included in GPLv3 works. [confidence: high; AGPL-3.0-specific combination: medium, legal check advised]",
+      "date": "2026-10",
+      "source": "https://github.com/postmanlabs/postman-sandbox ; https://github.com/postmanlabs/postman-runtime ; https://www.apache.org/licenses/GPL-compatibility.html"
+    },
+    {
+      "claim": "The open-source postman-sandbox README lists pm.test, info, vault, globals, cookies, execution, variables, visualizer, sendRequest, environment, iterationData and collectionVariables, but not pm.require, pm.datasets, pm.mock or pm.state, which are v12 app features. [confidence: medium]",
+      "date": "2026-09",
+      "source": "https://github.com/postmanlabs/postman-sandbox/blob/develop/README.md"
+    },
+    {
+      "claim": "pm.response.to.have.jsonSchema is implemented in chai-postman using Ajv (allErrors: true). The sandbox has deprecated tv4 in favour of ajv. [confidence: high]",
+      "date": "2026",
+      "source": "https://github.com/postmanlabs/chai-postman/blob/develop/lib/index.js ; https://learning.postman.com/docs/tests-and-scripts/write-scripts/postman-sandbox-reference/pm-require/"
+    },
+    {
+      "claim": "Postman CLI reporters are CLI, JSON, JUnit and HTML for v2 collections, but only the CLI reporter works for v3 YAML collections. 'postman request' exits with the number of failed tests. The CLI has no OAuth 2.0 support and doesn't run on Alpine. [confidence: high]",
+      "date": "2026",
+      "source": "https://learning.postman.com/docs/postman-cli/postman-cli-reporters/ ; https://learning.postman.com/docs/postman-cli/postman-cli-options/ ; https://learning.postman.com/docs/postman-cli/postman-cli-run-collection/"
+    },
+    {
+      "claim": "Postman proxy: default port 5559, desktop-only, one proxy or Interceptor session at a time, and image/audio/video bodies are not captured. The CA is auto-installed on macOS (v10.17+) and Windows (v10.18+) but must be installed manually on iOS and Android; Android apps also need a network_security_config. [confidence: high]",
+      "date": "2026",
+      "source": "https://learning.postman.com/docs/use/capturing-request-data/capture-with-proxy/ ; https://learning.postman.com/docs/use/capturing-request-data/capturing-https-traffic/"
+    },
+    {
+      "claim": "No Postman v12 page describes breakpoints, rewrite, map local/remote, throttling or scripting for proxied or Interceptor traffic. Community threads (2021) asking to modify proxied traffic got no solution. [confidence: medium, absence of evidence; threads are old]",
+      "date": "2021-08 / 2026",
+      "source": "https://community.postman.com/t/modify-request-response-captured-via-proxy/26593 ; https://community.postman.com/t/proxify-the-request-from-local-browser-modify-the-response-and-return-back-to-the-browser-how/29018"
+    },
+    {
+      "claim": "Postman Interceptor on the Chrome Web Store: about 700,000 users, rated 4.3/5 from 949 ratings, version 3.2.1, last updated 24 Aug 2025. [confidence: medium, store snapshot]",
+      "date": "2025-08-24",
+      "source": "https://chromewebstore.google.com/detail/postman-interceptor/aicmkgpgakddgnaphhhpliifpcfhicfo"
+    },
+    {
+      "claim": "The Browser Tool shipped in 12.15.0 (17 Jun 2026); the Interactions log with Playwright locators followed in 12.20.1 (21 Jul 2026). Agent Mode can generate Playwright and API tests from browsing sessions. [confidence: high]",
+      "date": "2026-06-17",
+      "source": "https://www.postman.com/release-notes/postman-app/ ; https://learning.postman.com/docs/use/capturing-request-data/browser-tool/overview/"
+    },
+    {
+      "claim": "Application Inventory (12.9.7, Solo and up) captures traffic from Playwright tests and validates it against collections, running their pm.test assertions on observed responses and reporting unmatched calls and coverage gaps. [confidence: high]",
+      "date": "2026-05-08",
+      "source": "https://www.postman.com/release-notes/postman-app/ ; https://learning.postman.com/docs/postman-cli/postman-cli-application/"
+    },
+    {
+      "claim": "Webhook listeners (12.10.5, Solo and up) provide a public URL, forwarding to localhost and replay, limited to 100 requests/min per IP. Cloud performance tests and Datasets arrived in 12.25.6 (27 Aug 2026). [confidence: high]",
+      "date": "2026-05-14 / 2026-08-27",
+      "source": "https://www.postman.com/release-notes/postman-app/ ; https://learning.postman.com/docs/use/send-requests/protocols/webhooks/"
+    },
+    {
+      "claim": "CloudSEK reported more than 30,000 public Postman workspaces leaking secrets, with GitHub, Slack and Salesforce among the most exposed. Postman responded with secret detection and removal of exposed workspaces. [confidence: high]",
+      "date": "2024-12-23",
+      "source": "https://cloudsek.com/blog/postman-data-leaks-the-hidden-risks-lurking-in-your-workspaces ; https://blog.treblle.com/apis-exposed-postman-data-breach-lessons"
+    },
+    {
+      "claim": "[Contradiction] A May 2025 Medium post claimed 'Postman is logging all your secrets'. Postman staff (Danny Dainton) called it misleading: the author had intercepted their own connection, and values sync encrypted by design while the 'secret' type only masks the UI. [confidence: medium]",
+      "date": "2025-05-22",
+      "source": "https://anonymousdata.medium.com/postman-is-logging-all-your-secrets-and-environment-variables-9c316e92d424 ; https://community.postman.com/t/does-postman-log-secrets-and-environment-variables-data-to-postman-cloud/80341"
+    },
+    {
+      "claim": "The HN thread on the Postman outage (537 points, 293 comments) has many users moving to Bruno, Insomnia and Yaak. One notes that organisations keep large Postman suites as docs and regression tests with embedded pm JavaScript; another says non-dev QA staff use Bruno. [confidence: medium, anecdotal]",
+      "date": "2025-10-20",
+      "source": "https://news.ycombinator.com/item?id=45645172 ; https://news.ycombinator.com/item?id=45649651"
+    },
+    {
+      "claim": "HN Charles Proxy thread (331 points):\n- Proxyman praised for its simulator certificate workflow and scripting.\n- Charles kept for named session grouping.\n- HTTP Toolkit praised for one-click Android pinning bypass and its isolated browser.\n- One user describes a Charles to cURL to Postman workflow for reverse-engineering mobile APIs.\n[confidence: medium, anecdotal]",
+      "date": "2025-12-20",
+      "source": "https://news.ycombinator.com/item?id=46333983 ; https://news.ycombinator.com/item?id=46335905 ; https://news.ycombinator.com/item?id=46334213"
+    },
+    {
+      "claim": "QA blog by a TestDevLab engineer: mobile QA uses Map Local for hard-to-reach error codes, long titles and localization; Charles Rewrite to turn 200 into 500; throttling; breakpoints; repeat; and session export (Proxyman can export to Postman). Proxyman's free Map Local was capped at 2 endpoints. [confidence: medium]",
+      "date": "2024-02-28 (updated 2024-12-16)",
+      "source": "https://www.testdevlab.com/blog/mock-and-manipulate-network-traffic-to-test-your-mobile-application-via-charles-and-proxyman"
+    },
+    {
+      "claim": "OneUptime guide describes a typical QA pipeline: CRUD chaining with pm.environment.set, CSV-driven negative login tests, pm.response.to.have.jsonSchema, and Newman with htmlextra and JUnit reporters on GitHub Actions, uploading artifacts with if: always(). [confidence: medium]",
+      "date": "2026-01-25",
+      "source": "https://oneuptime.com/blog/post/2026-01-25-api-testing-with-postman/view"
+    },
+    {
+      "claim": "Ministry of Testing Club thread (8.4k views): testers say they use Postman mostly for exploratory testing and run Newman in CI. There was strong backlash to the 2023 cap on local Collection Runner runs (25/month on Free) as a paywall on client-side functionality. [confidence: medium, older]",
+      "date": "2023-02-21",
+      "source": "https://club.ministryoftesting.com/t/postman-as-a-non-enterprise-tool-is-basically-dead/65177"
+    },
+    {
+      "claim": "EuroSTAR tutorial 'API Exploratory Testing with Postman' (Gil Zilberfeld, 3.5 h) teaches charter-based exploration by probing parameters, headers and body. [confidence: medium; the page's year is ambiguous]",
+      "date": "2024-06-11",
+      "source": "https://conference.eurostarsoftwaretesting.com/event/2024/api-exploratory-testing-with-postman/"
+    },
+    {
+      "claim": "Stack Overflow demand signals (old, 2014–2017): 'Sending cookies with postman' 392k views; 'How to run one request from another using Pre-request Script' 176k; 'How do I capture https requests with Postman native app' 36k; 'Postman / Newman retry in case of failure' 19k. [confidence: high data, old questions]",
+      "date": "2015–2017",
+      "source": "https://stackoverflow.com/questions/30890403/sending-cookies-with-postman ; https://stackoverflow.com/questions/39551635/how-to-run-one-request-from-another-using-pre-request-script-in-postman ; https://stackoverflow.com/questions/41366909/how-do-i-capture-https-requests-with-postman-native-app-using-windows-10 ; https://stackoverflow.com/questions/43495848/postman-newman-retry-in-case-of-failure"
+    },
+    {
+      "claim": "Charles 5.2.1 'Repeat Advanced' adds iterations and concurrency, 'mostly useful for Load Testing'. 'Validate' sends recorded responses to W3C validators, i.e. passive validation of captured traffic. [confidence: high]",
+      "date": "2026",
+      "source": "https://www.charlesproxy.com/documentation/tools/repeat-advanced/ ; https://www.charlesproxy.com/documentation/tools/validate/"
+    },
+    {
+      "claim": "Proxyman documents 32 advanced features, including Breakpoint, Map Local/Remote, Scripting, Network Conditions, DNS Spoofing, Access Control, Diff and Save Session. It can export Postman Collection 2. It has no test-assertion feature. [confidence: high]",
+      "date": "2026",
+      "source": "https://docs.proxyman.com/advanced-features ; https://docs.proxyman.com/basic-features/import-export ; https://docs.proxyman.com/scripting/script"
+    },
+    {
+      "claim": "Reqable markets itself as 'Reqable = Fiddler + Charles + Postman': capture, breakpoints, rewrite and Python scripts plus collections, environment variables, Postman import and iOS/Android apps. No assertions or runner are described. [confidence: medium]",
+      "date": "2026",
+      "source": "https://reqable.com/en-US/"
+    },
+    {
+      "claim": "HTTP Toolkit's Send page composes and resends requests but has no variables, scripts, tests or collections ('full scripting support' is listed as coming soon). Pro gates HAR import/export, code export, OpenAPI docs and validation for 2,600+ APIs, and mock/transform rules. [confidence: high]",
+      "date": "2026",
+      "source": "https://httptoolkit.com/docs/reference/send-page/ ; https://httptoolkit.com/pricing/"
+    },
+    {
+      "claim": "In ~2019 HTTP Toolkit's maker Tim Perry called Postman and HTTP Toolkit 'very nicely complimentary tools' with possible future overlap. By 2026 both sides have converged (Postman Browser Tool and App Inventory; HTTP Toolkit Send; Reqable). [confidence: medium; the 2019 source is outdated]",
+      "date": "~2019",
+      "source": "https://www.producthunt.com/p/http-toolkit/http-view"
+    },
+    {
+      "claim": "Our fork:\n- Upstream gates Map Local, Map Remote, mock, rewrite, delay and block behind Pro; only breakpoints and passthrough are free.\n- It has 30+ interceptors, including Android ADB/QR/Frida, iOS Frida and automatic setup, Docker, JVM, Electron and system proxy.\n- It has Ajv-based OpenAPI validation, an MCP client config modal, a Send page and HAR/snippet export (Pro).\n[confidence: high]",
+      "date": "2026-10-10",
+      "source": "/Users/codingtech/Documents/GitHub/httptoolkit/httptoolkit-ui/src/model/rules/rules.ts ; /Users/codingtech/Documents/GitHub/httptoolkit/httptoolkit-ui/src/model/interception/interceptors.ts ; /Users/codingtech/Documents/GitHub/httptoolkit/httptoolkit-ui/src/model/api/openapi.ts ; /Users/codingtech/Documents/GitHub/httptoolkit/README.md"
+    },
+    {
+      "claim": "Postman's own best-practice guide recommends recording E2E flows with Interceptor, capturing traffic via the proxy for security testing, and gating deploys with 'postman collection run'. [confidence: medium]",
+      "date": "2026",
+      "source": "https://www.postman.com/postman-best-practices/api-test-automation/"
+    },
+    {
+      "claim": "The signed-out 'lightweight API Client' can send requests, keep history, run post-response scripts and use the Visualizer. Collections, environments and variables require sign-in, and the Scratch Pad is deprecated. [confidence: high]",
+      "date": "2026",
+      "source": "https://learning.postman.com/docs/getting-started/basics/using-api-client/"
+    },
+    {
+      "claim": "GitHub issue #11252 'Export collections with WebSocket and gRPC requests' has been open since Sep 2022 (211 reactions, 106 comments). Issue #1966 'Running multiple collections in Collection Runner' has been open since 2016. [confidence: high]",
+      "date": "2022-09-09 / 2016-04-04",
+      "source": "https://github.com/postmanlabs/postman-app-support/issues/11252 ; https://github.com/postmanlabs/postman-app-support/issues/1966"
+    }
+  ],
+  "pain_points": [
+    "Free plan became single-user with no team creation in March 2026; any collaboration now needs Solo or Team. https://learning.postman.com/docs/billing/about-plans/",
+    "Data-driven testing is paywalled in the GUI: 'Custom data files (Collection Runner)' is Unavailable on Free. Package Library, Datasets, Simulator, Webhooks and Application Inventory need Solo or higher. https://www.postman.com/pricing/ ; https://learning.postman.com/docs/tests-and-scripts/running-collections/test-data/working-with-data-files/",
+    "CI churn:\n- Newman is declared unmaintained and can't run v3 YAML collections.\n- External packages and runRequest are unsupported in Newman.\n- The replacement Postman CLI is closed source and reports to Postman's cloud by default.\n- For v3 collections the CLI offers only its terminal reporter (no JUnit), and it has no OAuth 2.0 and no Alpine support.\nhttps://learning.postman.com/docs/reference/newman-cli/migrate-to-postman-cli/ ; https://learning.postman.com/docs/postman-cli/postman-cli-reporters/",
+    "Login and cloud dependence: the signed-out client lacks collections, environments and variables. The 20 Oct 2025 outage broke 'local' work (HN, 537 points). https://learning.postman.com/docs/getting-started/basics/using-api-client/ ; https://news.ycombinator.com/item?id=45645172",
+    "Proxy and Interceptor can only observe: no breakpoints, rewrite, map local/remote, throttling or scripts on proxied traffic. Users have asked since 2021. https://community.postman.com/t/modify-request-response-captured-via-proxy/26593",
+    "Device setup friction: manual CA install on iOS and Android, Android apps must add a network_security_config, and legacy Windows needed OpenSSL 1.1.1. There is no QR, ADB or simulator automation and no pinning bypass. https://learning.postman.com/docs/use/capturing-request-data/capturing-https-traffic/",
+    "Capture limits:\n- only one proxy or Interceptor session at a time; the proxy is desktop-only;\n- media bodies are not captured;\n- Interceptor needs a signed-in internal workspace with edit access, plus Bridge on Linux;\n- past breakages: 'Error creating interceptor session' (2022), missing PATCH bodies and responses (2021).\nhttps://learning.postman.com/docs/use/capturing-request-data/interceptor/ ; https://github.com/postmanlabs/postman-app-support/issues/11451 ; https://community.postman.com/t/21385",
+    "Run results are ephemeral: response bodies are persisted only if under 300 KB, only for the current session, and only for the user who ran them. Large runs can exhaust memory, and export is desktop-only. https://learning.postman.com/docs/tests-and-scripts/running-collections/intro-to-collection-runs/",
+    "Secrets risk in cloud workspaces: 30k+ public workspaces leaked secrets (CloudSEK, Dec 2024), and the 'secret' variable type only masks the UI. https://cloudsek.com/blog/postman-data-leaks-the-hidden-risks-lurking-in-your-workspaces ; https://community.postman.com/t/does-postman-log-secrets-and-environment-variables-data-to-postman-cloud/80341",
+    "Lock-in: collections containing WebSocket or gRPC requests can't be exported (issue open since 2022, 211 reactions). Newer pm APIs (pm.require npm, datasets, mock, state) are app-only and absent from the open-source sandbox. https://github.com/postmanlabs/postman-app-support/issues/11252 ; https://github.com/postmanlabs/postman-sandbox",
+    "Monitoring quotas: Free gets 1,000 monitor requests/month and monitors auto-pause at the limit. Minute-based schedules and manual multi-region selection are paid. https://learning.postman.com/docs/monitoring-your-api/monitor-usage/ ; https://learning.postman.com/docs/monitoring-your-api/setting-up-monitor/",
+    "Bloat and friction: users say creating a quick request is heavy and want a simple searchable history. Testers resent paywalls on client-side features. https://news.ycombinator.com/item?id=45652467 ; https://club.ministryoftesting.com/t/postman-as-a-non-enterprise-tool-is-basically-dead/65177",
+    "Mock surprises: equal-score ties return an arbitrary example unless path variables differ or x-mock-response-name/id is sent. Collection mocks are HTTP-only. Resilience conditions (Simulator) apply only to mocks and are paid. https://learning.postman.com/v11/docs/design-apis/mock-apis/matching-algorithm/ ; https://learning.postman.com/docs/design-apis/simulate-conditions/",
+    "The Runner can't run multiple collections in one run (issue open since 2016); retrying flaky requests needs custom setNextRequest logic (Stack Overflow, 19k views). https://github.com/postmanlabs/postman-app-support/issues/1966 ; https://stackoverflow.com/questions/43495848/postman-newman-retry-in-case-of-failure"
+  ],
+  "errors": "- **Reddit blocked:** WebSearch rejects reddit.com for this agent, and reddit.com JSON endpoints returned non-JSON. No Reddit threads were verified; practitioner evidence comes from Hacker News, Ministry of Testing Club, the Postman community forum, Stack Overflow, GitHub issues and QA blogs instead.\n- **JS-only page:** Postman's release-notes page renders with JavaScript, so it was read through the shared Playwright browser. The browser was intentionally left open, per worker rules.\n- **Missing talks:** No POST/CON 25/26 talk recordings were found. The EuroSTAR page's year is ambiguous (2024 per the speaker section).\n- **Broken or empty pages:** The Charles breakpoints doc URL returned 404; the feature was confirmed via the TestDevLab blog and HN instead. Chrome Web Store review texts could not be retrieved.\n- **Pricing page:** Read only up to 100k of 152k characters; the full plan table was intact.\n- **Older evidence:** Some community sources date from 2021–2023 and are marked as older in the claims.\n- **Doc snapshots:** Raw learning.postman.com markdown copies used as inputs are in /tmp/pm-research/docs/ (re-readable; these are not report files)."
+}

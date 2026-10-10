@@ -1,0 +1,278 @@
+{
+  "already_have": [
+    {
+      "feature": "Send page: tabbed HTTP client (method, URL, headers, body) with cancel; tabs persist for everyone",
+      "where": "/Users/codingtech/Documents/GitHub/httptoolkit/httptoolkit-ui/src/model/send/send-store.ts; /Users/codingtech/Documents/GitHub/httptoolkit/httptoolkit-ui/src/model/send/send-request-model.ts; /Users/codingtech/Documents/GitHub/httptoolkit/httptoolkit-ui/src/components/send/send-page.tsx",
+      "gap": "Tabs only: each SendRequest holds an id, method, URL, headers and body. There are no names, folders, collections, variables, environments, auth helpers, scripts or tests. trackResponseEvents applies the response only at response-end, so SSE and long streams show nothing until they close. HTTP only. Tabs are stored in localStorage through mobx-persist."
+    },
+    {
+      "feature": "Resend a captured exchange in Send",
+      "where": "/Users/codingtech/Documents/GitHub/httptoolkit/httptoolkit-ui/src/model/send/send-store.ts (addRequestInputFromExchange); /Users/codingtech/Documents/GitHub/httptoolkit/httptoolkit-ui/src/components/view/view-page.tsx (onPrepareToResendRequest)",
+      "gap": "Works one exchange at a time. The captured response is not kept as an example, and there is no 'save selection as collection'."
+    },
+    {
+      "feature": "Paste cURL into the URL bar; load a HAR request into the current tab",
+      "where": "/Users/codingtech/Documents/GitHub/httptoolkit/httptoolkit-ui/src/components/send/send-request-line.tsx (onPaste, parseCurlCommand); /Users/codingtech/Documents/GitHub/httptoolkit/httptoolkit-ui/src/components/send/send-page.tsx (updateFromHar, buildRequestInputFromHarRequest)",
+      "gap": "No import of Postman collections or environments, OpenAPI specs or .http files."
+    },
+    {
+      "feature": "Copy as code snippet (all @httptoolkit/httpsnippet targets) from View and Send",
+      "where": "/Users/codingtech/Documents/GitHub/httptoolkit/httptoolkit-ui/src/model/ui/export.ts; /Users/codingtech/Documents/GitHub/httptoolkit/httptoolkit-ui/src/model/ui/snippet-formats.ts; /Users/codingtech/Documents/GitHub/httptoolkit/httptoolkit-ui/src/model/ui/snippet-export-sanitization.ts; /Users/codingtech/Documents/GitHub/httptoolkit/httptoolkit-ui/src/components/send/request-pane.tsx",
+      "gap": "No Postman collection, .http or Hurl output. The sanitizer has no Authorization or Cookie handling, so those headers export verbatim. No addTarget was found in the httpsnippet dist, so custom formats would need their own generators."
+    },
+    {
+      "feature": "HAR export: one exchange, a multi-selection or the whole session",
+      "where": "/Users/codingtech/Documents/GitHub/httptoolkit/httptoolkit-ui/src/model/http/har.ts (generateHar); /Users/codingtech/Documents/GitHub/httptoolkit/httptoolkit-ui/src/model/ui/export.ts (exportHar); /Users/codingtech/Documents/GitHub/httptoolkit/httptoolkit-ui/src/components/view/multi-selection-summary-pane.tsx; /Users/codingtech/Documents/GitHub/httptoolkit/httptoolkit-ui/src/components/view/view-event-list-buttons.tsx",
+      "gap": "Secrets are exported as-is. No Postman v2.1 collection export."
+    },
+    {
+      "feature": "HAR import into the traffic list",
+      "where": "/Users/codingtech/Documents/GitHub/httptoolkit/httptoolkit-ui/src/model/events/events-store.ts (loadFromHar); /Users/codingtech/Documents/GitHub/httptoolkit/httptoolkit-ui/src/model/http/har.ts (parseHar)",
+      "gap": "Imported traffic goes to View only. It cannot become saved requests, a set of mocks or a test suite."
+    },
+    {
+      "feature": "Bulk ZIP export (HAR plus snippets in chosen languages)",
+      "where": "/Users/codingtech/Documents/GitHub/httptoolkit/httptoolkit-ui/src/model/ui/zip-export-service.ts; /Users/codingtech/Documents/GitHub/httptoolkit/httptoolkit-ui/src/model/ui/zip-export-formats.ts; /Users/codingtech/Documents/GitHub/httptoolkit/httptoolkit-ui/src/components/view/zip-export-dialog.tsx",
+      "gap": "No collection or test-file formats, and no redaction."
+    },
+    {
+      "feature": "Mock from captured traffic: one exchange becomes a static-response rule; a multi-selection becomes a rule group",
+      "where": "/Users/codingtech/Documents/GitHub/httptoolkit/httptoolkit-ui/src/model/rules/rule-creation.ts (buildRuleFromExchange); /Users/codingtech/Documents/GitHub/httptoolkit/httptoolkit-ui/src/components/view/view-page.tsx (onBuildRuleFromSelectedExchanges)",
+      "gap": "Matches the exact request, includes bodies only up to 1 MB and gives one response per endpoint. No ID generalization, no example selection by status header and no mock-only port."
+    },
+    {
+      "feature": "Rules engine: static or file response, forward-to-host (map remote), transformer (match-replace on body, host, path and query; headers; JSON update), request/response breakpoints, webhook, mockttp delay/close/reset/timeout steps, WebSocket rules",
+      "where": "/Users/codingtech/Documents/GitHub/httptoolkit/httptoolkit-ui/src/model/rules/definitions/http-rule-definitions.ts (HttpStepLookup); /Users/codingtech/Documents/GitHub/httptoolkit/httptoolkit-ui/src/model/rules/definitions/websocket-rule-definitions.ts; /Users/codingtech/Documents/GitHub/httptoolkit/httptoolkit-ui/src/model/rules/rules-store.ts",
+      "gap": "No percentage-based flaky/chaos or bandwidth presets, no assertion step, and nothing links rules to tests."
+    },
+    {
+      "feature": "Rules persisted and saved/loaded as files",
+      "where": "/Users/codingtech/Documents/GitHub/httptoolkit/httptoolkit-ui/src/model/rules/rule-serialization.ts (serializeRules, deserializeRules); /Users/codingtech/Documents/GitHub/httptoolkit/httptoolkit-ui/src/model/rules/rules-store.ts",
+      "gap": "Saved as one JSON blob, which does not diff well. Postman mocks and examples cannot be imported."
+    },
+    {
+      "feature": "Send reuses the proxy-wide settings: client certificate per host, extra CAs, upstream proxy, DNS options and TLS key log",
+      "where": "/Users/codingtech/Documents/GitHub/httptoolkit/httptoolkit-ui/src/model/send/send-store.ts (sendRequest)",
+      "gap": "No per-request TLS or HTTP-version toggles. No cookie jar."
+    },
+    {
+      "feature": "OpenAPI-aware traffic: custom specs per base URL, operation matching, Ajv parameter validation, body schemas",
+      "where": "/Users/codingtech/Documents/GitHub/httptoolkit/httptoolkit-ui/src/model/api/api-store.ts (addCustomApi); /Users/codingtech/Documents/GitHub/httptoolkit/httptoolkit-ui/src/model/api/openapi.ts (matchOpenApiOperation, getBodySchema); /Users/codingtech/Documents/GitHub/httptoolkit/httptoolkit-ui/src/model/api/build-api-metadata.ts",
+      "gap": "Does not validate response status or body against the spec and gives no session pass/fail report. Cannot turn a spec into a collection."
+    },
+    {
+      "feature": "CLI/MCP bridge (httptoolkit-ctl / httptoolkit-mcp)",
+      "where": "/Users/codingtech/Documents/GitHub/httptoolkit/httptoolkit-ui/src/services/ui-api/operations/; /Users/codingtech/Documents/GitHub/httptoolkit/httptoolkit-server/src/api/ui-operation-bridge.ts",
+      "gap": "Only events.list, events.get-outline, events.get-request-body, events.get-response-body, events.clear, interceptors.list, interceptors.activate, proxy.get-config and rules.list exist. No send, mock-creation, collection or test-run operations, so there is no CI path. The server takes the operation list from the UI at runtime, so new UI operations need no server change."
+    },
+    {
+      "feature": "Sent requests are recorded in the traffic list (works like a history)",
+      "where": "/Users/codingtech/Documents/GitHub/httptoolkit/httptoolkit-ui/src/model/send/send-store.ts (eventStore.recordSentRequest)",
+      "gap": "Send has no history panel for reopening past requests, and they are lost when the session is cleared."
+    }
+  ],
+  "proposals": [
+    {
+      "feature": "Save captured traffic as a collection (Collections and History sidebar in Send)",
+      "postman_equivalent": "'Save to collection' from proxy/Interceptor capture (grouped by domain or endpoint), Browser Tool 'Create Collection', collections with folders and saved examples",
+      "user_value": "One click turns real traffic from a browser, phone or Docker container into named, reusable requests, with the real responses kept as examples and nothing retyped. Beginners can learn an API from what their app actually sends.",
+      "building_blocks": "/Users/codingtech/Documents/GitHub/httptoolkit/httptoolkit-ui/src/components/view/view-page.tsx (onBuildRuleFromSelectedExchanges pattern); /Users/codingtech/Documents/GitHub/httptoolkit/httptoolkit-ui/src/components/view/multi-selection-summary-pane.tsx; /Users/codingtech/Documents/GitHub/httptoolkit/httptoolkit-ui/src/model/send/send-request-model.ts (buildRequestInputFromExchange); /Users/codingtech/Documents/GitHub/httptoolkit/httptoolkit-ui/src/model/send/send-store.ts (addRequestInput); /Users/codingtech/Documents/GitHub/httptoolkit/httptoolkit-ui/src/model/http/har.ts (generateHar); /Users/codingtech/Documents/GitHub/httptoolkit/httptoolkit-ui/src/index.tsx; /Users/codingtech/Documents/GitHub/httptoolkit/httptoolkit-ui/src/components/send/send-page.tsx",
+      "approach": "1. Add a new CollectionStore in src/model/collections/ (Collection > Folder > SavedRequest {name, request, examples, auth, tests}), created in index.tsx with 2 lines. Store it in IndexedDB, not mobx-persist, which is backed by localStorage.\n2. Add 'Save to collection' to the exchange context menu and the multi-selection pane, reusing buildRequestInputFromExchange.\n3. Group by host, then by the first path segment. Dedupe by method plus normalized path, with numeric or UUID segments becoming {{id}}.\n4. Move the base URL into a {{baseUrl}} variable and the Authorization header into collection auth (#6).\n5. Save examples as HAR entries built with generateHar, with a 1 MB body cap.\n6. Add a new sidebar component mounted in send-page.tsx with 1 line. Opening an item creates a Send tab; CollectionStore keeps the tab-to-item link, so the persisted SendRequest schema does not change.\n7. Add a History section built from the exchanges Send recorded.",
+      "effort": "L",
+      "priority": "P1",
+      "risks": "localStorage holds about 5 MB per origin, and data is tied to the UI origin (:8080 in dev versus the bundled app), so an origin change loses it: use IndexedDB plus file export/import now, and file-backed storage through the desktop API later. Upstream changes to the Send page can conflict, so limit edits to mount points. Keep the sidebar collapsible for beginners."
+    },
+    {
+      "feature": "Assertions on sent requests and on live captured traffic (pm.test-compatible)",
+      "postman_equivalent": "Post-response scripts with pm.test and pm.expect, jsonSchema checks (Ajv), the Test Results tab with 'Refresh results', and Application Inventory ('postman app test', Solo+ only), which runs tests on captured Playwright traffic",
+      "user_value": "QA writes a check once and sees pass/fail on every matching request from any device or app, without resending. Rerunning on a stored response is safe for POST and DELETE. The research found no free tool that does this.",
+      "building_blocks": "/Users/codingtech/Documents/GitHub/httptoolkit/httptoolkit-ui/src/model/send/send-store.ts; /Users/codingtech/Documents/GitHub/httptoolkit/httptoolkit-ui/src/components/send/response-pane.tsx; /Users/codingtech/Documents/GitHub/httptoolkit/httptoolkit-ui/src/components/view/http/http-details-pane.tsx; /Users/codingtech/Documents/GitHub/httptoolkit/httptoolkit-ui/src/model/events/events-store.ts; /Users/codingtech/Documents/GitHub/httptoolkit/httptoolkit-ui/src/model/api/openapi.ts (Ajv usage); /Users/codingtech/Documents/GitHub/httptoolkit/httptoolkit-ui/src/services/ui-worker.ts (worker pattern)",
+      "approach": "1. Add src/model/testing/test-engine.ts. It runs scripts in a dedicated new Web Worker (src/services/test-worker.ts) with a documented pm subset:\n- pm.test, and pm.expect via chai (MIT);\n- pm.response: code, status, headers, json(), text(), responseTime, plus to.have.status/header/jsonBody/jsonSchema checks via Ajv;\n- pm.request;\n- get/set for pm.environment, pm.collectionVariables and pm.globals, with changes posted back as a diff;\n- console capture, a 1 s timeout, and no fetch or importScripts.\n2. Store tests on the SavedRequest, folder or collection, filled by #1 and by #3 imports.\n3. Watch mode: a MobX reaction on completed exchanges runs the tests of any saved request whose method and URL pattern match. Results are keyed by exchange id.\n4. Add a Tests card to response-pane.tsx and http-details-pane.tsx (1 line each), a pass/fail tag the View filter can use, and a 'Rerun on this response' action.",
+      "effort": "L",
+      "priority": "P1",
+      "risks": "Imported collections carry untrusted JS: run it only in the worker, with no network, a timeout and explicit consent per collection. Users will expect the full Postman sandbox (lodash, cheerio, pm.sendRequest, pm.require), so document the subset and report unsupported calls clearly. CPU load under heavy capture: run only matched exchanges, debounce, keep it in the worker. If postman-sandbox or chai-postman (Apache-2.0) are reused, check AGPL compatibility."
+    },
+    {
+      "feature": "Postman Collection v2.1 and environment/globals import and export",
+      "postman_equivalent": "Import and export of collections (v2.1 JSON), environments and globals; the migration wizard",
+      "user_value": "Postman users can switch with one drag-and-drop, which matters given the 1-user Free plan, forced login and Newman's lack of v3 support. Wirepane users can share captured flows with people on Postman, Bruno, Insomnia or Newman.",
+      "building_blocks": "/Users/codingtech/Documents/GitHub/httptoolkit/httptoolkit-ui/src/model/send/send-request-model.ts (buildRequestInputFromHarRequest pattern); /Users/codingtech/Documents/GitHub/httptoolkit/httptoolkit-ui/src/model/http/har.ts (parseHarRequest); /Users/codingtech/Documents/GitHub/httptoolkit/httptoolkit-ui/src/components/view/view-event-list-buttons.tsx (file import pattern); /Users/codingtech/Documents/GitHub/httptoolkit/httptoolkit-ui/src/model/ui/export.ts (saveFile pattern); /Users/codingtech/Documents/GitHub/httptoolkit/httptoolkit-ui/src/components/view/multi-selection-summary-pane.tsx",
+      "approach": "1. Add new files in src/model/collections/postman/: import-v21.ts, export-v21.ts and environment.ts.\n2. Import: accept info.schema v2.0 or v2.1 and reject v1 with a hint. Map folders and items, url.raw with {{vars}}, headers (respecting disabled ones), the raw/urlencoded/formdata/graphql/file body modes, auth, variables, event scripts (kept as test and pre-request source for #2) and responses (as examples).\n3. Map environments to ours, with secret-typed values going to the secret store. Support common dynamic variables ({{$guid}}, {{$timestamp}}, {{$randomInt}}) in the resolver.\n4. Export: a whole collection, or straight from a View multi-selection via a button next to HAR, with captured responses as examples including originalRequest.\n5. Add one Import entry that detects the file type: Postman collection or environment, HAR, cURL or OpenAPI. Parse large files in a worker.",
+      "effort": "M",
+      "priority": "P1",
+      "risks": "Schema variants and lossy mapping (unsupported auth types, formdata file paths, script semantics): show an import report. Collection v3 YAML (2026-03) is still changing, so do v2.1 first. Trademark: use 'Import from Postman' / 'Postman-compatible' wording and no logo. Exports must go through redaction (#5)."
+    },
+    {
+      "feature": "Variables, environments and local secret storage, with click-to-extract chaining",
+      "postman_equivalent": "Global, collection, environment, data and local variable scopes, {{var}} templating, the environment switcher, Vault/secret variables, chaining with pm.environment.set",
+      "user_value": "The same requests run against dev, staging and prod. Tokens and IDs flow from one response into the next request. Secrets never leave the machine and never appear in exports.",
+      "building_blocks": "/Users/codingtech/Documents/GitHub/httptoolkit/httptoolkit-ui/src/model/send/send-store.ts (sendRequest); /Users/codingtech/Documents/GitHub/httptoolkit/httptoolkit-ui/src/model/send/send-request-model.ts (RequestInput, EditableBody); /Users/codingtech/Documents/GitHub/httptoolkit/httptoolkit-ui/src/components/send/send-request-line.tsx; /Users/codingtech/Documents/GitHub/httptoolkit/httptoolkit-ui/src/model/ui/export.ts (generateCodeSnippetFromRequestInput); /Users/codingtech/Documents/GitHub/httptoolkit/httptoolkit-ui/src/services/desktop-api.ts; /Users/codingtech/Documents/GitHub/httptoolkit/httptoolkit-desktop/src/preload.cts",
+      "approach": "1. Add src/model/collections/variables.ts. Scopes are global, collection, environment, data and local, and the narrowest wins. Add an environment picker to the Send toolbar.\n2. Add one seam in send-store.ts sendRequest: requestInput = await prepareForSend(requestInput), defined in a new send-pipeline.ts. It resolves {{vars}} in the URL, headers and decoded text bodies (re-encoded through EditableBody), then applies auth (#6) and cookies (#12). Recorded exchanges show the resolved values.\n3. Highlight unresolved {{var}} in the URL bar.\n4. Add 'Set as variable' on JSON values in Send and View bodies. It stores the JSONPath and re-extracts the value from later responses.\n5. Secrets: a per-variable flag, with values kept in the OS keychain via Electron safeStorage (a small API in preload.cts and desktop-api.ts). They stay masked in the UI, snippets and exports.",
+      "effort": "M",
+      "priority": "P1",
+      "risks": "Touches upstream send-store.ts (keep it to 2 lines) and the desktop preload. Template only text content types so binary bodies are not corrupted. Web dev mode has no keychain, so fall back to memory only. Snippets should keep {{vars}} unresolved by default."
+    },
+    {
+      "feature": "Secret-safe exports and a local secret-leak lens",
+      "postman_equivalent": "The secret variable type and Secret Scanner, Postman's response to secrets leaking from 30,000+ public workspaces",
+      "user_value": "HAR, ZIP, snippet and collection exports are safe to attach to bug tickets by default. QA can see which captured requests send tokens in cleartext or to third parties.",
+      "building_blocks": "/Users/codingtech/Documents/GitHub/httptoolkit/httptoolkit-ui/src/model/ui/export.ts; /Users/codingtech/Documents/GitHub/httptoolkit/httptoolkit-ui/src/model/http/har.ts (generateHar); /Users/codingtech/Documents/GitHub/httptoolkit/httptoolkit-ui/src/model/ui/snippet-export-sanitization.ts; /Users/codingtech/Documents/GitHub/httptoolkit/httptoolkit-ui/src/model/ui/zip-export-service.ts; /Users/codingtech/Documents/GitHub/httptoolkit/httptoolkit-ui/src/components/view/multi-selection-summary-pane.tsx; /Users/codingtech/Documents/GitHub/httptoolkit/httptoolkit-ui/src/components/view/view-event-list-buttons.tsx",
+      "approach": "1. Add a new src/model/ui/redaction.ts that masks:\n- the Authorization, Proxy-Authorization, Cookie and Set-Cookie headers, plus X-*-Key and X-*-Token headers;\n- sensitive query params (token, key, secret, password, signature, code);\n- body values matching known token patterns: JWT, AWS AKIA, GitHub ghp_, Slack xox, Stripe sk_live and private keys.\n2. Run it as a post-processing wrapper on the generated HAR or collection object at each export call site (one line each), behind a 'Redact secrets' checkbox that is on by default.\n3. Leak lens: the same detectors tag exchanges (for example secret:jwt or secret:cleartext) so the existing View filter can find them.",
+      "effort": "S",
+      "priority": "P1",
+      "risks": "Missed detections give false confidence: call it best-effort and show what was redacted. Each export call site is an upstream file, so keep edits to one line. A redacted HAR cannot be replayed; say so in the dialog."
+    },
+    {
+      "feature": "Auth helpers with inheritance",
+      "postman_equivalent": "Authorization tab: Inherit, API Key, Bearer, Basic, Digest, OAuth 2.0, JWT Bearer and AWS SigV4, set at request, folder or collection level",
+      "user_value": "No hand-built auth headers, tokens refresh automatically, and imported Postman collections keep working.",
+      "building_blocks": "/Users/codingtech/Documents/GitHub/httptoolkit/httptoolkit-ui/src/model/send/send-store.ts; /Users/codingtech/Documents/GitHub/httptoolkit/httptoolkit-ui/src/services/server-api.ts (sendRequest); /Users/codingtech/Documents/GitHub/httptoolkit/httptoolkit-ui/src/components/send/request-pane.tsx; /Users/codingtech/Documents/GitHub/httptoolkit/httptoolkit-ui/src/components/send/send-request-headers-card.tsx (card pattern); /Users/codingtech/Documents/GitHub/httptoolkit/httptoolkit-ui/src/components/send/send-card-section.tsx",
+      "approach": "1. Add src/model/collections/auth.ts with these types: none, inherit, bearer, basic, api-key, oauth2 (client credentials, password, refresh), aws-sigv4 and jwt.\n2. Apply auth inside prepareForSend (#4), after variable resolution, so signatures cover the final encoded body.\n3. Store auth on the SavedRequest, folder or collection rather than on RequestInput, so the upstream schema stays unchanged. Add a new Auth card mounted in request-pane.tsx with 1 line.\n4. Send OAuth2 token requests through ServerApi.sendRequest (no CORS) and cache the tokens in the secret store.\n5. Later: OAuth2 auth-code with PKCE through the system browser and a loopback redirect, and Digest via a challenge retry.",
+      "effort": "M",
+      "priority": "P1",
+      "risks": "Auth bugs look like server bugs, so show the applied auth in the sent request view. SigV4 and JWT need small libraries (aws4 and jose, both MIT), which add bundle size. Tokens are secrets (#4, #5)."
+    },
+    {
+      "feature": "Smarter mocks from collections and captures (examples, status selection, ID generalization, mock-only port)",
+      "postman_equivalent": "Mock servers built from saved examples with x-mock-response-code/-name selection; code mocks with scenarios (cloud)",
+      "user_value": "Frontend and mobile developers keep working when the backend is down or unfinished. QA can force any error case with one header. It works for phones through the proxy and stays fully local.",
+      "building_blocks": "/Users/codingtech/Documents/GitHub/httptoolkit/httptoolkit-ui/src/model/rules/rule-creation.ts (buildRuleFromExchange, buildDefaultGroupWrapper); /Users/codingtech/Documents/GitHub/httptoolkit/httptoolkit-ui/src/model/rules/definitions/http-rule-definitions.ts (StaticResponseStep); /Users/codingtech/Documents/GitHub/httptoolkit/httptoolkit-ui/src/model/rules/rules-store.ts (draftRules); /Users/codingtech/Documents/GitHub/httptoolkit/httptoolkit-ui/src/components/view/view-page.tsx; /Users/codingtech/Documents/GitHub/httptoolkit/httptoolkit-ui/src/model/proxy-store.ts",
+      "approach": "1. Add src/model/collections/collection-mocks.ts, which turns a collection, folder or selection into an HtkRuleGroup.\n2. Per endpoint, match method plus a path regex with numeric, UUID and {{var}} segments generalized. Create one rule per example, with header matchers for x-mock-response-code and x-mock-response-name (Postman-compatible) and the first 2xx as fallback. Dedupe repeated captures.\n3. Optional mock-only port: a second mockttp session on a fixed localhost port, so apps can point their base URL at it without proxy setup. Check this works with the admin client in proxy-store.ts.\n4. Keep templating small, such as {{$timestamp}} and echoing a path param.",
+      "effort": "M",
+      "priority": "P2",
+      "risks": "Generalized paths can over-match: show the generated regex and let the user edit it. A second mockttp session adds lifecycle code. Use only standard matcher and step types, or saved rule files will not load in official HTTP Toolkit."
+    },
+    {
+      "feature": "OpenAPI contract check on captured traffic",
+      "postman_equivalent": "Spec Hub validation; contract checks in Application Inventory and API Catalog (paid tiers)",
+      "user_value": "Every real response the app receives is checked against the spec (documented status, body schema, required params), so drift is caught during normal debugging rather than in a separate test run.",
+      "building_blocks": "/Users/codingtech/Documents/GitHub/httptoolkit/httptoolkit-ui/src/model/api/openapi.ts (matchOpenApiOperation, getBodySchema, Ajv + ajv-formats); /Users/codingtech/Documents/GitHub/httptoolkit/httptoolkit-ui/src/model/api/api-store.ts (addCustomApi, findBestMatchingApi); /Users/codingtech/Documents/GitHub/httptoolkit/httptoolkit-ui/src/model/api/build-api-metadata.ts; /Users/codingtech/Documents/GitHub/httptoolkit/httptoolkit-ui/src/components/view/http/http-details-pane.tsx; /Users/codingtech/Documents/GitHub/httptoolkit/httptoolkit-ui/src/services/ui-worker.ts",
+      "approach": "1. Add a new src/model/api/contract-check.ts. For exchanges with a matched operation, validate request params and body, plus response status, content-type and body schema, with Ajv. Compile once per operation, cache, and run in the UI worker for large bodies.\n2. Show a Contract card listing the failing JSON paths, and tag failing exchanges contract:fail for filtering.\n3. Export a session report (JUnit or Markdown) from a multi-selection.\n4. Let users turn findings into pm-style tests (#2).",
+      "effort": "M",
+      "priority": "P2",
+      "risks": "Differences between OpenAPI 3.0 and 3.1, and nullable/discriminator/readOnly quirks, cause false positives, so allow ignores. Performance on large sessions. Built-in public specs may be stale, so check only user-added specs by default."
+    },
+    {
+      "feature": "Collection runner with free data files and JUnit/HTML reports",
+      "postman_equivalent": "Collection Runner (iterations, delay, run order, setNextRequest), CSV/JSON data files (paid-only in the Free GUI), Newman and Postman CLI reporters",
+      "user_value": "Data-driven regression runs of a captured and curated flow, free with CSV/JSON. Every request in a run also shows up in the traffic list next to its test results, which Postman cannot show.",
+      "building_blocks": "/Users/codingtech/Documents/GitHub/httptoolkit/httptoolkit-ui/src/model/send/send-store.ts (sendRequest accepts any SendRequest; await pendingSend.promise); /Users/codingtech/Documents/GitHub/httptoolkit/httptoolkit-ui/src/model/events/events-store.ts; /Users/codingtech/Documents/GitHub/httptoolkit/httptoolkit-ui/src/model/ui/export.ts (saveFile pattern); CollectionStore (#1); test engine (#2)",
+      "approach": "1. Add src/model/testing/runner.ts and src/components/collections/runner-pane.tsx. The user picks a collection or folder, iterations, delay, a data file and stop-on-fail.\n2. Each item runs as an ephemeral SendRequest passed to the existing sendStore.sendRequest, so no upstream change is needed. Tests (#2) then run on the resulting exchange.\n3. Support pm.execution.setNextRequest and skipRequest, with a loop guard.\n4. Show a results table and export JUnit XML, JSON and HTML. Tag run exchanges so View can filter or hide them.",
+      "effort": "L",
+      "priority": "P2",
+      "risks": "Not headless: the app must be running. Cover CI through #10 first; a server-side headless runner would be XL and would touch the server. Large runs flood the event list and memory. Run-order semantics must match Postman closely enough for imported suites."
+    },
+    {
+      "feature": "CLI/MCP write operations: send requests, run collections, create mocks",
+      "postman_equivalent": "Postman CLI 'collection run', the Postman MCP Server, and the Postman plugin for coding agents",
+      "user_value": "AI coding agents and CI scripts can reproduce a bug against live traffic, run a suite and add a mock locally through httptoolkit-ctl / httptoolkit-mcp, with no account or API key.",
+      "building_blocks": "/Users/codingtech/Documents/GitHub/httptoolkit/httptoolkit-ui/src/services/ui-api/operations/index.ts; /Users/codingtech/Documents/GitHub/httptoolkit/httptoolkit-ui/src/services/ui-api/operations/rule-operations.ts; /Users/codingtech/Documents/GitHub/httptoolkit/httptoolkit-ui/src/services/ui-api/operations/event-operations.ts; /Users/codingtech/Documents/GitHub/httptoolkit/httptoolkit-ui/src/services/ui-api/api-registry.ts; /Users/codingtech/Documents/GitHub/httptoolkit/httptoolkit-server/src/api/ui-operation-bridge.ts",
+      "approach": "1. Add new operation files:\n- send-operations.ts: send.request and send.resend-exchange, each returning the exchange id and an outline;\n- collection-operations.ts: collections.list, and collections.run returning a summary and a JUnit path;\n- mock-operations.ts: rules.mock-from-exchange, rules.add-static-response and rules.set-active.\n2. Register them in operations/index.ts with 1-2 lines. The server gets its operation list from the UI over /ui-operations, so no server edits are needed.\n3. Gate the write operations behind a Settings toggle, 'Allow CLI/MCP to send requests and change rules', off by default.",
+      "effort": "S",
+      "priority": "P2",
+      "risks": "An agent that can send arbitrary requests can exfiltrate data: keep the toggle, the server token and localhost-only access. Operation schemas become a public contract. collections.run depends on #9."
+    },
+    {
+      "feature": "Export captured flows as plain text and test code (.http, Hurl with asserts, Playwright API test)",
+      "postman_equivalent": "Code snippets (35 targets), Git-friendly Collection v3 YAML, and the Browser Tool with Agent Mode generating Playwright tests",
+      "user_value": "What the app really did becomes files that live in Git and run in CI without Wirepane: Hurl, Playwright, or .http files for VS Code and JetBrains. No lock-in.",
+      "building_blocks": "/Users/codingtech/Documents/GitHub/httptoolkit/httptoolkit-ui/src/model/ui/export.ts; /Users/codingtech/Documents/GitHub/httptoolkit/httptoolkit-ui/src/model/ui/snippet-export-sanitization.ts; /Users/codingtech/Documents/GitHub/httptoolkit/httptoolkit-ui/src/model/http/har.ts (generateHar); /Users/codingtech/Documents/GitHub/httptoolkit/httptoolkit-ui/src/model/ui/zip-export-service.ts; /Users/codingtech/Documents/GitHub/httptoolkit/httptoolkit-ui/src/components/view/multi-selection-summary-pane.tsx",
+      "approach": "1. Add src/model/ui/flow-export.ts. It works from a generated HAR, so it is worker-friendly and shares the snippet sanitization. It produces:\n- one .http file with ### separators;\n- a .hurl file with status, header and jsonpath asserts inferred from the captured responses, and [Captures] for IDs reused later in the flow;\n- a Playwright request test with the same asserts and chained variables.\n2. Offer these as buttons in the multi-selection pane and as ZIP formats. Secrets become env placeholders via #5.\n3. Write standalone generators, because @httptoolkit/httpsnippet exposes no addTarget.",
+      "effort": "M",
+      "priority": "P2",
+      "risks": "Asserts inferred from dynamic values such as timestamps and IDs make brittle tests: assert types and shape, not values. Hurl and Playwright syntax must be checked against current versions."
+    },
+    {
+      "feature": "Cookie jar shared by Send and captured traffic",
+      "postman_equivalent": "Per-domain cookie manager, plus cookie sync from Interceptor or the proxy",
+      "user_value": "Replaying a logged-in browser or app session in Send just works: cookies from the intercepted browser carry over to new requests with no copy-paste.",
+      "building_blocks": "/Users/codingtech/Documents/GitHub/httptoolkit/httptoolkit-ui/src/model/http/cookies.ts; /Users/codingtech/Documents/GitHub/httptoolkit/httptoolkit-ui/src/model/events/events-store.ts; /Users/codingtech/Documents/GitHub/httptoolkit/httptoolkit-ui/src/model/send/send-store.ts (prepareForSend seam from #4)",
+      "approach": "1. Add src/model/send/cookie-jar.ts with domain, path and expiry rules, using tough-cookie (MIT) or a small parser on top of cookies.ts.\n2. Opt-in 'sync cookies from capture' per domain: a reaction on completed exchanges reads Set-Cookie and Cookie headers.\n3. prepareForSend adds a Cookie header unless the request already has one or the tab disables the jar. Set-Cookie on Send responses updates the jar.\n4. Add a small manager dialog to view, edit and delete cookies.",
+      "effort": "M",
+      "priority": "P2",
+      "risks": "Session cookies are secrets: opt-in per domain, kept in the secret store and never exported. SameSite and __Host- handling differs from browsers, so document it."
+    },
+    {
+      "feature": "OpenAPI spec to collection",
+      "postman_equivalent": "Importing OpenAPI as a collection (or as spec plus collection) in Spec Hub",
+      "user_value": "Start testing an API from its spec with example bodies, then compare against real traffic with the contract check (#8).",
+      "building_blocks": "/Users/codingtech/Documents/GitHub/httptoolkit/httptoolkit-ui/src/model/api/build-api-metadata.ts; /Users/codingtech/Documents/GitHub/httptoolkit/httptoolkit-ui/src/model/api/openapi.ts (getParameters, getBodySchema); /Users/codingtech/Documents/GitHub/httptoolkit/httptoolkit-ui/src/model/api/api-store.ts",
+      "approach": "1. Add src/model/collections/openapi-to-collection.ts, reusing the existing spec parsing and dereferencing, and run it in the UI worker.\n2. Create one folder per tag and one request per operation, using {{baseUrl}} and path params as variables.\n3. Include required query and header params and a JSON body taken from spec examples or generated from the schema.\n4. Map security schemes to auth helpers (#6) and documented responses to examples.",
+      "effort": "M",
+      "priority": "P3",
+      "risks": "Bodies generated from schemas are rough, and large specs produce large collections. Every API client has this feature, so it is P3."
+    },
+    {
+      "feature": "Live SSE viewer and WebSocket client in Send",
+      "postman_equivalent": "SSE event stream view; WebSocket and Socket.IO requests",
+      "user_value": "Debug streaming APIs (LLM streaming, notifications) in the same tool that captures them.",
+      "building_blocks": "/Users/codingtech/Documents/GitHub/httptoolkit/httptoolkit-ui/src/model/send/send-store.ts (trackResponseEvents); /Users/codingtech/Documents/GitHub/httptoolkit/httptoolkit-ui/src/components/send/sent-response-body.tsx; /Users/codingtech/Documents/GitHub/httptoolkit/httptoolkit-server/src/api/api-model.ts (sendRequest); /Users/codingtech/Documents/GitHub/httptoolkit/httptoolkit-ui/src/model/rules/definitions/websocket-rule-definitions.ts",
+      "approach": "1. SSE: trackResponseEvents only sets the response at response-end, so a stream that never ends shows nothing. Tee the response stream (a small upstream change) into a new event-stream panel that parses text/event-stream chunks live.\n2. WebSocket: add a new server endpoint for connect/send/receive and a WebSocket mode in Send. Captured WebSocket messages can seed it.",
+      "effort": "L",
+      "priority": "P3",
+      "risks": "Touches both upstream send-store.ts and the server, so sync conflicts are more likely: first check whether upstream plans the same feature. Socket.IO framing adds scope."
+    },
+    {
+      "feature": "Chaos and network-condition presets on live traffic",
+      "postman_equivalent": "Postman Simulator: response delay, rate limits and Chaos Mode random 5xx (paid, mocks only)",
+      "user_value": "Test how an app behaves when its API is slow, flaky or offline, on real traffic from any device. Postman only offers this on paid cloud mocks.",
+      "building_blocks": "/Users/codingtech/Documents/GitHub/httptoolkit/httptoolkit-ui/src/model/rules/definitions/http-rule-definitions.ts (HttpStepLookup with mockttp delay/close/reset/timeout); /Users/codingtech/Documents/GitHub/httptoolkit/httptoolkit-ui/src/model/rules/rule-creation.ts; /Users/codingtech/Documents/GitHub/httptoolkit/httptoolkit-ui/src/model/rules/rules-store.ts; /Users/codingtech/Documents/GitHub/httptoolkit/httptoolkit-ui/src/components/modify/",
+      "approach": "1. Start with presets built as ordinary rule groups, with no new step types: added latency (delay plus passthrough), 'Host offline' (reset-connection), 'Timeout' (timeout step) and 'Always 503' (static response).\n2. Then add a probabilistic 'flaky' step that gives a set percentage of requests a 5xx or a reset. Implement it in the UI through the callback channel breakpoints already use, in a new definitions file spread into HttpStepLookup with 1 line.\n3. Bandwidth throttling would need mockttp support, so it is out of scope.",
+      "effort": "M",
+      "priority": "P3",
+      "risks": "A custom step type cannot be loaded by official HTTP Toolkit and only works while the UI is open, like breakpoints. mockttp has no throttling."
+    }
+  ],
+  "do_not_copy": [
+    {
+      "feature": "Accounts, cloud workspaces, sync, seats and team plans",
+      "why": "Goes against the no-account, local-first goal. Share through files and Git instead."
+    },
+    {
+      "feature": "Public workspaces, the API Network and hosted docs",
+      "why": "This is where Postman's secrets leaked (30,000+ workspaces). Hosting needs infrastructure."
+    },
+    {
+      "feature": "Monitors, cloud runners, cloud load tests, Cloud Agent",
+      "why": "They need servers and metering. Local runs plus CI through CLI/MCP cover the need."
+    },
+    {
+      "feature": "Flows low-code canvas",
+      "why": "Large surface for little value, and users already call Postman an 'overcomplicated mess'. The runner and scripts are enough."
+    },
+    {
+      "feature": "Credit-metered Agent Mode and forced AI onboarding",
+      "why": "A documented pain point. If AI is added, make it opt-in with the user's own key or a local model and no credits."
+    },
+    {
+      "feature": "Spec Hub designer, governance rules, API Catalog, Insights",
+      "why": "Enterprise features that are off-mission. Keep only contract checks on real traffic."
+    },
+    {
+      "feature": "The full postman-sandbox package library (pm.require for npm/JSR, team packages)",
+      "why": "Large bundle and attack surface for running untrusted imported scripts. Support a documented pm subset instead."
+    },
+    {
+      "feature": "Separate 'Initial value' and 'Current value' for variables",
+      "why": "Confusing, and it led to synced secrets. Use one local value plus an explicit secret flag stored in the keychain."
+    },
+    {
+      "feature": "Collection v3 multi-file YAML as the native format (for now)",
+      "why": "Released 2026-03 and still changing. Do v2.1 import/export first; use .http/Hurl or our own diff-friendly files for Git."
+    },
+    {
+      "feature": "Interceptor browser extension and an embedded Browser Tool",
+      "why": "Wirepane already launches pre-configured browsers and intercepts phones, Docker and terminals. An extension adds maintenance without adding capability."
+    },
+    {
+      "feature": "Hosted webhook listener URLs",
+      "why": "Needs a public tunnel service, which does not fit a free local tool."
+    },
+    {
+      "feature": "Telemetry on by default and forced auto-updates",
+      "why": "Both are top Postman complaints. Keep telemetry opt-in and let users control updates."
+    }
+  ],
+  "positioning": "Wirepane is the free, local, account-free HTTP debugger that turns real traffic into API work. It captures traffic from browsers, phones, Docker and terminals, and lets you rewrite, mock and set breakpoints on it live. Then you save what you saw as a Postman-compatible collection, check it with familiar pm.test assertions on both sent and live captured requests, and export it as HAR, Postman v2.1, .http/Hurl or Playwright tests, with secrets redacted by default. Postman is an API platform with a capture tool bolted on: it cannot pause or rewrite live traffic, and its free tier keeps shrinking (1 user, AI credits, cloud sync by default). Proxyman is a paid interceptor without a full client or tests. Wirepane is interceptor-first, with a compact Postman-compatible client and test layer and no seats, cloud or meters. It does not chase Postman's platform breadth (workspaces, monitors, Flows, governance). It wins on the loop Postman cannot close: see real traffic, then turn it into requests, mocks and tests in one click. All new work lives in new src/model/collections and src/model/testing modules, with one-line hooks into upstream files, so subtree syncs stay cheap.",
+  "errors": "No blocking errors. Verified: mobx-persist is localStorage-backed (so collections need IndexedDB or files); the server MCP/CLI bridge takes its operation list from the UI at runtime; no addTarget was found in the @httptoolkit/httpsnippet dist. Not verified: whether webpack needs extra config for a second worker, whether a second mockttp session on a fixed port fits proxy-store.ts, and the AGPL/Apache-2.0 compatibility of reusing postman-sandbox or postman-collection. The product-map api_client_features section was read in condensed form (feature, plan, first 260 characters of each detail)."
+}
