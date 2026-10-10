@@ -7,8 +7,9 @@ import type { HttpExchange, HtkRequest } from '../../types';
 import { getHeaderValue } from '../http/headers';
 
 // Served by Wirepane itself (see the default rules), so they only open through the proxy:
-export const CERTIFICATE_PAGE_URL = 'http://amiusing.httptoolkit.tech/certificate';
-export const CHECK_PAGE_URL = 'https://amiusing.httptoolkit.tech';
+// wirepane.cert isn't a real domain: the proxy answers it, so it only works through Wirepane
+export const CERTIFICATE_PAGE_URL = 'http://wirepane.cert/certificate';
+export const CHECK_PAGE_URL = 'https://wirepane.cert';
 
 // Traffic from before the UI started (e.g. imported HAR files) doesn't mean a phone is connected now
 export const UI_STARTED_AT = Date.now();

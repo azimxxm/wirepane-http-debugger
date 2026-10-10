@@ -10,9 +10,10 @@ The README (in Uzbek) is the source of truth for the goal, setup and roadmap: **
 
 ## Branding
 
-User-visible text says "Wirepane". These keep the "HTTP Toolkit" name on purpose, don't rename them:
+User-visible text says "Wirepane". That includes the CA: the server creates its own "Wirepane CA" in `wirepane-ca.pem` / `wirepane-ca.key` (`generateHTTPSConfig` in `httptoolkit-server/src/index.ts`). The official app's `ca.pem` / `ca.key` share the same config folder and are never touched. Phones download the certificate from `http://wirepane.cert/certificate`; `wirepane.cert` is not a real domain, the proxy answers it through the built-in rules in `httptoolkit-ui/src/model/rules/rule-creation.ts`. `amiusing.httptoolkit.tech` still works the same way.
 
-- "HTTP Toolkit CA" (CA `commonName` in `httptoolkit-server/src/index.ts`, the Firefox `certutil -n` nickname, UI texts naming it): the CA is shared with the official app, and renaming it means reinstalling it on every device.
+These keep the "HTTP Toolkit" name on purpose, don't rename them:
+
 - The `HTTP Toolkit Rules` title in saved rule files (file format), the HTTP Toolkit Android app (its real Play Store name) and links to httptoolkit.com docs.
 - Internal identifiers: package names, the `httptoolkit` config and Electron userData dirs (`extraMetadata` in `httptoolkit-desktop/package.json`), `HTK_*` / `HTTPTOOLKIT_*` env vars, `amiusing.httptoolkit.tech`.
 - "HTTP Toolkit Pro" texts still inside upstream components: those prompts never render any more (see Architecture), so they stay untouched to keep syncs small.

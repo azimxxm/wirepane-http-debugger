@@ -101,7 +101,7 @@ Tafsilotlar `docs/design-plan.md` (Phase 3) va `docs/design/critique-2026-10-10.
 ## 5. iPhone testi (egasi bilan)
 
 - Mac IP `192.168.0.156` (o'zgarishi mumkin). Port status bar'da ko'rinadi.
-- Qadamlar 2-bo'limda. Tekshiruv: Safari'da `https://amiusing.httptoolkit.tech` sahifasi "You're being intercepted by Wirepane" deb chiqishi kerak.
+- Qadamlar app'da: Intercept → iPhone or iPad. Sertifikat `http://wirepane.cert/certificate` da, nomi **Wirepane CA**. Tekshiruv: Safari'da `https://wirepane.cert` "You're being intercepted by Wirepane" deb chiqishi kerak.
 - Oxirida egasiga proxy'ni **Off** qilishni eslatish.
 
 ## 6. Maxfiylik (P0, release'dan oldin albatta)
@@ -113,7 +113,7 @@ Tafsilotlar `docs/design-plan.md` (Phase 3) va `docs/design/critique-2026-10-10.
   - `app.httptoolkit.tech`: desktop'ning default `APP_URL`i (`httptoolkit-desktop/src/index.ts:35`, `stop-server.ts:48`). `.app`da o'z UI build'imizga almashtirilsin (7-bo'lim, 3-band).
   - `github.com/httptoolkit/httptoolkit-android/releases/latest`: Android interception'da APK yuklash (`fetch-apk.ts`). Bu funksional so'rov.
   - `android.httptoolkit.tech/connect`: Android ilovasi uchun deep link, funksional.
-  - `amiusing.httptoolkit.tech`: telefonga sertifikat o'rnatish sahifasi, funksional.
+  - `amiusing.httptoolkit.tech`: sertifikat va tekshiruv sahifasi. Unga ham proxy'ning o'zi javob beradi, shuning uchun internetga so'rov ketmaydi. Endi asosiy manzil `wirepane.cert`.
   - `httptoolkit.com/pricing`: faqat MCP/CLI matnlarida qolgan, hech qachon ko'rinmaydi.
 
 ## 7. O'z `.app`imiz

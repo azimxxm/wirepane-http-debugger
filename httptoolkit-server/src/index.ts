@@ -32,8 +32,10 @@ import { clearWebExtensionConfig, updateWebExtensionConfig } from './webextensio
 import { HttpClient } from './client/http-client';
 
 async function generateHTTPSConfig(configPath: string) {
-    const keyPath = path.join(configPath, 'ca.key');
-    const certPath = path.join(configPath, 'ca.pem');
+    // wirepane: our own "Wirepane CA", in its own files. The official HTTP Toolkit app uses this
+    // same config folder, and its ca.pem & ca.key are left alone.
+    const keyPath = path.join(configPath, 'wirepane-ca.key');
+    const certPath = path.join(configPath, 'wirepane-ca.pem');
 
     const [ certContent ] = await Promise.all([
         readFile(certPath, 'utf8').then((certContent) => {
@@ -46,8 +48,8 @@ async function generateHTTPSConfig(configPath: string) {
 
         const newCertPair = await generateCACertificate({
             subject: {
-                commonName: 'HTTP Toolkit CA',
-                organizationName: 'HTTP Toolkit CA'
+                commonName: 'Wirepane CA',
+                organizationName: 'Wirepane'
             }
         });
 

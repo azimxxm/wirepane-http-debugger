@@ -69,11 +69,12 @@ export class AmIUsingMatcher extends httpMatchers.RegexPathMatcher {
 
     constructor() {
         // Optional slash is for backward compat: for server 0.1.18+ it's always present
-        super(/^https?:\/\/amiusing\.httptoolkit\.tech\/?$/);
+        // wirepane: wirepane.cert is our own address for it, answered by the proxy like proxy.man
+        super(/^https?:\/\/(amiusing\.httptoolkit\.tech|wirepane\.cert)\/?$/);
     }
 
     explain() {
-        return 'for amiusing.httptoolkit.tech';
+        return 'for wirepane.cert and amiusing.httptoolkit.tech';
     }
 }
 

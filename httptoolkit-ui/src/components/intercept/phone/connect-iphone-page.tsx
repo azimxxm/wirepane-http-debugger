@@ -32,8 +32,8 @@ import {
 } from './phone-setup-parts';
 
 // The CA keeps HTTP Toolkit's name: it's shared with the official app (see CLAUDE.md)
-const CA_NAME = 'HTTP Toolkit CA';
-const CERTIFICATE_FILENAME = 'http-toolkit-ca-certificate.crt';
+const CA_NAME = 'Wirepane CA';
+const CERTIFICATE_FILENAME = 'wirepane-ca-certificate.crt';
 
 const StepsLayout = styled.div`
     display: flex;

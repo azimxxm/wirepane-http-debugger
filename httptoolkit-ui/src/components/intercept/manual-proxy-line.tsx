@@ -86,11 +86,11 @@ export const ManualProxyLine = (props: {
             { copied ? 'Copied' : 'Copy' }
         </SmallButton>
         <Separator aria-hidden={true}>·</Separator>
-        <span>trust the HTTP Toolkit CA certificate</span>
+        <span>trust the Wirepane CA certificate</span>
         <SmallButton
             onClick={props.onToggleSetup}
             aria-expanded={props.setupOpen}
-            title='Show the manual setup steps. In your certificate settings, the CA is called "HTTP Toolkit CA".'
+            title='Show the manual setup steps. In your certificate settings, the CA is called "Wirepane CA".'
         >
             Set up
         </SmallButton>

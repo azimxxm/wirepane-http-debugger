@@ -238,7 +238,8 @@ export const buildDefaultGroupRules = (
             priority: RulePriority.OVERRIDE,
             matchers: [
                 new HttpRule.MethodMatchers.GET(),
-                new matchers.FlexiblePathMatcher("amiusing.httptoolkit.tech/certificate")
+                // wirepane: also at wirepane.cert/certificate
+                new matchers.RegexPathMatcher(/^https?:\/\/(amiusing\.httptoolkit\.tech|wirepane\.cert)\/certificate\/?$/)
             ],
             completionChecker: new completionCheckers.Always(),
             steps: [new HttpRule.FromFileResponseStep(200, undefined, proxyStore.certPath, {

@@ -52,9 +52,10 @@ Qo'lda sozlash: proxy Mac'da ishlaydi (port status bar'da ko'rinadi) va Wi-Fi ta
 
 - **iPhone:**
   1. Wi-Fi → (i) → Configure Proxy → Manual. Server: Mac IP, port: status bar'dagi port.
-  2. Safari'da `http://amiusing.httptoolkit.tech/certificate` ni oching va profilni yuklab oling.
+  2. Safari'da `http://wirepane.cert/certificate` ni oching va profilni yuklab oling. Bu manzil faqat proxy sozlangandan keyin ochiladi, chunki unga Wirepane'ning o'zi javob beradi.
   3. Settings → General → VPN & Device Management bo'limida profilni o'rnating.
-  4. Settings → General → About → Certificate Trust Settings bo'limida **HTTP Toolkit CA**ni yoqing.
+  4. Settings → General → About → Certificate Trust Settings bo'limida **Wirepane CA**ni yoqing.
+  5. Tekshirish: Safari'da `https://wirepane.cert` "You're being intercepted by Wirepane" deb chiqishi kerak.
 - **Android:** app'da **Android Device via QR code** (root shart emas) yoki **Android Device via ADB**ni tanlang.
 
 Ish tugagach, telefondagi proxy'ni **Off** qiling.
@@ -81,7 +82,6 @@ O'zgartirgan kodingiz saqlanib qoladi. Conflict chiqsa, uni oddiy `git merge`dag
   - [ ] `wirepane.com`, `wirepane.dev` va `wirepane.app` domenlarini olish (2026-10-10 holatida bo'sh edi). Trademark tekshiruvi (USPTO, WIPO).
   - "HTTP Toolkit" nomi original loyihaga tegishli. AGPL kodni ishlatishga ruxsat beradi, lekin nomni ishlatishga emas. `LICENSE` va "based on HTTP Toolkit" degan attribution saqlanib qoladi.
   - Faqat foydalanuvchi ko'radigan joylar o'zgaradi. Quyidagilar ataylab "HTTP Toolkit"ligicha qoladi:
-    - **HTTP Toolkit CA**: telefonlarga o'rnatilgan CA ishlashda davom etadi.
     - Rules faylidagi `HTTP Toolkit Rules` sarlavhasi.
     - Android'dagi HTTP Toolkit ilovasi (Play Store'dagi asl nomi).
     - httptoolkit.com docs havolalari.
@@ -124,6 +124,6 @@ O'zgartirgan kodingiz saqlanib qoladi. Conflict chiqsa, uni oddiy `git merge`dag
 
 - **License:** AGPL-3.0 (`LICENSE`). App'ni boshqalarga tarqatsangiz, uning source kodi ham ochiq bo'lishi shart. Bu repo public, shuning uchun bu shart bajarilgan.
 - **Xavfsizlik:** dev rejimda server token'siz ishlaydi, proxy esa butun Wi-Fi tarmog'iga ochiq. Ishonchsiz tarmoqda ishlatmang.
-- Rasmiy HTTP Toolkit bilan bir xil CA'dan (`~/Library/Preferences/httptoolkit/ca.pem`) foydalanadi, shuning uchun telefonga sertifikatni bir marta o'rnatish yetarli.
+- Wirepane'ning o'z CA'si bor: **Wirepane CA** (`~/Library/Preferences/httptoolkit/wirepane-ca.pem`). Rasmiy HTTP Toolkit'ning `ca.pem` fayliga tegilmaydi. Oldin "HTTP Toolkit CA" o'rnatilgan telefonlarga yangi sertifikatni bir marta o'rnatish kerak.
 - Apple Silicon'da hammasi native `arm64`da ishlaydi, Rosetta shart emas.
 - Server Node `v24.19.0`ni talab qiladi. Boshqa 24.x versiyalarda ham ishlaydi, faqat `EBADENGINE` ogohlantirishi chiqadi.

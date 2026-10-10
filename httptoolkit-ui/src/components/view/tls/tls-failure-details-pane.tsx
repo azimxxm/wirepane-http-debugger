@@ -111,17 +111,17 @@ export class TlsFailureDetailsPane extends React.Component<{
                             failure.failureCause === 'cert-rejected'
                                 ? <>
                                     To resolve this, you need to configure the client to trust
-                                    your HTTP Toolkit CA.
+                                    your Wirepane CA.
                                 </>
                             : failure.failureCause === 'no-shared-cipher'
                                 ? <>
                                     You probably need to ensure the client is configured to trust the
-                                    HTTP Toolkit CA.
+                                    Wirepane CA.
                                 </>
                             : <>
                                 In the first two cases, this is not related to Wirepane.
                                 In the third case, you need to configure the client to trust your
-                                HTTP Toolkit CA.
+                                Wirepane CA.
                             </>
                         }
                     </p>
