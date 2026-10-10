@@ -16,6 +16,7 @@
 
 | #   | Ish                                                                 | Nega                                                     | Hajm      |
 | --- | ------------------------------------------------------------------- | -------------------------------------------------------- | --------- |
+| 0   | **Devices paneli (View):** qaysi request qaysi qurilmadan kelgani, Proxyman'dagi kabi. **Boshlangan, tugallanmagan** | Egasi 2–3 telefon ulasa View chalkash bo'ladi | M         |
 | 1   | ~~**Send v2:** fayl, rasm va media yuborish, Form, GraphQL, WebSocket~~ **tayyor** (2026-10-10) | API testing'ning asosiy qismi, egasi so'radi             | L         |
 | 2   | ~~**Connect a phone** ekrani va barqaror port~~ **tayyor** (2026-10-10) | iPhone va Android'ni ulash hozir chalkash, port siljiydi | M         |
 | 3   | **Dizayn 3-bosqich:** menu bar, ⌘K, ⌘,                              | Desktop konventsiyalari                                  | M         |
@@ -27,6 +28,39 @@
 | 9   | Postman va Proxyman'dan qolgan feature'lar                          | "Bitta dastur" maqsadi                                   | XL        |
 
 ---
+
+## 0. Hozir davom etayotgan ish: Devices paneli (View)
+
+**Nega:** egasi iPhone'ni Wi-Fi orqali uladi va trafik ko'rindi. Lekin 2–3 qurilma bo'lsa, View'da qaysi request qaysi telefondan kelgani bilinmaydi. Proxyman'da har bir qurilma **Devices** bo'limida alohida turadi. Qurilma ochilganda faqat uning request'lari ko'rinadi.
+
+**Tayyor (commit `52073ab`, hali ulanmagan, testlari yo'q):** `httptoolkit-ui/src/model/devices/`. Unda:
+
+- `devices-store.ts`, `device-model.ts`, `device-tracker.ts`;
+- `device-names.ts` (qurilmani qayta nomlash, localStorage);
+- `device-filters.ts`, `device-selection-filter.ts`, `device-directory.ts`.
+
+Agent Mac o'chirilishi sababli to'xtatildi. Fayllarni avval o'qib, tekshirib olish kerak.
+
+**Qoldi:**
+
+1. **View'dagi Devices paneli.** Chap tomonda, yig'iladigan va kengligi o'zgaradigan (Send'dagi Collections paneli kabi).
+   - Qatorlar: "All devices", "This Mac", keyin har bir qurilma: tur ikonkasi, nom, request soni va faollik nuqtasi (oxirgi 60 s).
+   - Qurilmani ochganda uning ilovalari va domenlari ko'rinadi.
+   - Bosilganda ro'yxat shu qurilma, ilova yoki domenga filtrlanadi.
+   - Klaviatura: strelkalar, Enter, F2 bilan qayta nomlash. O'ng tugma menyusi: Rename, Show only this device, Forget name.
+   - Bo'sh holatda tugma bo'lsin: "Intercept → iPhone or Android".
+2. **Request ro'yxati.** Bir nechta qurilma bo'lsa va "All devices" tanlangan bo'lsa, har bir qatorda kichik qurilma belgisi bo'lsin (ikonka va qisqa nom, yoki rangli nuqta).
+3. **Filtr.** Tanlov filtr qutisi bilan birga ishlasin (AND). Matnli filtr ham bo'lsin: `device=iphone`, `client-ip=192.168.0.23`. HAR export ko'rinib turgan request'larga mos kelsin.
+4. **Status bar.** "2 devices" kabi yozuv.
+5. **Unit testlar:** IP bo'yicha guruhlash, loopback, User-Agent turlari, nomlar va filtr.
+6. **Tekshiruv uchta qurilma bilan:**
+   - This Mac: `127.0.0.1`;
+   - iPhone: Mac'ning LAN IP'sidan `curl --interface` va iPhone User-Agent;
+   - Android User-Agent.
+
+   Light va dark mode skrinshotlari olinsin.
+
+**Qurilma qanday aniqlanadi:** client IP bo'yicha (`request.remoteIpAddress`). Turi User-Agent'dan olinadi; buning uchun `model/interception/phone-setup.ts`dagi iOS/Android aniqlash qayta ishlatiladi. DHCP IP'ni almashtirsa qurilma yangidek ko'rinadi. Keyinroq MAC manzil bilan bog'lash mumkin (`arp -a`).
 
 ## 1. Send v2: tayyor (2026-10-10)
 
@@ -69,6 +103,9 @@ Reja va tafsilotlar: [`docs/send-v2-plan.md`](send-v2-plan.md).
 
 ## 3. Dizayn 3-bosqich
 
+- [x] **Dock nomi va ikonkasi** (2026-10-10). Dev rejimda Dock "Electron" deb ko'rsatardi. `start.sh` endi dev Electron.app'ni Wirepane nomi va ikonkasi bilan belgilaydi (`scripts/brand-dev-electron.sh`).
+- [ ] **macOS menu bar ikonkasi** qo'shildi (`httptoolkit-desktop/src/menu-bar-icon.ts`; menyusi: Show Wirepane, New Window, Quit), lekin hali ishlab turganda ko'rilmagan. Keyingi `./start.sh`da paydo bo'lishini va menyu ishlashini tekshirish kerak. Keyinroq menyuga proxy holati va Recording tugmasini qo'shish mumkin.
+
 Tafsilotlar `docs/design-plan.md` (Phase 3) va `docs/design/critique-2026-10-10.md` (P1-2, P1-6, P2-4, P2-5, P2-7, P2-8, P2-9, P2-10) da.
 
 - **Menu bar** (`httptoolkit-desktop/src/menu.ts`):
@@ -99,6 +136,14 @@ Tafsilotlar `docs/design-plan.md` (Phase 3) va `docs/design/critique-2026-10-10.
 - hamma narsa klaviatura bilan bajariladi.
 
 ## 5. iPhone testi (egasi bilan)
+
+- **Avval:** iPhone'da eski "HTTP Toolkit CA" profili bor. Uni o'chirib, yangi **Wirepane CA**ni o'rnatish kerak:
+  1. Settings → General → VPN & Device Management → HTTP Toolkit CA → Remove Profile.
+  2. Safari'da `http://wirepane.cert/certificate` → Allow.
+  3. VPN & Device Management → Wirepane CA → Install.
+  4. Settings → General → About → Certificate Trust Settings → Wirepane CA yoqiladi.
+- **Proxy porti:** oxirgi marta 8040 edi. Telefondagi port app'dagi Intercept → iPhone or iPad ekranidagi port bilan bir xil bo'lishi kerak.
+- **Devices paneli tayyor bo'lgach:** 2 ta qurilma bilan tekshirish (iPhone va Mac).
 
 - Mac IP `192.168.0.156` (o'zgarishi mumkin). Port status bar'da ko'rinadi.
 - Qadamlar app'da: Intercept → iPhone or iPad. Sertifikat `http://wirepane.cert/certificate` da, nomi **Wirepane CA**. Tekshiruv: Safari'da `https://wirepane.cert` "You're being intercepted by Wirepane" deb chiqishi kerak.
