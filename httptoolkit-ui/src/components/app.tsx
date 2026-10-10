@@ -14,7 +14,6 @@ import { WithInjected } from '../types';
 import { appHistory } from '../routing';
 import { useHotkeys, Ctrl } from '../util/ui';
 
-import { AccountStore } from '../model/account/account-store';
 import { UiStore } from '../model/ui/ui-store';
 import { ProxyStore } from '../model/proxy-store';
 import {
@@ -31,9 +30,6 @@ import { ModifyPage } from './modify/modify-page';
 import { SendPage } from './send/send-page';
 import { SettingsPage } from './settings/settings-page';
 
-import { LoginModal } from './account/login-modal';
-import { PlanPicker } from './account/plan-picker';
-import { CheckoutSpinner } from './account/checkout-spinner';
 import { HtmlContextMenu } from './html-context-menu';
 import { DisconnectedWarning } from './disconnected-warning';
 import { McpModal } from './mcp/mcp-modal';
@@ -63,8 +59,7 @@ const Route = ({ children, ...props }: ExtendProps & RouteComponentProps): React
 };
 
 const AppKeyboardShortcuts = (props: {
-    navigate: (path: string) => void,
-    canVisitSettings: boolean
+    navigate: (path: string) => void
 }) => {
     useHotkeys('Ctrl+1,Cmd+1', (e) => {
         props.navigate('/intercept');
@@ -83,19 +78,17 @@ const AppKeyboardShortcuts = (props: {
         e.preventDefault();
     }, [props.navigate]);
     useHotkeys('Ctrl+9,Cmd+9', (e) => {
-        if (props.canVisitSettings) props.navigate('/settings');
+        props.navigate('/settings');
         e.preventDefault();
-    }, [props.navigate, props.canVisitSettings]);
+    }, [props.navigate]);
 
     return null;
 };
 
-@inject('accountStore')
 @inject('uiStore')
 @inject('proxyStore')
 @observer
 class App extends React.Component<{
-    accountStore: AccountStore,
     uiStore: UiStore,
     proxyStore: ProxyStore
 }> {
@@ -110,7 +103,7 @@ class App extends React.Component<{
 
     componentDidMount() {
         this.closeZipExportOnOtherModal = autorun(() => {
-            if (this.props.accountStore.modal || this.props.uiStore.mcpModalOpen) {
+            if (this.props.uiStore.mcpModalOpen) {
                 this.props.uiStore.closeZipExport();
             }
         });
@@ -118,11 +111,6 @@ class App extends React.Component<{
 
     componentWillUnmount() {
         this.closeZipExportOnOtherModal?.();
-    }
-
-    @computed
-    get canVisitSettings() {
-        return this.props.accountStore.user.userHasSubscription();
     }
 
     @computed
@@ -183,24 +171,14 @@ class App extends React.Component<{
                 : []
             ),
 
-            (this.canVisitSettings
-                ? {
-                    name: 'Settings',
-                    title: `Reconfigure Wirepane and manage your account (${Ctrl}+9)`,
-                    icon: 'GearSix',
-                    position: 'bottom',
-                    type: 'router',
-                    url: '/settings'
-                }
-                : {
-                    name: 'Get Pro',
-                    title: "Sign up for HTTP Toolkit Pro",
-                    icon: 'Lightning',
-                    position: 'bottom',
-                    type: 'callback',
-                    onClick: () => this.props.accountStore.getPro('sidebar')
-                }
-            ),
+            {
+                name: 'Settings',
+                title: `Reconfigure Wirepane (${Ctrl}+9)`,
+                icon: 'GearSix',
+                position: 'bottom',
+                type: 'router',
+                url: '/settings'
+            },
 
             ...(this.canUseMcp
                 ? [{
@@ -221,32 +199,19 @@ class App extends React.Component<{
                 position: 'bottom',
                 highlight: true,
                 type: 'web',
-                url: 'https://github.com/httptoolkit/httptoolkit/issues/new/choose'
+                url: 'https://github.com/azimxxm/wirepane/issues/new'
             }
         ] as SidebarItem[];
     }
 
     render() {
         const {
-            modal,
-            setSelectedPlan,
-            subscriptionPlans,
-            userEmail,
-            logIn,
-            logOut,
-            cancelCheckout
-        } = this.props.accountStore;
-
-        const {
             contextMenuState,
             clearHtmlContextMenu
         } = this.props.uiStore;
 
         return <LocationProvider history={appHistory}>
-            <AppKeyboardShortcuts
-                navigate={appHistory.navigate}
-                canVisitSettings={this.canVisitSettings}
-            />
+            <AppKeyboardShortcuts navigate={appHistory.navigate} />
             <AppContainer>
                 <Sidebar items={this.menuItems} />
 
@@ -263,29 +228,6 @@ class App extends React.Component<{
 
                 <DisconnectedWarning />
             </AppContainer>
-
-            {
-                modal === 'login' &&
-                    <LoginModal
-                        accountStore={this.props.accountStore}
-                    />
-            }
-
-            { modal === 'pick-a-plan' &&
-                <PlanPicker
-                    email={userEmail}
-                    onPlanPicked={setSelectedPlan}
-                    logOut={logOut}
-                    logIn={logIn}
-                    plans={subscriptionPlans}
-                />
-            }
-
-            { modal === 'post-checkout' &&
-                <CheckoutSpinner
-                    onCancel={cancelCheckout}
-                />
-            }
 
             { this.props.uiStore.mcpModalOpen && this.canUseMcp &&
                 <McpModal onClose={this.props.uiStore.closeMcpModal} />

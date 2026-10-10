@@ -15,7 +15,7 @@ User-visible text says "Wirepane". These keep the "HTTP Toolkit" name on purpose
 - "HTTP Toolkit CA" (CA `commonName` in `httptoolkit-server/src/index.ts`, the Firefox `certutil -n` nickname, UI texts naming it): the CA is shared with the official app, and renaming it means reinstalling it on every device.
 - The `HTTP Toolkit Rules` title in saved rule files (file format), the HTTP Toolkit Android app (its real Play Store name) and links to httptoolkit.com docs.
 - Internal identifiers: package names, the `httptoolkit` config and Electron userData dirs (`extraMetadata` in `httptoolkit-desktop/package.json`), `HTK_*` / `HTTPTOOLKIT_*` env vars, `amiusing.httptoolkit.tech`.
-- "HTTP Toolkit Pro" / account / subscription texts: they go away with the paid gating, not through a rename.
+- "HTTP Toolkit Pro" texts still inside upstream components: those prompts never render any more (see Architecture), so they stay untouched to keep syncs small.
 
 The logo source is `brand/icon.svg`. `./brand/build-icons.sh` regenerates every icon and logo file from it (`httptoolkit-desktop/src/icons/*`, `httptoolkit-ui/src/images/logo-icon.svg` and `loading-logo.png`), so change the source and rerun the script instead of editing those files.
 
@@ -65,4 +65,4 @@ Pitfalls:
 4. Config and the CA live in `env-paths('httptoolkit')` (`~/Library/Preferences/httptoolkit` on macOS), shared with the official app. Renaming that directory forces everyone to reinstall the CA on their devices, so a rebrand should change user-visible names only and leave internal ones alone.
 5. The `ctl` and `mcp` server commands (`src/commands/`) expose the UI's operations to CLIs and MCP clients through `src/api/ui-operation-bridge.ts`; the desktop app ships `httptoolkit-ctl` / `httptoolkit-mcp` wrappers for them.
 
-UI state lives in MobX stores under `httptoolkit-ui/src/model/` (proxy session, captured events, rules, interception, send, account). Paid features are gated in two places: `NonPaidStepClasses` in `model/rules/rules.ts` lists the free rule steps, and `accountStore.user.isPaidUser()` checks are spread across components. Heavy work (body decoding, formatting, OpenAPI building, cert parsing, zip export) runs in a web worker, `src/services/ui-worker.ts`.
+UI state lives in MobX stores under `httptoolkit-ui/src/model/` (proxy session, captured events, rules, interception, send, account). Everything is free. `AccountStore` (`model/account/account-store.ts`) is one fixed full-access user with no account servers, so every upstream paid check (`user.isPaidUser()`, `mightBePaidUser`, `NonPaidStepClasses` in `model/rules/rules.ts`) passes, and the server's `src/api/ui-operation-bridge.ts` gives every CLI/MCP caller full access. Login, plan picker, checkout and the settings account card are deleted; keep them out when syncing upstream. Heavy work (body decoding, formatting, OpenAPI building, cert parsing, zip export) runs in a web worker, `src/services/ui-worker.ts`.

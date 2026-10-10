@@ -1,5 +1,4 @@
 import { autorun, IReactionDisposer } from 'mobx';
-import { AccountStore } from '../../model/account/account-store';
 import { getServerPort } from '../desktop-api';
 import { OperationRegistry } from './api-registry';
 
@@ -8,8 +7,7 @@ const RECONNECT_MAX_MS = 30_000;
 
 export function startServerOperationBridge(
     registry: OperationRegistry,
-    authToken: string | undefined,
-    accountStore: AccountStore
+    authToken: string | undefined
 ) {
     let ws: WebSocket | null = null;
     let reconnectDelay = RECONNECT_BASE_MS;
@@ -71,12 +69,9 @@ export function startServerOperationBridge(
             ws!.send(JSON.stringify({
                 type: 'auth',
                 token: authToken,
-                // JWT must be false (not a paid user) or a valid JWT. N.b. we don't use
-                // _maybe_ paid user - if not sure, we treat as free until the updated
-                // JWT arrives, which will refresh this automatically.
-                jwt: accountStore.user.isPaidUser()
-                    ? accountStore.userJwt
-                    : false
+                // Wirepane has no accounts, so there's never a JWT to send. The server
+                // gives every caller full access without one.
+                jwt: false
             }));
         }));
 

@@ -87,8 +87,8 @@ O'zgartirgan kodingiz saqlanib qoladi. Conflict chiqsa, uni oddiy `git merge`dag
   3. UI build'ini (`httptoolkit-ui` → `npm run build`) app ichiga qo'shish va `APP_URL`ni unga yo'naltirish.
   4. `httptoolkit-desktop/package.json` faylida signing va notarize sozlamalarini o'zgartirish (`appId` va `productName` allaqachon Wirepane). `build-setup/setup-server.ts` server'ni GitHub release'dan yuklamasin, `../httptoolkit-server`dan yig'sin.
   5. Apple Developer sertifikatisiz tarqatish: Apple Silicon (`arm64`) uchun ad-hoc imzolangan `.app` yoki `.pkg`. Brauzerdan yuklangan imzosiz `.app` yoki `.pkg`ni Gatekeeper to'xtatadi: foydalanuvchi System Settings → Privacy & Security → **Open Anyway** bosishi kerak bo'ladi. `curl` bilan yuklangan faylga esa quarantine belgisi qo'yilmaydi, shuning uchun `curl … | sh` install skripti ogohlantirishsiz o'rnatadi.
+- [x] Barcha Pro feature'lar hamma uchun bepul. Akkaunt, login va to'lov yo'q. Map Local, Map Remote, mock, rewrite, delay, block, Settings (proxy, connection, API, themes), saqlanadigan rules, HAR import/export va MCP/CLI cheklovsiz ishlaydi.
 - [ ] Proxyman'dagi feature'lar:
-  - **Bizda bor, lekin Pro bilan yopilgan** (`httptoolkit-ui/src/model/rules/rules.ts` → `NonPaidStepClasses`): Map Local (`file`), Map Remote (`forward-to-host`), mock, rewrite, delay, block. Breakpoint esa bepul.
   - **Qo'shish kerak:**
     - P1: Access Control (LAN'dan kim ulana olishi), macOS system proxy toggle, iOS Simulator auto-setup, telefon ulash uchun QR.
     - P2: Highlight/Comment, Diff, Network Conditions, DNS Spoofing.

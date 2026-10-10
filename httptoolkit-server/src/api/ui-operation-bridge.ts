@@ -90,7 +90,8 @@ export class UiOperationBridge extends EventEmitter {
     }
 
     isPaidUser(): boolean {
-        return this.primaryChannel?.user?.isPaidUser() ?? false;
+        // Wirepane is free: CLI and MCP get every operation, with or without an account
+        return true;
     }
 
     /**

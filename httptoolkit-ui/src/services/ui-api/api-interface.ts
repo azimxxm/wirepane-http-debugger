@@ -29,5 +29,5 @@ export function initializeUiApi(stores: {
 
     // Connect to the server's WebSocket bridge (for MCP and external tool access).
     const authToken = new URLSearchParams(window.location.search).get('authToken') ?? undefined;
-    startServerOperationBridge(registry, authToken, accountStore);
+    startServerOperationBridge(registry, authToken);
 }

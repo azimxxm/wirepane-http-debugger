@@ -2,7 +2,6 @@ import { OperationRegistry } from '../api-registry';
 import { registerEventOperations } from './event-operations';
 import { registerProxyOperations } from './proxy-operations';
 import { registerInterceptorOperations } from './interceptor-operations';
-import { registerAccountOperations } from './account-operations';
 import { registerRuleOperations } from './rule-operations';
 import { CollectedEvent } from '../../../types';
 import { EventsStore } from '../../../model/events/events-store';
@@ -26,6 +25,5 @@ export function registerAllOperations(
     registerEventOperations(registry, stores.eventsStore, getEvents, isPaidUser);
     registerProxyOperations(registry, stores.proxyStore);
     registerInterceptorOperations(registry, stores.interceptorStore);
-    registerAccountOperations(registry, stores.accountStore);
     registerRuleOperations(registry, stores.rulesStore);
 }

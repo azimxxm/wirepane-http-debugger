@@ -60,9 +60,7 @@ mobx.configure({ enforceActions: 'observed' });
 delay(5000).then(runBackgroundUpdates);
 checkForOutdatedComponents();
 
-const accountStore = new AccountStore(
-    () => appHistory.navigate('/settings')
-);
+const accountStore = new AccountStore();
 const apiStore = new ApiStore(accountStore);
 const uiStore = new UiStore(accountStore);
 const proxyStore = new ProxyStore(accountStore);
