@@ -1,10 +1,9 @@
 #!/usr/bin/env bash
-# Clones the HTTP Toolkit repos (if missing) and installs their dependencies.
-# Once you fork the repos, run it as: GITHUB_OWNER=<your-github-user> ./setup.sh
+# Installs dependencies for the server, UI and desktop app.
+# Run it once after cloning, and again when a package-lock.json changes (e.g. after ./sync-upstream.sh).
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")" && pwd)"
-GITHUB_OWNER="${GITHUB_OWNER:-httptoolkit}"
 REPOS=(httptoolkit-server httptoolkit-ui httptoolkit-desktop)
 MIN_NODE_MAJOR=22 # httptoolkit-desktop needs Node 22+
 
@@ -13,13 +12,6 @@ if [ "$node_major" -lt "$MIN_NODE_MAJOR" ]; then
   echo "ERROR: Node.js $MIN_NODE_MAJOR+ is required (found: $(node -v 2>/dev/null || echo none))" >&2
   exit 1
 fi
-
-for repo in "${REPOS[@]}"; do
-  if [ ! -d "$ROOT/$repo/.git" ]; then
-    echo "==> Cloning $GITHUB_OWNER/$repo"
-    git clone "https://github.com/$GITHUB_OWNER/$repo.git" "$ROOT/$repo"
-  fi
-done
 
 # The UI uses puppeteer 5 only for its integration tests, and that version has no
 # Chromium download for Apple Silicon, so npm ci fails without this. The app itself doesn't need it.
