@@ -36,6 +36,20 @@ Finder'dan ochish: `Start Wirepane.command` faylini ikki marta bosing. Log'lar `
 
 **Boshqa Mac'da davom ettirish:** `git pull` → `./setup.sh` → `./start.sh`. `setup.sh` faqat dependency'lar o'zgarganda kerak.
 
+### O'rnatiladigan `.pkg` yig'ish
+
+```bash
+./scripts/build-pkg.sh   # Bruno, server, UI va desktop'ni yig'adi, oxirida .pkg qayerdaligini chiqaradi
+```
+
+Natija: `httptoolkit-desktop/dist/Wirepane-<versiya>-arm64.pkg` (Apple Silicon uchun, ~210 MB). Uning ichida ad-hoc imzolangan `Wirepane.app` bor. Server ham, UI ham shu repo'dagi koddan yig'iladi. Internetdan faqat Node.js bir marta yuklanadi va `build/cache`da saqlanadi. Apple Developer akkaunti va sertifikat kerak emas. Yig'ish bir necha daqiqa oladi.
+
+Foydalanuvchi uni shunday o'rnatadi:
+
+1. `.pkg`ni ikki marta bosadi va qadamlardan o'tadi. App `/Applications`ga o'rnatiladi ("faqat men uchun" tanlansa, `~/Applications`ga).
+2. Internetdan yuklangan `.pkg`ni macOS birinchi ochishda to'xtatadi, chunki u imzosiz. Unda `.pkg` ustida o'ng tugma → **Open** → **Open**. Yoki System Settings → Privacy & Security → **Open Anyway**.
+3. Wirepane'ni Applications'dan ochadi. Agar app ham shunday to'xtatilsa, unda ham o'ng tugma → **Open**.
+
 ## Nimani qayerda o'zgartirish
 
 | Nima                 | Qayerda                   | Qachon ko'rinadi                              |
@@ -89,16 +103,13 @@ O'zgartirgan kodingiz saqlanib qoladi. Conflict chiqsa, uni oddiy `git merge`dag
 
     Shunda `sync-upstream.sh` ham kamroq conflict beradi. "HTTP Toolkit Pro" matnlari esa Pro feature'lar ochilganda olib tashlanadi.
 
-- [ ] O'zimizning `.app`imizni yig'ish. Buning uchun:
-  1. `httptoolkit-server/src/constants.ts` — o'z UI origin'imizga ruxsat berish (hozir faqat `https://app.httptoolkit.tech` ruxsat etilgan).
-  2. Auto-update'ni o'chirish: `httptoolkit-server/src/index.ts` (`update-requested`) va `package.json` → `oclif.update`. Aks holda rasmiy server bizning server o'rniga yuklanib qoladi.
-  3. UI build'ini (`httptoolkit-ui` → `npm run build`) app ichiga qo'shish va `APP_URL`ni unga yo'naltirish.
-  4. `httptoolkit-desktop/package.json` faylida signing va notarize sozlamalarini o'zgartirish (`appId` va `productName` allaqachon Wirepane). `build-setup/setup-server.ts` server'ni GitHub release'dan yuklamasin, `../httptoolkit-server`dan yig'sin.
-  5. **Tarqatish: `.pkg` installer, Apple Developer akkauntisiz.** Akkaunt hali yo'q (egasi ariza beradi), shuning uchun:
-     - app ad-hoc imzolanadi va imzosiz `.pkg` ichida Apple Silicon (`arm64`) uchun tarqatiladi;
-     - notarize qilinmaydi va build sertifikatsiz Mac'da ishlashi kerak.
-
-     Brauzerdan yuklangan `.pkg`ni Gatekeeper birinchi marta to'xtatadi: o'ng tugma → Open yoki System Settings → Privacy & Security → **Open Anyway**. `curl … | sh` bilan o'rnatilsa ogohlantirish chiqmaydi. Akkaunt kelgach, Developer ID imzosi va notarize qo'shiladi.
+- [x] O'zimizning `.app`imizni yig'ish (2026-10-12). `./scripts/build-pkg.sh` imzosiz `.pkg` yasaydi:
+  1. Server o'z kodimizdan yig'iladi (`scripts/build-server.sh`), GitHub'dagi rasmiy release yuklanmaydi. Bruno package'lari server bundle'i ichida.
+  2. Server o'zini yangilamaydi: `update-requested` e'tiborsiz qoldiriladi, oclif'ning update plugin'i olib tashlandi. Server'ni ishga tushiruvchi skript faqat app ichidagi server'ni ishga tushiradi. Rasmiy app'ning `~/.local/share/httptoolkit-server` papkasiga tegilmaydi.
+  3. UI app ichida va `wirepane://app` manzilidan ochiladi. Release server faqat shu origin'ga ruxsat beradi. Sozlamalar va Send tab'lari app qayta ochilganda ham saqlanadi.
+  4. App ad-hoc imzolanadi, `.pkg` imzosiz, notarize yo'q. Build sertifikatsiz Mac'da ishlaydi.
+  - [ ] Egasi tekshiradi: `.pkg`ni boshqa (toza) foydalanuvchida o'rnatish va Gatekeeper oqimi.
+  - Akkaunt kelgach: Developer ID imzosi, hardened runtime va notarize. Ular `ENABLE_SIGNING=true` bilan yoqiladigan yo'lga qo'shiladi, imzosiz yo'l zaxira bo'lib qoladi.
 - [x] Barcha Pro feature'lar hamma uchun bepul. Akkaunt, login va to'lov yo'q. Map Local, Map Remote, mock, rewrite, delay, block, Settings (proxy, connection, API, themes), saqlanadigan rules, HAR import/export va MCP/CLI cheklovsiz ishlaydi.
 - [ ] Proxyman'dagi feature'lar:
   - [x] Telefon ulash ekrani: iPhone va Android uchun IP, port, sertifikat QR'i va jonli holat, port qayta yuklashda o'zgarmaydi.

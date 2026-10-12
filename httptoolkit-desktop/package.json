@@ -13,7 +13,7 @@
     "build": "npm run build:src && npm run build:electron",
     "build:src": "tsc",
     "postbuild:src": "tsx ./build-setup/strip-preload-map.ts",
-    "build:electron": "npm run server:setup && electron-builder build --config ./build-setup/electron-builder.config.cjs",
+    "build:electron": "electron-builder build --config ./build-setup/wirepane-builder.config.cjs",
     "build:dir-only": "npm run server:setup && electron-builder --dir",
     "start": "npm run server:setup && npm run start:app",
     "start:dev": "tsx ./build-setup/skip-server.ts && cross-env HTK_DEV=true APP_URL='http://localhost:8080' npm run start:app",
@@ -36,7 +36,7 @@
     "extraMetadata": {
       "name": "httptoolkit",
       "productName": "httptoolkit",
-      "author": "Toolshed Labs SLU"
+      "author": "Wirepane"
     },
     "files": [
       "**/*",

@@ -179,34 +179,21 @@
   "license": "AGPL-3.0-or-later",
   "oclif": {
     "bin": "httptoolkit-server",
+    "dirname": "wirepane-server",
     "commands": "./lib/commands",
-    "plugins": [
-      "@oclif/plugin-update"
-    ],
+    "plugins": [],
     "dependenciesToPackage": [
       "@oclif/command",
       "@oclif/config",
       "@oclif/plugin-help",
-      "@oclif/plugin-update",
+      "semver",
+      "tslib",
       "registry-js",
       "win-version-info",
       "node-datachannel",
       "tls-impersonate"
     ],
     "update": {
-      "s3": {
-        "host": "https://github.com/httptoolkit/httptoolkit-server/releases/download/",
-        "templates": {
-          "target": {
-            "versioned": "v<%- version %>/<%- channel === 'stable' ? '' : channel + '-' %><%- bin %>-v<%- version %>-<%- platform %>-<%- arch %><%- ext %>",
-            "manifest": "latest-manifest/<%- channel === 'stable' ? '' : channel + '-' %><%- platform %>-<%- arch %>"
-          },
-          "vanilla": {
-            "versioned": "v<%- version %>/<%- channel === 'stable' ? '' : channel + '-' %><%- bin %>-v<%- version %><%- ext %>",
-            "manifest": "latest-manifest/<%- channel === 'stable' ? '' : channel + '-' %>version"
-          }
-        }
-      },
       "node": {
         "version": "24.19.0",
         "targets": [

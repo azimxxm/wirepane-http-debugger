@@ -171,7 +171,9 @@ async function deleteFolder(folder: string) {
 // Before deleting anything anywhere, we check it's an HTK-related path.
 // Not a perfect check, but good safety against somehow deleting / or similar.
 function isOwnedPath(input: string) {
-    if (input.split(path.sep).includes('httptoolkit-server')) {
+    // wirepane: our oclif dirname (package.json) is wirepane-server. The httptoolkit-server
+    // folders belong to the official HTTP Toolkit app, so we never delete anything there.
+    if (input.split(path.sep).includes('wirepane-server')) {
         return true;
     } else {
         logError(`Unexpected unowned path ${input}`);

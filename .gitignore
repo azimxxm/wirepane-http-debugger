@@ -1,4 +1,6 @@
 /logs/
+# scripts/build-pkg.sh: the server release and the Node.js download cache
+/build/
 .DS_Store
 .env
 node_modules/

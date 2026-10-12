@@ -12,7 +12,9 @@ export const ALLOWED_ORIGINS = IS_PROD_BUILD
         // ensures that no other sites/apps can communicate with your server
         // whilst you have the app open. If they could (requires an HTTP mitm),
         // they would be able to start proxies & interceptors.
-        /^https:\/\/app\.httptoolkit\.tech$/
+        // wirepane: our releases only allow the UI bundled inside the desktop app,
+        // which it serves from wirepane://app (httptoolkit-desktop/src/bundled-ui.ts).
+        /^wirepane:\/\/app$/
     ]
     : [
         // Dev builds can use the main site, or local sites, even if those

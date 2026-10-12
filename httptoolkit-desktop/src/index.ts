@@ -28,13 +28,25 @@ import { stopServer } from './stop-server.ts';
 import { shouldClearStaleUICache, clearUICache, recordUIRun } from './cache-cleanup.ts';
 import { getDeviceDetails } from './device.ts';
 import { createMenuBarIcon } from './menu-bar-icon.ts';
+import { BUNDLED_UI_URL, registerBundledUiScheme, serveBundledUi } from './bundled-ui.ts';
 
 import packageJson from '../package.json' with { type: 'json' };
 
 const isWindows = os.platform() === 'win32';
 
-const APP_URL = process.env.APP_URL || 'https://app.httptoolkit.tech';
-const hasTrustedOrigin = (url: URL) => url.origin === APP_URL;
+// wirepane: by default the app loads the UI bundled inside it (bundled-ui.ts). Dev runs set
+// APP_URL=http://localhost:8080 (start.sh).
+const APP_URL = process.env.APP_URL || BUNDLED_UI_URL;
+// wirepane: protocol + host, because URL.origin is 'null' for custom schemes like wirepane://
+const originOf = (url: URL) => `${url.protocol}//${url.host}`;
+const APP_ORIGIN = originOf(new URL(APP_URL));
+const hasTrustedOrigin = (url: URL) => originOf(url) === APP_ORIGIN;
+
+// wirepane: WIREPANE_HIDDEN_WINDOW=1 starts the app without anything on screen: no Dock icon, no
+// menu bar icon, no dialogs, and a window that's never shown or focused. The UI still loads, so
+// automated checks can drive it over --remote-debugging-port.
+const HIDDEN_WINDOW = process.env.WIREPANE_HIDDEN_WINDOW === '1';
+if (HIDDEN_WINDOW) app.dock?.hide();
 
 const AUTH_TOKEN = crypto.randomBytes(20).toString('base64url');
 const DESKTOP_VERSION = packageJson.version;
@@ -49,6 +61,10 @@ const RESOURCES_PATH = APP_PATH.endsWith('app.asar')
     : APP_PATH; // Otherwise everything is in the root of the app
 const LOGS_PATH = app.getPath('logs');
 const LAST_RUN_LOG_PATH = path.join(LOGS_PATH, 'last-run.log');
+
+// wirepane: the UI build ships in Resources/httptoolkit-ui (build-setup/wirepane-builder.config.cjs)
+registerBundledUiScheme();
+app.on('ready', () => serveBundledUi(path.join(RESOURCES_PATH, 'httptoolkit-ui')));
 
 // Keep a global reference of the window object, if you don't, the window will
 // be closed automatically when the JavaScript object is garbage collected.
@@ -78,7 +94,8 @@ const pickServerPorts = async (): Promise<ServerPorts> => {
 // synchronously via additionalArguments and into the server via CLI flags.
 let serverPorts: ServerPorts;
 
-app.commandLine.appendSwitch('ignore-connections-limit', 'app.httptoolkit.tech');
+// wirepane: the UI's own host, as upstream did for app.httptoolkit.tech
+app.commandLine.appendSwitch('ignore-connections-limit', new URL(APP_URL).hostname);
 app.commandLine.appendSwitch('disable-renderer-backgrounding');
 app.commandLine.appendSwitch('js-flags', [
     '--expose-gc', // Expose window.gc in the UI
@@ -130,7 +147,8 @@ const createWindow = () => {
     }
 
     windows.push(window);
-    windowState.manage(window);
+    // wirepane: a saved maximized/fullscreen state would show the window
+    if (!HIDDEN_WINDOW) windowState.manage(window);
 
     // Stream renderer console output directly into our log file:
     window.webContents.on('console-message', ({ level, message }) => {
@@ -151,6 +169,7 @@ const createWindow = () => {
     }));
 
     window.on('ready-to-show', function () {
+        if (HIDDEN_WINDOW) return; // wirepane
         window!.show();
         window!.focus();
     });
@@ -213,7 +232,7 @@ if (!amMainInstance) {
             serverKilled = true;
 
             try {
-                await stopServer(server, AUTH_TOKEN, serverPorts.serverPort);
+                await stopServer(server, AUTH_TOKEN, serverPorts.serverPort, APP_ORIGIN); // wirepane: our origin
             } catch (error) {
                 console.log('Failed to kill server', error);
                 logError(error);
@@ -320,6 +339,7 @@ if (!amMainInstance) {
     });
 
     function checkForUnsafeProtocol(url: URL) {
+        if (hasTrustedOrigin(url)) return true; // wirepane: the bundled UI's own wirepane:// pages
         if (url.protocol !== 'http:' && url.protocol !== 'https:') {
             console.warn(`Attempt to open a non-HTTP url: ${url}`);
             return false;
@@ -340,6 +360,7 @@ if (!amMainInstance) {
     async function showErrorAlert(title: string, body: string, docsUrl?: string) {
         writeLog(`ALERT: ${title}: ${body}`);
         console.warn(`${title}: ${body}`);
+        if (HIDDEN_WINDOW) return; // wirepane: logged only, nothing on screen
 
         if (docsUrl) {
             const result = await dialog.showMessageBox({
@@ -383,7 +404,8 @@ if (!amMainInstance) {
             process.env.XDG_DATA_HOME ||
             (isWindows && process.env.LOCALAPPDATA) ||
             path.join(homeDir, '.local', 'share'),
-            'httptoolkit-server'
+            // wirepane: our oclif dirname (server package.json). httptoolkit-server is the official app's.
+            'wirepane-server'
         );
 
         const serverUpdatesPath = process.env.OCLIF_CLIENT_HOME ||
@@ -673,7 +695,7 @@ if (!amMainInstance) {
 
     Promise.all([appReady.promise, portsResolved.promise, uiCacheReady]).then(() => {
         Menu.setApplicationMenu(getMenu(windows, openNewWindow));
-        createMenuBarIcon(windows, openNewWindow); // wirepane
+        if (!HIDDEN_WINDOW) createMenuBarIcon(windows, openNewWindow); // wirepane
         createWindow();
     });
 

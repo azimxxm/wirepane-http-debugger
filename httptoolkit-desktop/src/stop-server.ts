@@ -13,8 +13,9 @@ const isRunning = (pid: number) => {
     }
 }
 
-export async function stopServer(proc: ChildProcess.ChildProcess, token: string, serverPort: number) {
-    await softShutdown(token, serverPort)
+// wirepane: origin is the UI's origin, which the server accepts (wirepane://app in our releases)
+export async function stopServer(proc: ChildProcess.ChildProcess, token: string, serverPort: number, origin: string) {
+    await softShutdown(token, serverPort, origin)
         .catch(console.log); // If that fails, continue shutting down anyway
 
     // In each case, that triggers a clean shutdown. We want to make sure it definitely shuts
@@ -33,7 +34,7 @@ export async function stopServer(proc: ChildProcess.ChildProcess, token: string,
     } while (isRunning(proc.pid!))
 }
 
-function softShutdown(token: string, serverPort: number) {
+function softShutdown(token: string, serverPort: number, origin: string) {
     // We first try to cleanly shut down the server, so it can clean up after itself.
     // On Mac & Linux, we could shut down the server with SIGTERM, with some fiddling to detach it
     // so that we kill the full shell script + node tree. On Windows that's not possible though,
@@ -45,7 +46,7 @@ function softShutdown(token: string, serverPort: number) {
         const req = http.request(`http://127.0.0.1:${serverPort}/shutdown`, {
             method: 'POST',
             headers: {
-                'origin': 'https://app.httptoolkit.tech',
+                'origin': origin,
                 'authorization': `Bearer ${token}`
             }
         });

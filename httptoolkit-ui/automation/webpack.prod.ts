@@ -1,4 +1,5 @@
 import * as path from 'path';
+import * as Webpack from 'webpack';
 import merge from "webpack-merge";
 import { RawSource } from 'webpack-sources';
 import * as SentryPlugin from '@sentry/webpack-plugin';
@@ -139,6 +140,11 @@ export default merge(common, {
             })
         ]
         : []),
+        // wirepane: DISABLE_UPDATES=true builds the UI that the desktop app bundles (scripts/build-pkg.sh).
+        // It updates together with the app, so it never registers the update service worker.
+        ...(process.env.DISABLE_UPDATES === 'true'
+            ? [new Webpack.DefinePlugin({ 'process.env.DISABLE_UPDATES': 'true' })]
+            : []),
         new BundleAnalyzerPlugin({
             analyzerMode: 'static',
             openAnalyzer: false,

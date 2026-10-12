@@ -1,5 +1,16 @@
 # Project log
 
+## 2026-10-12
+
+### Own installable app (no Apple Developer account)
+
+- **`./scripts/build-pkg.sh`** builds `httptoolkit-desktop/dist/Wirepane-1.27.2-arm64.pkg` (~210 MB, plus a `.zip`) from this repo: Bruno, our server release (`scripts/build-server.sh` + `scripts/assemble-server.cjs` → `build/server/`), the UI (`DISABLE_UPDATES=true`), the desktop (`npm run build` → `build-setup/wirepane-builder.config.cjs`).
+- **App:** ad-hoc signed (`identity: '-'`, no hardened runtime), unsigned pkg, no notarization, no `CSC_*`. `ENABLE_SIGNING=true` keeps upstream's signed path for later.
+- **UI** is bundled and served from `wirepane://app` (`httptoolkit-desktop/src/bundled-ui.ts`); the release server only accepts that origin.
+- **No self-updates:** `@oclif/plugin-update` removed (its init hook had tried `update --autoupdate` on 2026-10-10), oclif `dirname` is `wirepane-server`, our launcher never runs a server from `~/.local/share/*/client`.
+- **Checks:** `codesign --verify --deep --strict` OK; hidden launch (`WIREPANE_HIDDEN_WINDOW=1`) loaded the UI, proxied a request into View, kept localStorage/IndexedDB across a restart, quit cleanly; `.pkg` installed into `~/Applications` without a password (removed again). Server, UI unit tests pass.
+- **Next:** the owner installs the pkg on a clean user (Gatekeeper flow). Notes in `docs/remaining-work.md` section 7.
+
 ## 2026-10-10
 
 ### Done (branch `feature/rebrand`, not pushed)

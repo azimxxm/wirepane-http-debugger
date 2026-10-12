@@ -23,7 +23,7 @@
 | 4   | Dizaynni qayta tekshirish (`design-critic`)                                                                       | Qabul mezonlari                                          | S         |
 | 5   | **iPhone testi** egasi bilan                                                                                      | Haqiqiy qurilmada tekshiruv                              | S         |
 | 6   | **Maxfiylik:** upstream'ga telemetriya yuborilmasligi (asosiy qismi tayyor)                                       | "Hech narsa sizib chiqmaydi" va'dasi                     | S, **P0** |
-| 7   | O'z `.app`imizni yig'ish va tarqatish                                                                             | Oxirgi natija                                            | L         |
+| 7   | ~~O'z `.app`imizni yig'ish~~ **yig'ildi** (2026-10-12), o'rnatishni egasi tekshiradi                               | Oxirgi natija                                            | L         |
 | 8   | Collections davomi: testlar, runner, Keychain                                                                     | Postman bilan teng bo'lish                               | L         |
 | 9   | Postman va Proxyman'dan qolgan feature'lar                                                                        | "Bitta dastur" maqsadi                                   | XL        |
 
@@ -145,26 +145,40 @@ Tafsilotlar `docs/design-plan.md` (Phase 3) va `docs/design/critique-2026-10-10.
 
 - [x] **Server va desktop Sentry'si** (2026-10-10). HTTP Toolkit'ning qattiq yozilgan DSN'lari olib tashlandi: `httptoolkit-server/src/error-tracking.ts` va `httptoolkit-desktop/src/errors.ts`. Endi xatolar faqat `SENTRY_DSN` aniq berilsa yuboriladi.
 - [x] **Server o'zini yangilamaydi** (2026-10-10). UI har startda `POST /update` so'raydi. Oldin server `oclif update` bilan HTTP Toolkit'ning GitHub release'laridan rasmiy server'ni yuklardi (`logs/server.log`: "Updating CLI... fetching manifest"). Endi so'rov e'tiborsiz qoldiriladi (`httptoolkit-server/src/index.ts`).
-- [ ] **UI.** `src/metrics.ts` (PostHog, `events.httptoolkit.tech`) va `src/errors.ts` (Sentry) faqat build paytida `POSTHOG_KEY` yoki `SENTRY_DSN` berilsa yoqiladi. Bizning build'da berilmaydi. `.app` build skriptida bu ikkalasi bo'sh qolishini tekshirish kerak.
+- [x] **UI** (2026-10-12). `src/metrics.ts` (PostHog, `events.httptoolkit.tech`) va `src/errors.ts` (Sentry) faqat build paytida `POSTHOG_KEY` yoki `SENTRY_DSN` berilsa yoqiladi. `scripts/build-pkg.sh` ularni (`SENTRY_AUTH_TOKEN`, `REPORT_URI` bilan birga) build oldidan o'chiradi, shuning uchun `.app`ga tushmaydi.
 - [ ] **Qolgan tarmoq so'rovlari** (2026-10-10 dagi audit):
-  - `app.httptoolkit.tech`: desktop'ning default `APP_URL`i (`httptoolkit-desktop/src/index.ts:35`, `stop-server.ts:48`). `.app`da o'z UI build'imizga almashtirilsin (7-bo'lim, 3-band).
+  - ~~`app.httptoolkit.tech`~~ tayyor (2026-10-12): desktop'ning default `APP_URL`i endi app ichidagi UI (`wirepane://app`), `stop-server.ts` ham shu origin'ni yuboradi.
+  - `fonts.cdnfonts.com`: proxy'ning `wirepane.cert` sahifasi (`httptoolkit-ui/src/amiusing.html`) DM Sans shriftini shu CDN'dan yuklaydi. Sahifani ochgan telefon yoki brauzer u yerga so'rov yuboradi.
   - `github.com/httptoolkit/httptoolkit-android/releases/latest`: Android interception'da APK yuklash (`fetch-apk.ts`). Bu funksional so'rov.
   - `android.httptoolkit.tech/connect`: Android ilovasi uchun deep link, funksional.
   - `amiusing.httptoolkit.tech`: sertifikat va tekshiruv sahifasi. Unga ham proxy'ning o'zi javob beradi, shuning uchun internetga so'rov ketmaydi. Endi asosiy manzil `wirepane.cert`.
   - `httptoolkit.com/pricing`: faqat MCP/CLI matnlarida qolgan, hech qachon ko'rinmaydi.
 
-## 7. O'z `.app`imiz
+## 7. O'z `.app`imiz: yig'ildi (2026-10-12)
 
-README'dagi "O'zimizning `.app`imizni yig'ish" bo'limi:
+`./scripts/build-pkg.sh` → `httptoolkit-desktop/dist/Wirepane-<versiya>-arm64.pkg` (~210 MB), xuddi shu app `.zip`da ham bor. O'rnatilgan app ~860 MB joy oladi.
 
-1. `httptoolkit-server/src/constants.ts`: o'z UI origin'imiz uchun ruxsat.
-2. Auto-update'ni o'chirish.
-   - Server tomoni tayyor: `update-requested` e'tiborsiz qoldiriladi.
-   - Qoldi: `package.json`dagi `oclif.update`.
-   - **Muhim.** oclif'ning bin skripti `~/.local/share/httptoolkit-server/client/` ichidagi eng yangi server versiyasini ishga tushiradi (`httptoolkit-desktop/src/index.ts`, `cleanupOldServers`). Bu papka rasmiy HTTP Toolkit app bilan umumiy. Ya'ni Mac'da rasmiy app ham o'rnatilgan bo'lsa, Wirepane.app ularning yangilangan server'ini ishga tushirib yuborishi mumkin. Wirepane'ga o'z papkasini bering (`OCLIF_CLIENT_HOME` yoki oclif `dirname`).
-3. UI build'ini app ichiga qo'shish va `APP_URL`.
-4. `build-setup/setup-server.ts` server'ni GitHub release'dan emas, `../httptoolkit-server` dan yig'sin.
-5. `package.json`dagi `extraMetadata.author` va `maintainer` o'z ma'lumotlarimizga almashtirilsin.
+README'dagi 5 band:
+
+1. [x] Release server faqat `wirepane://app` origin'ga ruxsat beradi (`httptoolkit-server/src/constants.ts`). `stop-server.ts` ham shu origin'ni yuboradi.
+2. [x] Auto-update o'chirildi:
+   - `update-requested` e'tiborsiz qoldiriladi;
+   - `@oclif/plugin-update` va `oclif.update.s3` olib tashlandi. Plugin'ning init hook'i har 14 kunda fonda `update --autoupdate`ni ishga tushirardi. Bu Mac'da 2026-10-10 dagi urinish `~/Library/Caches/httptoolkit-server/autoupdate.log`da bor;
+   - oclif `dirname` endi `wirepane-server`. Release'da o'z launcher'imiz bor (`bin/httptoolkit-server`, uni `scripts/assemble-server.cjs` yozadi). U `~/.local/share/*/client`dagi server'ga hech qachon o'tmaydi. Desktop va server'dagi `cleanupOldServers` faqat `wirepane-server` papkasiga qaraydi, rasmiy app'nikiga tegmaydi.
+3. [x] UI build'i `Resources/httptoolkit-ui`da turadi va `wirepane://app`dan ochiladi (`httptoolkit-desktop/src/bundled-ui.ts`). Origin o'zgarmaydi, shuning uchun localStorage va IndexedDB saqlanib qoladi. UI `DISABLE_UPDATES=true` bilan yig'iladi: service worker yo'q.
+4. [x] Server `../httptoolkit-server`dan yig'iladi (`scripts/build-server.sh`). `npm run build` endi `server:setup`ni chaqirmaydi, u faqat upstream'ning `npm start` va `npm test` oqimlarida qoldi.
+5. [x] `extraMetadata.author` endi "Wirepane" (macOS'dagi copyright shundan olinadi). `linux.maintainer` hali `contact@httptoolkit.com`: Linux build kerak bo'lganda o'zimizning email qo'yiladi.
+
+Tekshirilgan (2026-10-12): `codesign --verify --deep --strict` o'tdi (`Signature=adhoc`). App ko'rinmas rejimda (`WIREPANE_HIDDEN_WINDOW=1`) ochildi: UI `wirepane://app`dan yuklandi, proxy ishladi, proxy orqali yuborilgan so'rov View'da ko'rindi. App to'xtatilganda server ham o'zi to'xtadi. `.pkg` `~/Applications`ga parolsiz o'rnatildi (keyin o'chirildi).
+
+**Qoldi:**
+
+- Egasi bilan: `.pkg`ni internetdan yuklab, toza foydalanuvchida o'rnatish va Gatekeeper oqimi (o'ng tugma → Open).
+- `tls-impersonate` (ixtiyoriy, TLS fingerprint) build'ga kirmadi. npm uni faqat Node `24.19.0` va undan yangisida o'rnatadi, bu Mac'da esa Node `24.14`. Node yangilangach `./setup.sh` va `./scripts/build-pkg.sh` uni o'zi qo'shadi.
+- Hajm: appning ~375 MB'i `httptoolkit-ui/dist/api` (ochiq API'larning OpenAPI spec'lari). Kerak bo'lsa ularni gzip qilib, `bundled-ui.ts`da ochish mumkin.
+- `nss/darwin`dagi `certutil` (Firefox'ning sertifikat bazasi uchun) x86_64, ya'ni Rosetta kerak. Upstream release'da ham shunday.
+- Server bundle'ida build qilingan Mac'dagi yo'l qoladi (`file:///Users/<user>/...`, Sentry'ning ishlatilmaydigan ESM loader'ida). Upstream'da ham shunday.
+- Akkaunt kelgach: `ENABLE_SIGNING=true` yo'li (Developer ID, hardened runtime, notarize) sozlanadi.
 
 **Tarqatish (egasining qarori, 2026-10-12):** imzosiz **`.pkg`** installer, ichida ad-hoc imzolangan arm64 `Wirepane.app`. Apple Developer akkaunti yo'q, egasi ariza beradi. Shuning uchun:
 
