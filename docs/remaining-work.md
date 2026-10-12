@@ -115,21 +115,35 @@ Reja va tafsilotlar: [`docs/send-v2-plan.md`](send-v2-plan.md).
 - Egasi ko'rinadigan oynada bir marta tekshirishi kerak: `hiddenInset` traffic light'lari rail logosiga tegmayaptimi; menu bar ikonkasining menyusi.
 - "Compact rows" zichlik sozlamasi.
 - Modify editor'laridagi to'liq teal kvadrat tugmalar (faqat ikonkalari almashgan).
-- View ochilganda ro'yxat atrofida keraksiz focus ring chiqmasligi tekshirilsin.
 - Native menyudagi "Pause/Resume Recording" yorlig'i holatga qarab o'zgarmaydi (buning uchun UI → desktop IPC kerak).
-- View toolbar'idagi Import/Export HAR hali o'z funksiyalarini `alert()` bilan ishlatadi: `model/events/har-files.ts`ga o'tkazilsin. `Wirepane_` nomini yasaydigan ikki joy (`har-files.ts`, `util/export-filenames.ts`) birlashtirilsin.
-- 1400px kenglikda Devices paneli ochiq bo'lsa, ko'p ustun host'ni qisqartiradi.
 
-## 4. Dizaynni qayta tekshirish
+## 4. Dizaynni qayta tekshirish: bajarildi (2026-10-12)
 
-`node logs/design/capture.cjs logs/design/after-phase3`, keyin `design-critic`. Qabul mezonlari `docs/design-plan.md`da:
+Hisobot: [`docs/design/critique-2026-10-12.md`](design/critique-2026-10-12.md). Baho **D → B+**, P0 qolmadi. Rasmlar headless Chrome'da olingan (`logs/design/after-phase3/`).
 
-- eski to'q sariq yoki indigo rang qolmagan;
-- kontrast AA darajasida;
-- har sahifada status bar bor;
-- sarlavhalar menyudagi nomlar bilan bir xil;
-- bo'sh holatlarda keyingi qadam bor;
-- hamma narsa klaviatura bilan bajariladi.
+**Tuzatildi:**
+
+- `5b22903`:
+  - View'dagi "Mock response ⌘M" / "Resend ⌘R" yorliqlari, ⌘K'da tanlangan request uchun buyruqlar;
+  - Host ustuni kengroq, bitta qurilma bo'lsa Devices paneli yig'iq;
+  - filtr, qidiruv va URL maydonlari 3:1 / 4.5:1 kontrastda;
+  - status bar'da "⌘K Commands", bitta status pill uslubi, eski ranglar olib tashlandi;
+  - focus ring qatorlar ustida;
+  - "curl" va "iOS" yozilishi, HAR import/export'da `alert()` yo'q.
+- `b3d8945`:
+  - Send'da Params · Headers · Body · Docs tab'lari;
+  - Params URL bilan sinxron, disabled param'lar va `:path` param'lar;
+  - Docs har bir HTTP tab'da, saqlanmagan tab'da ham.
+
+**Qolgan kichik ishlar (v1'dan keyin):**
+
+- Modify'dagi rule qatorlarida method'lar eski palitrada (`rule-row.tsx`, `getMethodColor`). "Existing Terminal" ikonkasi pushti.
+- Modify'dagi soya-kartalar (P2-8) va to'liq teal kvadrat tugmalar; key/value jadvallaridagi o'chirish tugmalari to'q teal (bitta accent tugma qoidasiga zid, hammasida birga o'zgartirish kerak).
+- 1100 px kenglikda Devices paneli ochiq bo'lsa, ro'yxat sarlavhasi qatorlardan siljiydi.
+- Send'dagi collection nomlari kesiladi, panelda bo'sh joy qoladi.
+- WebSocket uchun "Headers · Message" tab'lari. ⌘⌥1–4 tab shortcut'lari ⌘K'da yo'q.
+- Intercept kartalarida harakat matni ("Open Chrome →"), Settings preview'dagi Monaco ranglari (P2-1, P2-10).
+- Qayta tekshirish uchun 1366×768 va bo'sh holatlar ham suratga olinsin.
 
 ## 5. iPhone testi (egasi bilan)
 

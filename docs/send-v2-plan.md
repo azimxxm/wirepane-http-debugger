@@ -33,7 +33,7 @@ All in `httptoolkit-ui/src/model/send/`:
   - `resolveTemplates(sendRequest, text)` fills in `{{variables}}` in text sent outside a request, like WebSocket messages. It is a no-op until part D sets it from the collections store.
 - **Server.** `/client/send` accepts JSON bodies up to 256 MB (`httptoolkit-server/src/api/api-server.ts`).
 - **UI hooks** (stubs, each owned by one part):
-  - `components/send/body/send-body-card.tsx` (`SendBodyCard`) replaces upstream's body card in `request-pane.tsx`;
+  - the body editor (since 2026-10-12 `components/send/body/send-body-panel.tsx`, the Body tab of `components/send/request-editor/`) replaces upstream's body card in `request-pane.tsx`;
   - `components/send/graphql/graphql-body-editor.tsx` (`GraphqlBodyEditor`);
   - `components/send/websocket/websocket-request-pane.tsx` and `websocket-messages-pane.tsx`. `send-page.tsx` shows them instead of the HTTP panes when `extras.requestType === 'websocket'`.
 

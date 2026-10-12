@@ -86,7 +86,9 @@
 - **Redesign phase 3 done** (`7105308`): command palette, Go and Capture menus, list Type and optional columns, sectioned Settings, Phosphor icons, hidden-inset title bar. Also fixed the dark-mode Apple icon and the `code` key redaction (`8069552`).
 - Tests: UI 1398, server 96, desktop build OK.
 
-**Next for v1:** design re-critique (§4) → small leftovers → iPhone test with the owner (§5) → the owner says "publish" → publish checklist (§7).
+- **Re-critique** (`6e51d13`): D → B+, no P0s. Fixed its P1s and the main P2s (`5b22903`), and added Send's Params · Headers · Body · Docs tabs (`b3d8945`). Tests: UI 1468.
+
+**Next for v1:** iPhone test with the owner (§5) → the owner says "publish" → publish checklist (§7). The smaller design leftovers (§4) can wait for v1.1.
 
 > The full list of remaining work, with details and acceptance criteria, is in `docs/remaining-work.md`.
 
