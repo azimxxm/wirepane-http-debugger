@@ -1,6 +1,9 @@
 {
     "extends": "../../tsconfig.json",
     "compilerOptions": {
+        // wirepane: like the dev server's type check (ForkTsChecker forces it): the dom and WebWorker
+        // libs and several older @types packages in node_modules conflict with each other
+        "skipLibCheck": true,
         "types": [
             "node",
             "mocha",
@@ -11,6 +14,7 @@
     "include": [
         "../../custom-typings/*.d.ts",
         "../custom-typings/*.d.ts",
-        "./**/*.ts"
+        "./**/*.ts",
+        "./**/*.tsx" // wirepane: the component specs
     ]
 }

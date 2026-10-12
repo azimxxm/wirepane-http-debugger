@@ -10,7 +10,7 @@ import { delay } from '../../../../src/util/promise';
 // that HttpBody actually reads from. Cast through unknown to avoid having to mock the full
 // InputMessage interface in every test.
 const legacyMessage = (body: Buffer | { buffer: Buffer } | { encodedLength: number, decoded: Buffer } | undefined) =>
-    ({ body }) as unknown as Parameters<typeof HttpBody.prototype.constructor>[0];
+    ({ body }) as unknown as ConstructorParameters<typeof HttpBody>[0]; // wirepane: prototype.constructor is a plain Function
 
 describe('HttpBody', function () {
 

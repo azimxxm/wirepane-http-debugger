@@ -160,7 +160,8 @@ export const UNKNOWN_SOURCE = {
     icon: SourceIcons.Unknown
 };
 
-export const MANUALLY_SENT_SOURCE = {
+// wirepane: typed as a TrafficSource, otherwise its icon name widens to a plain string
+export const MANUALLY_SENT_SOURCE: TrafficSource = {
     ua: '',
     summary: 'Wirepane (Send)',
     description: 'Sent manually from Wirepane',

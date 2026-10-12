@@ -1,6 +1,6 @@
 import { expect } from '../../../test-setup';
 
-import { BrunoItem, BrunoRequest } from '../../../../src/model/collections/collection-types';
+import { BrunoItem, BrunoRequest, BrunoWsRequest } from '../../../../src/model/collections/collection-types';
 import {
     defaultRequestName,
     itemToRequestParts,
@@ -35,6 +35,9 @@ function httpItem(request: Partial<BrunoRequest>, extra: Partial<BrunoItem> = {}
         ...extra
     };
 }
+
+// ws-request items store no method or params, so their request is cast like newItem() does
+const wsRequest = (request: BrunoWsRequest) => request as BrunoRequest;
 
 const parts = (overrides: Partial<RequestParts>): RequestParts => ({
     method: 'GET',
@@ -252,7 +255,7 @@ describe("Collection request mapping", () => {
                 uid: UID,
                 type: 'ws-request',
                 name: 'Echo',
-                request: {
+                request: wsRequest({
                     url: 'wss://echo.example.com/socket',
                     headers: [{ name: 'Sec-WebSocket-Protocol', value: 'chat', enabled: true }],
                     auth: { mode: 'inherit' },
@@ -260,7 +263,7 @@ describe("Collection request mapping", () => {
                         { name: 'hello', type: 'text', content: 'hi {{name}}' },
                         { name: 'login', type: 'json', content: '{"user":"ann"}', selected: true }
                     ] }
-                } as BrunoRequest
+                })
             });
 
             expect(opened.method).to.equal('GET');
@@ -571,7 +574,7 @@ describe("Collection request mapping", () => {
                 name: 'Echo',
                 seq: 2,
                 settings: { timeout: 0, keepAliveInterval: 0 },
-                request: {
+                request: wsRequest({
                     url: '{{wsUrl}}/socket',
                     headers: [{ uid: 'h1', name: 'X-Client', value: 'wirepane', enabled: true }],
                     auth: { mode: 'inherit' },
@@ -585,7 +588,7 @@ describe("Collection request mapping", () => {
                     assertions: [],
                     tests: '',
                     docs: '# Echo'
-                } as BrunoRequest
+                })
             };
             expect(roundTrip(item)).to.deep.equal(item);
         });
@@ -724,12 +727,12 @@ describe("Collection request mapping", () => {
                 type: 'ws-request',
                 name: 'Echo',
                 settings: { timeout: 0, keepAliveInterval: 10 },
-                request: {
+                request: wsRequest({
                     url: 'wss://api.example.com/socket',
                     headers: [],
                     auth: { mode: 'inherit' },
                     body: { mode: 'ws', ws: [{ name: 'hello', type: 'text', content: 'hi' }] }
-                } as BrunoRequest
+                })
             };
 
             const { item } = requestPartsToItem(parts({ url: 'https://api.example.com/socket?v=2' }), '', base, { name: base.name });
