@@ -174,11 +174,30 @@ Tekshirilgan (2026-10-12): `codesign --verify --deep --strict` o'tdi (`Signature
 **Qoldi:**
 
 - Egasi bilan: `.pkg`ni internetdan yuklab, toza foydalanuvchida o'rnatish va Gatekeeper oqimi (o'ng tugma → Open).
-- `tls-impersonate` (ixtiyoriy, TLS fingerprint) build'ga kirmadi. npm uni faqat Node `24.19.0` va undan yangisida o'rnatadi, bu Mac'da esa Node `24.14`. Node yangilangach `./setup.sh` va `./scripts/build-pkg.sh` uni o'zi qo'shadi.
-- Hajm: appning ~375 MB'i `httptoolkit-ui/dist/api` (ochiq API'larning OpenAPI spec'lari). Kerak bo'lsa ularni gzip qilib, `bundled-ui.ts`da ochish mumkin.
+- `tls-impersonate`, hajm, userData va SIGTERM: pastdagi publish ro'yxatida.
 - `nss/darwin`dagi `certutil` (Firefox'ning sertifikat bazasi uchun) x86_64, ya'ni Rosetta kerak. Upstream release'da ham shunday.
 - Server bundle'ida build qilingan Mac'dagi yo'l qoladi (`file:///Users/<user>/...`, Sentry'ning ishlatilmaydigan ESM loader'ida). Upstream'da ham shunday.
 - Akkaunt kelgach: `ENABLE_SIGNING=true` yo'li (Developer ID, hardened runtime, notarize) sozlanadi.
+
+### Publish ro'yxati: faqat egasi "done, publish" deganda
+
+**Qoida (2026-10-12):** `.pkg`/`.app` faqat egasi "done, publish" deganda yig'iladi. Release'ga oid tuzatishlar shu ro'yxatga yoziladi va publish paytida bir yo'la qilinadi. Shu sanada boshlangan follow-up agent to'xtatildi, kodga tegilmagan. Quyidagilar o'shanda kod o'qib topilgan:
+
+1. **Electron userData rasmiy app bilan umumiy.** `extraMetadata.name`/`productName` = `httptoolkit` (`httptoolkit-desktop/package.json`). Shu sababli rasmiy HTTP Toolkit ochiq bo'lsa, Wirepane darrov yopiladi (single-instance lock). userData, log'lar (`LAST_RUN_LOG_PATH`), cache-cleanup va electron-store hammasi `app.getPath(...)`dan olinadi, bitta o'zgarish hammasini ko'chiradi.
+   - ctl socket alohida: server `httptoolkit-ctl.sock`ni qattiq yozgan (`httptoolkit-server/src/api/ui-operation-bridge.ts:50,66`, `bridge-client.ts:59,64`). Server listen'dan oldin mavjud socket'ni o'chiradi, ya'ni rasmiy app'nikini tortib oladi. Ikkala faylda bitta constant qilinsin, masalan `wirepane-ctl.sock`.
+   - APFS katta-kichik harfni farqlamaydi: dev allaqachon `~/Library/Application Support/Wirepane`ni ishlatadi, packaged `wirepane` o'sha papka bo'lib qoladi va dev bilan to'qnashadi. Boshqa nom tanlansin, masalan `Wirepane-app`.
+   - `app.name` o'zgarsa, menyuda "About/Hide/Quit <name>" chiqadi: `menu.ts`da shu role'larga aniq label berilsin.
+2. **Hajm.** App 874 MB, pkg 220 MB. UI'ning `dist/api` papkasi 375 MB (2549 ta `.json` spec). UI ularni `fetch('/api/${specId}.json')` bilan yuklaydi (`httptoolkit-ui/src/model/api/api-store.ts:19`). Build'da brotli bilan siqilsin, `bundled-ui.ts` oqim bilan ochsin (`createBrotliDecompress`), MIME'i `.json` qolsin. App ~330 MB kichrayadi, pkg deyarli o'zgarmaydi.
+3. **`tls-impersonate`.** Optional dependency, `engines: node >=24.19.0`. Mac'dagi Node 24.14, shuning uchun o'rnatilmaydi. Tizim Node'iga tegilmaydi: npm build'ning o'zi yuklaydigan Node 24.19.0 tarball'idan olinsin, `npm ci --omit=dev --ignore-scripts` staging'da ishga tushirilsin, `assemble-server.cjs` uni qo'shimcha manba sifatida olsin. Tekshiruv: upstream'ning `isSupported()` (`test/distributables-test/unix.sh:39`).
+4. **Yashirin rejimdagi app SIGTERM bilan yopilmaydi** (dev'da ko'rildi, 8 s'dan keyin ham ishlab turdi). Sababi hali topilmagan.
+   - UI'dagi `beforeunload` va `will-quit` sabab emas.
+   - SIGTERM Electron binary'ning PID'iga yuborilsin, `.bin/electron` wrapper'iga emas.
+   - Repro vaqtinchalik HOME, `CFFIXED_USER_HOME` va `TMPDIR` bilan qilinsin.
+5. **Build va tekshiruv:** `./scripts/build-pkg.sh`, keyin:
+   - `codesign --verify --deep --strict`;
+   - `pkgutil --check-signature`;
+   - yashirin ishga tushirish (UI, proxy, View, localStorage, SIGTERM).
+6. **Egasi bilan:** `.pkg`ni yuklab, Gatekeeper oqimini sinash (o'ng tugma → Open).
 
 **Tarqatish (egasining qarori, 2026-10-12):** imzosiz **`.pkg`** installer, ichida ad-hoc imzolangan arm64 `Wirepane.app`. Apple Developer akkaunti yo'q, egasi ariza beradi. Shuning uchun:
 
