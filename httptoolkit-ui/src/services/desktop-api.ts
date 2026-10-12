@@ -1,4 +1,5 @@
 import { desktopVersion } from "./service-versions";
+import { messageDialog } from '../model/ui/dialogs'; // wirepane
 
 type DesktopInjectedKey =
     | 'httpToolkitDesktopVersion'
@@ -130,7 +131,9 @@ export function restartApp(): void {
     } else {
         // On Mac, app exit is independent from window exit, so  on older desktop versions we can't
         // force a restart here, but hopefully this will lead the user to do so themselves:
-        alert("Please fully quit the application to restart all internal components.");
-        window.close();
+        messageDialog({ // wirepane: our own dialog instead of alert(), closing once it's read
+            title: 'Quit Wirepane to restart it',
+            message: 'Quit the app fully, then open it again, to restart everything it runs in the background.'
+        }).then(() => window.close());
     }
 }

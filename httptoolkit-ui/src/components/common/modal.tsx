@@ -36,6 +36,9 @@ export interface AppModalProps {
     className?: string;
     'aria-labelledby'?: string;
     'aria-label'?: string;
+    // wirepane: for alerts & confirmations (DialogHost), which describe themselves with their message
+    role?: 'dialog' | 'alertdialog';
+    'aria-describedby'?: string;
     children: React.ReactNode;
 }
 
@@ -98,6 +101,8 @@ export const AppModal = (props: AppModalProps) => {
         className={props.className}
         aria-labelledby={props['aria-labelledby']}
         aria-label={props['aria-label']}
+        role={props.role} // wirepane
+        aria-describedby={props['aria-describedby']} // wirepane
     >
         { props.children }
     </ModalDialog>;

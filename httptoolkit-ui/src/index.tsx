@@ -48,6 +48,7 @@ import {
 import { App } from './components/app';
 import { StyleProvider } from './components/style-provider';
 import { ErrorBoundary } from './components/error-boundary';
+import { DialogHost } from './components/common/dialog-host'; // wirepane: our own alert() & confirm() dialogs
 
 import { initializeUiApi } from './services/ui-api/api-interface';
 
@@ -130,6 +131,7 @@ appStartupPromise.then(() => {
                 <ErrorBoundary>
                     <GlobalStyles />
                     <App />
+                    <DialogHost /> {/* wirepane */}
                 </ErrorBoundary>
             </StyleProvider>
         </Provider>

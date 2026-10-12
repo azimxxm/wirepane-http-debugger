@@ -39,6 +39,7 @@ import { SelfSizedEditor } from '../editor/base-editor';
 import { ViewEventList } from './view-event-list';
 import { ViewToolbar } from './view-toolbar';
 import { describeOpenEvent, describeSelection } from './open-event-title'; // wirepane
+import { confirmClearTraffic, confirmDeletePinned } from './view-delete-dialogs'; // wirepane: our own dialogs instead of confirm()
 import { NoTrafficState, SelectRequestState } from './view-empty-states';
 import { ViewEventContextMenuBuilder } from './view-context-menu-builder';
 import { PaneOuterContainer } from './view-details-pane';
@@ -845,10 +846,17 @@ class ViewPage extends React.Component<ViewPageProps> {
 
     @action.bound
     onDelete(event: CollectedEvent) {
-        const { filteredEvents } = this.filteredEventState;
+        // Prompt before deleting pinned events (wirepane: in our own dialog, which deletes it once you agree):
+        if (event.pinned) {
+            confirmDeletePinned(1).then((confirmed) => { if (confirmed) this.removeEvent(event); });
+        } else {
+            this.removeEvent(event);
+        }
+    }
 
-        // Prompt before deleting pinned events:
-        if (event.pinned && !confirm("Delete this pinned exchange?")) return;
+    @action.bound
+    private removeEvent(event: CollectedEvent) {
+        const { filteredEvents } = this.filteredEventState;
 
         const rowIndex = filteredEvents.indexOf(event);
         const wasSelected = event === this.selectedEvent;
@@ -868,18 +876,21 @@ class ViewPage extends React.Component<ViewPageProps> {
     }
 
     @action.bound
-    onDeleteSelection() {
+    async onDeleteSelection() {
         if (this.isMultiSelection) {
             const events = [...this.selectedEvents];
             if (events.length === 0) return;
 
             const hasPinned = events.some(e => e.pinned);
-            if (hasPinned && !confirm(`Delete ${events.length} events including pinned?`)) return;
+            // wirepane: our own dialog instead of confirm()
+            if (hasPinned && !await confirmDeletePinned(events.length)) return;
 
-            this.onClearSelection();
-            for (const event of events) {
-                this.props.eventsStore.deleteEvent(event);
-            }
+            runInAction(() => { // wirepane: one action again after the dialog, so the list updates once
+                this.onClearSelection();
+                for (const event of events) {
+                    this.props.eventsStore.deleteEvent(event);
+                }
+            });
         } else if (this.selectedEvent) {
             this.onDelete(this.selectedEvent);
         }
@@ -891,26 +902,14 @@ class ViewPage extends React.Component<ViewPageProps> {
     }
 
     @action.bound
-    onClear(confirmRequired = true) {
+    async onClear(confirmRequired = true) {
         const { events } = this.props.eventsStore;
-        const someEventsPinned = events.some(e => e.pinned === true);
         const allEventsPinned = events.length > 0 &&
             events.every(e => e.pinned === true);
 
-        if (allEventsPinned) {
-            // We always confirm deletion of pinned exchanges:
-            const confirmResult = confirm("Delete pinned traffic?");
-            if (!confirmResult) return;
-        } else if (confirmRequired && events.length > 0) {
-            // We confirm deletion of non-pinned exchanges when triggered from the
-            // button, but not from keyboard shortcuts (which set confirmRequired=false).
-            const confirmResult = confirm(
-                someEventsPinned
-                    ? "Delete all non-pinned traffic?"
-                    : "Delete all collected traffic?"
-            );
-            if (!confirmResult) return;
-        }
+        // wirepane: our own dialog instead of confirm(). It always asks before deleting pinned traffic,
+        // and otherwise only from the button, not the keyboard shortcut (which sets confirmRequired=false).
+        if (!await confirmClearTraffic(events, confirmRequired)) return;
 
         this.props.uiStore.clearSelection();
         this.selectionAnchorId = undefined;

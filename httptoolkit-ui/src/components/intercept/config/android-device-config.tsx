@@ -22,6 +22,7 @@ import {
 } from '../../../model/rules/definitions/http-rule-definitions';
 import { RulesStore } from '../../../model/rules/rules-store';
 import { RulePriority } from '../../../model/rules/rules';
+import { messageDialog } from '../../../model/ui/dialogs'; // wirepane
 
 import { CopyButtonPill } from '../../common/copy-button';
 
@@ -151,11 +152,11 @@ class AndroidConfig extends React.Component<{
             // This should never happen, but plausibly could in some edge cases, in which case we need
             // to clearly tell the user what's going on here:
             if (proxyStore.externalNetworkAddresses.length === 0) {
-                alert(
-                    "Cannot activate Android interception as no network addresses could be detected." +
-                    "\n\n" +
-                    "Please open an issue at github.com/httptoolkit/httptoolkit"
-                );
+                messageDialog({ // wirepane: our own dialog instead of alert()
+                    title: "Can't connect an Android device",
+                    message: "Wirepane couldn't find this computer's address on your network, so the phone " +
+                        "has nowhere to send its traffic. Connect to Wi-Fi or a network, then try again."
+                });
                 logError("Android QR activation failed - no network addresses");
                 this.props.closeSelf();
             }

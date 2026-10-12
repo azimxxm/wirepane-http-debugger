@@ -3,6 +3,7 @@ import { triggerServerUpdate } from './server-api';
 import packageMetadata from '../../package.json';
 import { desktopVersion, serverVersion, versionSatisfies } from './service-versions';
 import { logError } from '../errors';
+import { messageDialog } from '../model/ui/dialogs'; // wirepane
 
 export const attemptServerUpdate = () =>
     triggerServerUpdate().catch(console.warn);
@@ -15,7 +16,11 @@ const alertFailedSWStartup = (e: any) => {
     const msg = "Initialization failed - background updates & cached/offline startup will be unavailable";
 
     logError(msg, { cause: e });
-    alert(msg);
+    messageDialog({ // wirepane: our own dialog instead of alert()
+        title: "Background updates aren't available",
+        message: "Wirepane couldn't start its update worker, so it can't update in the background " +
+            "or start up offline from its cache this time."
+    });
 };
 
 // Set up a SW in the background, to add offline support & instant startup.
@@ -59,17 +64,12 @@ export async function runBackgroundUpdates() {
 }
 
 function showPleaseUpdateMessage() {
-    alert(
-        "This HTTP Toolkit installation is now very outdated, and this version is " +
-        "no longer supported." +
-        "\n\n" +
-        "You can continue to use HTTP Toolkit, but you may experience issues & " +
-        "instability." +
-        "\n\n" +
-        "Please update to the latest version from httptoolkit.com when you can " +
-        "to access the many new features, bug fixes & performance improvements " +
-        "available there."
-    );
+    messageDialog({ // wirepane: our own dialog instead of alert(), and our name
+        title: 'This version of Wirepane is out of date',
+        message: "It's no longer supported. You can keep using it, but some things may not work." +
+            "\n\n" +
+            "Update to the latest version when you can, for the newest features and fixes."
+    });
 }
 
 export function checkForOutdatedComponents() {

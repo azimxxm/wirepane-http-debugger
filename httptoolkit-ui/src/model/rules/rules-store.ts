@@ -34,6 +34,7 @@ import { logError } from '../../errors';
 import { AccountStore } from '../account/account-store';
 import { ProxyStore } from '../proxy-store';
 import { getDesktopInjectedValue } from '../../services/desktop-api';
+import { messageDialog } from '../ui/dialogs'; // wirepane
 import { RTC_RULES_SUPPORTED, WEBSOCKET_RULE_RANGE } from '../../services/service-versions';
 
 import {
@@ -179,7 +180,10 @@ export class RulesStore {
                     } catch (e) {
                         console.log('Failed to activate stored rules', e, JSON.stringify(rules));
                         logError('Failed to activate configured ruleset');
-                        alert(`Configured rules could not be activated, so were reset to default.`);
+                        messageDialog({ // wirepane: our own dialog instead of alert()
+                            title: 'Your rules were reset to the defaults',
+                            message: "Your saved rules couldn't be turned on, so Wirepane went back to the default rules."
+                        });
 
                         this.resetRulesToDefault(); // Should trigger the reaction above again, and thereby resolve().
                     }
@@ -233,7 +237,10 @@ export class RulesStore {
                 );
 
                 logError(err);
-                alert(`Could not load rules from last run.\n\n${err}`);
+                messageDialog({ // wirepane: our own dialog instead of alert()
+                    title: "Couldn't load your rules",
+                    message: `The rules from your last session couldn't be read, so you're starting with the default rules.\n\n${err}`
+                });
                 // We then continue, which resets the rules exactly as if this was the user's first run.
             });
 

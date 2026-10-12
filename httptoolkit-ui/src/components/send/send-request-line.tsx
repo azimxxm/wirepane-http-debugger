@@ -7,6 +7,7 @@ import { styled } from '../../styles';
 import { Icon } from '../../icons';
 
 import { getMethodThemeColor } from '../../model/events/categorization';
+import { messageDialog } from '../../model/ui/dialogs'; // wirepane
 
 import { Ctrl, isMac } from '../../util/ui';
 import { Button, Select, TextInput } from '../common/inputs';
@@ -233,7 +234,10 @@ export const SendRequestLine = (props: {
                 props.updateFromHar(harRequest);
             } catch (e: any) {
                 console.log(e);
-                alert(`Could not parse pasted curl command:\n\n${e.message || e}`);
+                messageDialog({ // wirepane: our own dialog instead of alert()
+                    title: "Couldn't read that cURL command",
+                    message: `Check that you pasted the whole command, with its URL.\n\n${e.message || e}`
+                });
             }
         }
     }, [props.updateFromHar, props.updateUrl]);

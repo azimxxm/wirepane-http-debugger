@@ -14,6 +14,7 @@ import { SendStore } from '../../model/send/send-store';
 import { UiStore } from '../../model/ui/ui-store';
 import { buildRequestInputFromHarRequest, SendRequest } from '../../model/send/send-request-model';
 import { CollectionsStore } from '../../model/collections/collections-store';
+import { messageDialog } from '../../model/ui/dialogs'; // wirepane
 
 import { ContainerSizedEditor } from '../editor/base-editor';
 
@@ -99,7 +100,8 @@ class SendPage extends React.Component<{
             const errorMessage = (e instanceof ApiError && e.apiError?.message)
                 ? e.apiError?.message
                 : e.message ?? e;
-            alert(errorMessage);
+            // wirepane: our own dialog instead of alert()
+            messageDialog({ title: "Couldn't send this request", message: `${errorMessage}` });
         });
     };
 

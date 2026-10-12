@@ -1,7 +1,6 @@
 import * as React from 'react';
 import { observer, inject } from 'mobx-react';
 import { buildHarFilename } from '../../util/export-filenames'; // wirepane: one place for our file names
-import * as dedent from 'dedent';
 import * as Ajv from 'ajv';
 
 import { ViewableEvent } from '../../types';
@@ -12,6 +11,7 @@ import { EventsStore } from '../../model/events/events-store';
 import { generateHar } from '../../model/http/har';
 import { logError } from '../../errors';
 import { formatAjvError } from '../../util/json-schema';
+import { messageDialog } from '../../model/ui/dialogs'; // wirepane
 
 import { IconButton } from '../common/icon-button';
 
@@ -83,22 +83,19 @@ export const ImportHarButton = inject('eventsStore', 'accountStore')(
                     } catch (error: any) {
                         logError(error);
 
+                        // wirepane: our own dialog instead of alert(), titled like har-files.ts
                         if (error.name === 'HARError' && error.errors) {
-                            alert(dedent`
-                                HAR file is not valid.
-
-                                ${
-                                    error.errors
+                            messageDialog({
+                                title: "That isn't a valid HAR file",
+                                message: error.errors
                                     .map((e: Ajv.ErrorObject) => formatAjvError(data, e))
                                     .join('\n')
-                                }
-                            `);
+                            });
                         } else {
-                            alert(dedent`
-                                Could not parse HAR file.
-
-                                ${error.message || error}
-                            `);
+                            messageDialog({
+                                title: "Couldn't import that HAR file",
+                                message: `${error.message || error}`
+                            });
                         }
                     }
                 }

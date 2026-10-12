@@ -108,6 +108,9 @@ export const CollectionDialog = (props: {
     onClose: () => void,
     onSubmit?: () => void,
     footer?: React.ReactNode,
+    // Alerts & confirmations (DialogHost) are 'alertdialog's, described by their message
+    role?: 'dialog' | 'alertdialog',
+    describedBy?: string,
     children: React.ReactNode
 }) => {
     const titleId = React.useId();
@@ -122,7 +125,12 @@ export const CollectionDialog = (props: {
         onSubmit();
     }, [onSubmit]);
 
-    return <DialogRoot onClose={props.onClose} aria-labelledby={titleId}>
+    return <DialogRoot
+        onClose={props.onClose}
+        aria-labelledby={titleId}
+        role={props.role}
+        aria-describedby={props.describedBy}
+    >
         <DialogForm
             style={{ width: props.width }}
             onSubmit={(event) => { event.preventDefault(); onSubmit?.(); }}

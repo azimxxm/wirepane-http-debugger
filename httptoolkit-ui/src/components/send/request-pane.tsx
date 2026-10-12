@@ -12,6 +12,7 @@ import { RulesStore } from '../../model/rules/rules-store';
 import { UiStore } from '../../model/ui/ui-store';
 import { RequestInput, SendRequest } from '../../model/send/send-request-model';
 import { ContextMenuItem } from '../../model/ui/context-menu';
+import { messageDialog } from '../../model/ui/dialogs'; // wirepane
 import { generateSendSnippet } from '../../model/send/body-modes/send-snippets'; // wirepane: every body mode
 import {
     getCodeSnippetFormatKey,
@@ -130,7 +131,10 @@ export class RequestPane extends React.Component<{
             await copyToClipboard(snippet);
         } catch (e: any) {
             console.log(e);
-            alert(`Could not copy this request as a code snippet:\n\n${e.message || e}`);
+            messageDialog({ // wirepane: our own dialog instead of alert()
+                title: "Couldn't copy this request as a code snippet",
+                message: `${e.message || e}`
+            });
         }
     };
 

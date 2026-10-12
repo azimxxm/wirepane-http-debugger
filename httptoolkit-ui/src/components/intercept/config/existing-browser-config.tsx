@@ -1,6 +1,5 @@
-import dedent from 'dedent';
-
 import { Interceptor } from '../../../model/interception/interceptors';
+import { confirmDialog } from '../../../model/ui/dialogs'; // wirepane
 
 export async function onActivateExistingBrowser(
     interceptor: Interceptor,
@@ -26,10 +25,11 @@ export async function onActivateExistingBrowser(
         }
 
         // If the browser is open, confirm that we can kill & restart it first:
-        const confirmed = confirm(dedent`
-            Your browser is currently open, and needs to be
-            restarted to enable interception. Restart it now?
-        `.replace('\n', ' '));
+        const confirmed = await confirmDialog({ // wirepane: our own dialog instead of confirm()
+            title: 'Restart your browser?',
+            message: "It's open right now, and it has to restart before Wirepane can intercept it.",
+            confirmLabel: 'Restart browser'
+        });
 
         // If cancelled, we silently do nothing
         if (!confirmed) return;

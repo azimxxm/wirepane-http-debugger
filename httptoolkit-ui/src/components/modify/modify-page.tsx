@@ -8,6 +8,7 @@ import { styled } from '../../styles';
 import { WithInjected } from '../../types';
 import { logError } from '../../errors';
 import { uploadFile, saveFile } from '../../util/ui';
+import { confirmDialog, messageDialog } from '../../model/ui/dialogs'; // wirepane
 
 import { RulesStore } from '../../model/rules/rules-store';
 import { AccountStore } from '../../model/account/account-store';
@@ -212,8 +213,13 @@ class ModifyPage extends React.Component<ModifyPageProps> {
     }
 
     @action.bound
-    resetToDefaults() {
-        const confirmResult = confirm("Reset all rules?");
+    async resetToDefaults() {
+        const confirmResult = await confirmDialog({ // wirepane: our own dialog instead of confirm()
+            title: 'Reset all rules?',
+            message: "Every rule goes back to the defaults. Rules you haven't exported are lost.",
+            confirmLabel: 'Reset rules',
+            destructive: true
+        });
         if (!confirmResult) return;
 
         this.props.rulesStore.resetRulesToDefault();
@@ -281,7 +287,10 @@ class ModifyPage extends React.Component<ModifyPageProps> {
                 );
             } catch (e) {
                 logError(e);
-                alert(`Rules could not be imported: ${e}`);
+                messageDialog({ // wirepane: our own dialog instead of alert()
+                    title: "Couldn't import those rules",
+                    message: `${(e as Error)?.message ?? e}`
+                });
             }
         }
     }

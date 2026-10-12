@@ -14,6 +14,7 @@ import { AccountStore } from '../../../model/account/account-store';
 import { EventsStore } from '../../../model/events/events-store';
 import { RulesStore } from '../../../model/rules/rules-store';
 import { FridaActivationOptions, FridaHost, FridaTarget } from '../../../model/interception/frida';
+import { messageDialog } from '../../../model/ui/dialogs'; // wirepane
 
 import { getDetailedInterceptorMetadata } from '../../../services/server-api';
 import { ActivationFailure } from '../../../services/server-api-types';
@@ -164,11 +165,12 @@ const INCOMPATIBLE_APP_IDS: string[] = [
 ];
 
 const alertActivationError = (action: string, error: ErrorLike) => {
-    if (error instanceof ActivationFailure) {
-        alert(`Failed to ${action}: ${error.failureMessage} (${error.errorCode})`);
-    } else {
-        alert(`Failed to ${action}: ${error.message ?? error}`);
-    }
+    messageDialog({ // wirepane: our own dialog instead of alert()
+        title: `Couldn't ${action}`,
+        message: error instanceof ActivationFailure
+            ? `${error.failureMessage} (${error.errorCode})`
+            : `${error.message ?? error}`
+    });
 
     throw error;
 };
@@ -336,7 +338,7 @@ class FridaConfig extends React.Component<{
             await this.props.activateInterceptor({
                 action: 'setup',
                 hostId
-            }).catch((e) => alertActivationError('setup Frida', e));
+            }).catch((e) => alertActivationError('set up Frida', e)); // wirepane: 'set up', it's a dialog title now
             this.props.reportSuccess({ idSuffix: 'setup', showRequests: false });
 
             this.setHostProgress(hostId, 75);

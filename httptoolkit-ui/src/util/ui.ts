@@ -7,6 +7,7 @@ import { logError } from '../errors';
 
 import { desktopVersion } from '../services/service-versions';
 import { DesktopApi } from '../services/desktop-api';
+import { messageDialog } from '../model/ui/dialogs'; // wirepane
 
 export function isReactElement(node: any): node is React.ReactElement {
     return node && !!node.$$typeof;
@@ -140,10 +141,10 @@ export function uploadFile(
             } else {
                 // In the middle ground, we released a desktop version that includes an Electron update
                 // with disables file.path, with no fallback. Anybody using this needs to update.
-                window.alert(
-                    "File path access is not available due to a temporary issue in this release.\n\n" +
-                    "Please update to the latest HTTP Toolkit from httptoolkit.com"
-                );
+                messageDialog({ // wirepane: our own dialog instead of alert()
+                    title: "This version can't read file paths",
+                    message: "Picking a file here needs a newer desktop app. Update Wirepane, then try again."
+                });
                 return result.resolve(null);
             }
         } else {
