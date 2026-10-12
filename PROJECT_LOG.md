@@ -2,6 +2,16 @@
 
 ## 2026-10-12
 
+### Pre-release fixes (a58bfce..67e523a, not pushed)
+
+- **Toolbar:** one 52 px window toolbar with breadcrumbs ("View › GET /todos/1", ⌘[ back) and the "Search or run a command ⌘K" field; the rail starts below it.
+- **Raw tunnels on:** `FEATURE_FLAGS = ['raw-tunnels']` in `account-store.ts`. Non-HTTP TCP goes through and shows in View under its device; Frida apps use SOCKS. Open: mockttp drops the reply when a client half-closes (`docs/remaining-work.md` 8.5).
+- **Own dialogs:** `alert()`/`confirm()` replaced by `messageDialog()`/`confirmDialog()` (`model/ui/dialogs.ts`, `DialogHost`), View's Clear and pinned deletes included. Only the startup alert in `index.html` stays.
+- **iPhone page:** step 3 says Safari (Chrome shows an empty page), the QR caption warns about the default browser, an AirDrop "Save certificate (.crt)" button.
+- **Ports:** proxy 9473–9999 (was 8000), dev UI 45458 (was 8080).
+- **Checks:** UI 1514 unit tests, `tsc -p test/unit` clean, dev type check clean, dev UI loads headless on 45458 with the proxy on 9473.
+- **Next:** new test pkg for the owner; after "done": push, Actions → Release, check the draft, publish.
+
 ### Release 1.0.0 prepared: macOS, Windows, Linux (not pushed, no CI run yet)
 
 - **Version:** root `VERSION` = `1.0.0` for file names, the tag, the macOS About panel and Settings > Status. The internal app/server version stays `1.27.2`.
