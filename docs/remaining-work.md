@@ -273,10 +273,13 @@ Gatekeeper birinchi ochishda to'xtatadi: o'ng tugma → Open yoki "Open Anyway".
 
 **Holat (2026-10-12):** egasi boshladi ("Flutter ilovalarini ko'ra olishimiz kerak, Proxyman ko'ra olmaydi"). Haqiqiy iPhone'dagi test o'tdi: mitmproxy WireGuard rejimida Jett, Road24 va TelecomTV'ning o'z API'lari ochiq ko'rindi (research, 14-bo'lim). Qadamlar:
 
+**Egasining qarori (2026-10-12):** avval WireGuard (bepul WireGuard ilovasi bilan, tez chiqadi), keyin **IKEv2**: iOS'ning o'z VPN turi, u Safari'dagi linkdan bitta profil (Wirepane CA + VPN) bo'lib o'rnatiladi, hech qanday ilova kerak emas. Bu asosiy iOS yo'li bo'ladi. Shuning uchun sidecar'ning kirish qismi almashtiriladigan qilib yoziladi: `wireguard` hozir, `ikev2` (ESP-over-UDP, NAT-T) keyin, TCP/DNS/QUIC/UDP yadrosi ikkalasiga umumiy.
+
 1. [ ] Rust sidecar `wirepane-tunnel/` (WireGuard → SOCKS5 + teglar → Mockttp, DNS, QUIC block, UDP relay) — boshlandi.
 2. [ ] Server: `wireguard-vpn` interceptor, kalitlar, QR config, lifecycle, event relay; Mockttp'da SOCKS custom-metadata.
 3. [ ] UI: iPhone/Android sahifasida "Capture all apps (VPN)", QR, holat; qurilmani teg bo'yicha aniqlash; pinned host'lar (Apple push, iCloud) uchun passthrough.
 4. [ ] Packaging: sidecar'ni app ichiga qo'shish, `NSLocalNetworkUsageDescription`, packaged app'da Local Network ruxsatini tekshirish.
+5. [ ] IKEv2 kirish qismi: IKE_SA_INIT/IKE_AUTH (server sertifikati Wirepane CA'dan), CHILD_SA (ESP AES-GCM), NAT-T, config payload (IP, DNS), DPD va rekey; `.mobileconfig` profil (CA + VPN payload) linkdan yuklanadi. Taxminan 2–3 hafta.
 
 - Kichik Rust sidecar `wirepane-tunnel` mitmproxy_rs (MIT: boringtun + smoltcp) ustiga quriladi va root talab qilmaydi.
 - Telefon rasmiy **WireGuard** ilovasini ishlatadi, sozlama QR orqali beriladi.
