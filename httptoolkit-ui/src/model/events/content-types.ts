@@ -7,7 +7,7 @@ import {
     isProbablyGrpcProto,
     isValidGrpcProto,
 } from '../../util/protobuf';
-import { isProbablyJson, isProbablyJsonRecords } from '../../util/json';
+import { isProbablyJson, isProbablyJsonRecords, sniffJsonSyntax } from '../../util/json';
 import { isProbablyUtf8 } from '../../util/buffer';
 
 // Simplify a mime type as much as we can, without throwing any errors
@@ -55,6 +55,7 @@ export type ViewableContentType =
     | 'protobuf'
     | 'grpc-proto'
     | 'json-records'
+    | 'summary' // wirepane: a short note instead of the content, for big binary bodies
     ;
 
 export const EditableContentTypes = [
@@ -226,7 +227,9 @@ export function getCompatibleTypes(
         // Allow optionally formatting non-JSON as JSON, if it's anything remotely close
         availableTypes.add('json');
 
-        if (isCommonDefaultType) {
+        // wirepane: only open it as JSON if it really is, as the first character alone also
+        // matches text like '404 page not found', which the JSON view used to garble.
+        if (isCommonDefaultType && sniffJsonSyntax(body!) !== 'not-json') {
             preferredType = 'json';
         }
     }
@@ -301,6 +304,26 @@ export function getCompatibleTypes(
         availableTypes.add('base64');
     }
 
+    // wirepane: binary bodies (video segments, protobuf sent as form data...) are only garbage
+    // in the text-based views, so open them in a binary-safe one. Big ones get a short summary,
+    // as rendering megabytes of hex blocks the UI for seconds. Multipart bodies stay text: their
+    // fields are readable even when a file part isn't.
+    if (
+        body &&
+        !BINARY_VIEW_TYPES.includes(preferredType) &&
+        !rawContentType?.toLowerCase().startsWith('multipart/') &&
+        isProbablyBinary(body)
+    ) {
+        if (body.length > LARGE_BINARY_BODY_SIZE) {
+            availableTypes.add('summary');
+            preferredType = 'summary';
+        } else {
+            preferredType = availableTypes.has('grpc-proto') ? 'grpc-proto'
+                : availableTypes.has('protobuf') ? 'protobuf'
+                : 'raw';
+        }
+    }
+
     // Lastly, anything can be shown raw or as text, if you like:
     availableTypes.add('text');
     availableTypes.add('raw');
@@ -309,6 +332,21 @@ export function getCompatibleTypes(
         preferredContentType: preferredType,
         availableContentTypes: Array.from(availableTypes)
     };
+}
+
+// wirepane: views that already suit binary data. Hex ('raw') isn't one of them for big bodies:
+// 100kB of hex takes about 70ms to render, a 4MB video segment 1.5s, all of it blocking the UI.
+const BINARY_VIEW_TYPES: ViewableContentType[] = ['image', 'protobuf', 'grpc-proto', 'summary'];
+const LARGE_BINARY_BODY_SIZE = 100_000;
+
+// wirepane: whether the start of the body has control characters that never appear in text:
+// those below 0x20 except tab, LF, VT, FF, CR, ESC and the record separator of JSON text
+// sequences. Text in other charsets (e.g. windows-1251) has none, so it still counts as text.
+function isProbablyBinary(body: Buffer) {
+    return body.subarray(0, 1024).some((byte) =>
+        byte < 0x09 ||
+        (byte > 0x0D && byte < 0x20 && byte !== 0x1B && byte !== 0x1E)
+    );
 }
 
 function getFirstRealChar(buffer: Buffer | undefined): string | null {

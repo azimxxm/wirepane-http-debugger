@@ -10,7 +10,8 @@ import { formatBufferAsync } from '../../services/ui-worker-api';
 import { ReadOnlyParams } from '../../components/common/editable-params';
 import { ImageViewer } from '../../components/editor/image-viewer';
 import { ExifBanner, ExifTags, parseImageExif } from '../../components/editor/exif-banner';
-import { formatJson } from '../../util/json';
+import { BinaryBodySummary } from '../../components/editor/binary-body-summary';
+import { formatJson, getJsonSyntax } from '../../util/json';
 
 export interface EditorFormatter {
     language: string;
@@ -121,7 +122,10 @@ export const Formatters: { [key in ViewableContentType]: Formatter } = {
         render: (input: Buffer, headers?: Headers) => {
             if (input.byteLength < 10_000) {
                 const inputAsString = bufferToString(input);
-                return formatJson(inputAsString, { formatRecords: false });
+                // wirepane: reformatting text that isn't JSON changes it, so it's shown as sent
+                return getJsonSyntax(inputAsString) === 'not-json'
+                    ? inputAsString
+                    : formatJson(inputAsString, { formatRecords: false });
             } else {
                 return observablePromise(
                     formatBufferAsync(input, 'json', headers)
@@ -184,5 +188,10 @@ export const Formatters: { [key in ViewableContentType]: Formatter } = {
             extract: parseImageExif,
             Component: ExifBanner
         } satisfies FormatterMetadata<ExifTags>
+    },
+    // wirepane: the default for big binary bodies, see getCompatibleTypes
+    summary: {
+        layout: 'scrollable',
+        Component: BinaryBodySummary
     }
 };

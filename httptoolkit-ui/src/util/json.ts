@@ -80,7 +80,16 @@ export function formatJson(text: string, options: { formatRecords: boolean } = {
     while ((token = scanner.scan()) !== JsonSyntaxKind.EOF) {
         const tokenOffset = scanner.getTokenOffset();
         const tokenLength = scanner.getTokenLength();
-        const tokenText = text.slice(tokenOffset, tokenOffset + tokenLength);
+        let tokenText = text.slice(tokenOffset, tokenOffset + tokenLength);
+
+        // wirepane: the JSON scanner has no single-quoted strings, so it would split 'a:b, c'
+        // at the colon and comma, and we'd add spaces and line breaks inside the value.
+        if (token === JsonSyntaxKind.Unknown && tokenText[0] === "'") {
+            const stringEnd = findSingleQuotedStringEnd(text, tokenOffset);
+            tokenText = text.slice(tokenOffset, stringEnd);
+            scanner.setPosition(stringEnd);
+            token = JsonSyntaxKind.StringLiteral;
+        }
 
         if (options.formatRecords && indent === 0) {
             betweenRecords = true;
@@ -255,6 +264,139 @@ function isValueToken(token: JsonSyntaxKind | null): boolean {
            token === JsonSyntaxKind.NullKeyword ||
            token === JsonSyntaxKind.CloseBraceToken ||
            token === JsonSyntaxKind.CloseBracketToken;
+}
+
+// wirepane: returns the offset just after the closing quote of the single-quoted string
+// starting at `start`. Unclosed strings stop at the end of the line, like in JavaScript.
+function findSingleQuotedStringEnd(text: string, start: number): number {
+    for (let i = start + 1; i < text.length; i++) {
+        const char = text[i];
+        if (char === '\\') i++; // Skip the escaped character, which may be a quote
+        else if (char === "'") return i + 1;
+        else if (char === '\n' || char === '\r') return i;
+    }
+    return text.length;
+}
+
+const IDENTIFIER_REGEX = /^[A-Za-z_$][\w$]*$/;
+
+// Not JSON, but what Python's json.dumps and JavaScript objects write for these numbers
+const JS_VALUE_REGEX = /^(NaN|Infinity|undefined)$/;
+
+// How much of a body we read to guess its JSON syntax, when we only need a guess:
+const JSON_SYNTAX_SNIFF_LIMIT = 16 * 1024;
+
+export type JsonSyntax =
+    | 'json' // Only JSON tokens, though maybe broken: cut off, comments, missing commas...
+    | 'relaxed-json' // JavaScript object style: unquoted keys or single-quoted strings
+    | 'not-json';
+
+// wirepane: formatJson only moves whitespace around tokens. That's safe for JSON, even broken
+// or cut-off JSON, but other text gets changed: '404 page not found' became '404pagenotfound'
+// and '12:00:00' became '12: 0\n0: 0\n0'. This checks that the text really is made of JSON
+// values (allowing unquoted keys and single quotes), so anything else can be shown as sent.
+// The end of the text may be missing, so a body cut down to a prefix gives the same answer.
+export function getJsonSyntax(text: string): JsonSyntax {
+    if (text.charCodeAt(0) === 0xFEFF) text = text.slice(1); // A byte order mark isn't content
+    const scanner = createJsonScanner(text);
+
+    let relaxed = false;
+    let depth = 0;
+    let topLevelValueDone = false;
+    let expectColon = false;
+    let separated = true; // Whitespace or a comment since the previous token?
+    let previous: 'start' | 'open' | 'close' | 'comma' | 'colon' | 'key' | 'string' | 'value' = 'start';
+
+    let token: JsonSyntaxKind;
+    while ((token = scanner.scan()) !== JsonSyntaxKind.EOF) {
+        if (
+            token === JsonSyntaxKind.Trivia ||
+            token === JsonSyntaxKind.LineBreakTrivia ||
+            token === JsonSyntaxKind.LineCommentTrivia ||
+            token === JsonSyntaxKind.BlockCommentTrivia
+        ) {
+            separated = true;
+            continue;
+        }
+
+        // Only one value per body, and an unquoted key must be followed by its colon:
+        if (topLevelValueDone) return 'not-json';
+        if (expectColon && token !== JsonSyntaxKind.ColonToken) return 'not-json';
+
+        const tokenOffset = scanner.getTokenOffset();
+        const tokenText = text.slice(tokenOffset, tokenOffset + scanner.getTokenLength());
+
+        if (token === JsonSyntaxKind.Unknown && tokenText[0] === "'") {
+            scanner.setPosition(findSingleQuotedStringEnd(text, tokenOffset));
+            token = JsonSyntaxKind.StringLiteral;
+            relaxed = true;
+        }
+
+        const isTouchingValue = !separated &&
+            (previous === 'string' || previous === 'value' || previous === 'key');
+
+        switch (token) {
+            case JsonSyntaxKind.OpenBraceToken:
+            case JsonSyntaxKind.OpenBracketToken:
+                if (isTouchingValue) return 'not-json';
+                depth++;
+                previous = 'open';
+                break;
+            case JsonSyntaxKind.CloseBraceToken:
+            case JsonSyntaxKind.CloseBracketToken:
+                if (depth === 0) return 'not-json';
+                depth--;
+                if (depth === 0) topLevelValueDone = true;
+                previous = 'close';
+                break;
+            case JsonSyntaxKind.CommaToken:
+                if (depth === 0) return 'not-json';
+                previous = 'comma';
+                break;
+            case JsonSyntaxKind.ColonToken:
+                // Keys are strings or (relaxed) identifiers, so 12:30 isn't a key and value
+                if (depth === 0 || (previous !== 'string' && previous !== 'key')) return 'not-json';
+                expectColon = false;
+                previous = 'colon';
+                break;
+            case JsonSyntaxKind.StringLiteral:
+            case JsonSyntaxKind.NumericLiteral:
+            case JsonSyntaxKind.TrueKeyword:
+            case JsonSyntaxKind.FalseKeyword:
+            case JsonSyntaxKind.NullKeyword:
+                // Touching values are one word split in two, like the 0s of 00 or 2026-07
+                if (isTouchingValue) return 'not-json';
+                if (depth === 0) topLevelValueDone = true;
+                previous = token === JsonSyntaxKind.StringLiteral ? 'string' : 'value';
+                break;
+            default: // Unknown: unquoted keys (right after { or a comma) or NaN-like values
+                if (!IDENTIFIER_REGEX.test(tokenText)) return 'not-json';
+                relaxed = true;
+                if (previous === 'colon' && JS_VALUE_REGEX.test(tokenText)) {
+                    previous = 'value';
+                } else if (previous === 'open' || previous === 'comma') {
+                    expectColon = true;
+                    previous = 'key';
+                } else {
+                    return 'not-json';
+                }
+        }
+
+        separated = false;
+    }
+
+    return relaxed ? 'relaxed-json' : 'json';
+}
+
+// wirepane: a quick guess from the start of a body, for picking views and editor modes
+export function sniffJsonSyntax(content: Buffer): JsonSyntax {
+    let text = content.subarray(0, JSON_SYNTAX_SNIFF_LIMIT).toString('utf8');
+    if (content.byteLength > JSON_SYNTAX_SNIFF_LIMIT) {
+        // Drop the last token, as the cut may have split it (e.g. 'tru' from 'true')
+        const lastBreak = text.search(/[\s,:{\[][^\s,:{\[]*$/);
+        if (lastBreak !== -1) text = text.slice(0, lastBreak);
+    }
+    return getJsonSyntax(text);
 }
 
 function scanAhead(scanner: any): JsonSyntaxKind {

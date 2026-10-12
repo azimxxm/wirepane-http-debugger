@@ -1,6 +1,6 @@
 import { expect } from "chai";
 
-import { formatJson } from "../../../src/util/json";
+import { formatJson, getJsonSyntax, sniffJsonSyntax } from "../../../src/util/json";
 
 describe("JSON formatting", () => {
 
@@ -336,4 +336,98 @@ true
 
     });
 
+});
+
+// wirepane: single-quoted strings, as in the non-strict JSON of the Firebase iOS SDK
+describe("JSON formatting of single-quoted strings", () => {
+
+    it("should not add spaces or line breaks inside the string", () => {
+        const input = "{app_id:'1:123456789012:ios:f4a2', time:'2026-07-04T06:00:00Z', note:'a, b'}";
+        const expected = `{
+  app_id: '1:123456789012:ios:f4a2',
+  time: '2026-07-04T06:00:00Z',
+  note: 'a, b'
+}`;
+        expect(formatJson(input)).to.equal(expected);
+    });
+
+    it("should keep an escaped quote inside the string", () => {
+        const input = "{a:'it\\'s: here',b:1}";
+        const expected = `{
+  a: 'it\\'s: here',
+  b: 1
+}`;
+        expect(formatJson(input)).to.equal(expected);
+    });
+
+    it("should end an unclosed string at the end of the line", () => {
+        const input = "{a:'one: two\n}";
+        expect(formatJson(input)).to.equal("{\n  a: 'one: two\n}");
+    });
+});
+
+describe("JSON syntax detection", () => {
+
+    describe("getJsonSyntax", () => {
+
+        it("should accept strict JSON", () => {
+            expect(getJsonSyntax('{"a":1,"b":[true,false,null,"c",-1.5e3]}')).to.equal('json');
+            expect(getJsonSyntax('[1, 2, 3]')).to.equal('json');
+            expect(getJsonSyntax('"just a string"')).to.equal('json');
+            expect(getJsonSyntax('123')).to.equal('json');
+        });
+
+        it("should accept JSON that is broken or cut off", () => {
+            expect(getJsonSyntax('{"a":1,"b":[1,')).to.equal('json');
+            expect(getJsonSyntax('{"a":"cut off in a str')).to.equal('json');
+            expect(getJsonSyntax('{"a":1,}')).to.equal('json');
+            expect(getJsonSyntax('{"a":1, // comment\n"b":2}')).to.equal('json');
+        });
+
+        it("should ignore a byte order mark", () => {
+            expect(getJsonSyntax('\uFEFF{"a":1}')).to.equal('json');
+        });
+
+        it("should recognize unquoted keys and single quotes as relaxed JSON", () => {
+            expect(getJsonSyntax("{app_id:'1:2:ios:3', \"b\": 1}")).to.equal('relaxed-json');
+            expect(getJsonSyntax("{'a': ['b', 'c']}")).to.equal('relaxed-json');
+            expect(getJsonSyntax('{$a: 1, _b: 2}')).to.equal('relaxed-json');
+        });
+
+        it("should recognize NaN-like values as relaxed JSON", () => {
+            expect(getJsonSyntax('{"a": NaN, "b": Infinity}')).to.equal('relaxed-json');
+        });
+
+        it("should reject text that only starts like JSON", () => {
+            expect(getJsonSyntax('404 page not found')).to.equal('not-json');
+            expect(getJsonSyntax('12:00:00')).to.equal('not-json');
+            expect(getJsonSyntax('2026-07-04T06:00:00Z')).to.equal('not-json');
+            expect(getJsonSyntax('true story')).to.equal('not-json');
+            expect(getJsonSyntax('https://example.com/a?b=c')).to.equal('not-json');
+            expect(getJsonSyntax("hello: world")).to.equal('not-json');
+            expect(getJsonSyntax("{ me { name } }")).to.equal('not-json');
+        });
+
+        it("should reject JSON with a prefix or a second value", () => {
+            expect(getJsonSyntax(")]}'\n{\"a\":1}")).to.equal('not-json');
+            expect(getJsonSyntax('{"a":1}{"b":2}')).to.equal('not-json');
+            expect(getJsonSyntax('{"a":1}}')).to.equal('not-json'); // One closing brace too many
+        });
+    });
+
+    describe("sniffJsonSyntax", () => {
+
+        it("should give the same answer for a long body as for its start", () => {
+            const strict = Buffer.from('[' + '1234567,'.repeat(5000) + '1]');
+            expect(strict.byteLength).to.be.greaterThan(16 * 1024);
+            expect(sniffJsonSyntax(strict)).to.equal('json');
+
+            const relaxed = Buffer.from('{' + "key_name:'value: 1, 2',".repeat(1000) + "last:'end'}");
+            expect(relaxed.byteLength).to.be.greaterThan(16 * 1024);
+            expect(sniffJsonSyntax(relaxed)).to.equal('relaxed-json');
+
+            const text = Buffer.from('this is not JSON, but it is long. '.repeat(1000));
+            expect(sniffJsonSyntax(text)).to.equal('not-json');
+        });
+    });
 });

@@ -8,7 +8,7 @@ import * as beautifyXml from 'xml-beautifier';
 import { Headers } from '../types';
 import { asBuffer, bufferToHex, bufferToString, getReadableSize } from '../util/buffer';
 import { parseRawProtobuf, extractProtobufFromGrpc } from '../util/protobuf';
-import { formatJson } from '../util/json';
+import { formatJson, getJsonSyntax } from '../util/json';
 
 const truncationMarker = (size: string) => `\n[-- Truncated to ${size} --]`;
 const FIVE_MB = 1024 * 1024 * 5;
@@ -132,7 +132,11 @@ const WorkerFormatters = {
         try {
             return JSON.stringify(JSON.parse(asString), null, 2);
         } catch (e) {
-            if (content.byteLength <= 5_000_000) {
+            if (
+                content.byteLength <= 5_000_000 &&
+                // wirepane: reformatting text that isn't JSON changes it, so it's shown as sent
+                getJsonSyntax(asString) !== 'not-json'
+            ) {
                 return formatJson(asString, { formatRecords: false });
             } else {
                 // Large non-parseable content - we fall back to the raw string

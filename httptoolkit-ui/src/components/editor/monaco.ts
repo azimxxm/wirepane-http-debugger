@@ -9,6 +9,7 @@ import { delay } from '../../util/promise';
 import { asError } from '../../util/error';
 
 import { ContentValidator, validateJsonRecords, validateXml } from '../../model/events/content-validation';
+import { registerRelaxedJsonLanguage } from './relaxed-json-language';
 
 export type {
     MonacoTypes,
@@ -83,6 +84,9 @@ async function loadMonacoEditor(retries = 5): Promise<void> {
         monaco.languages.register({
             id: 'json-records'
         });
+
+        // wirepane: JSON with unquoted keys or single quotes, without an error on every key
+        registerRelaxedJsonLanguage(monaco);
 
         addValidator(monaco, 'xml', validateXml);
         addValidator(monaco, 'json-records', validateJsonRecords);

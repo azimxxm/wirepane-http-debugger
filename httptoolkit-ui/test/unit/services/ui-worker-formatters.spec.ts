@@ -101,3 +101,33 @@ describe("Protobuf formatting", () => {
     });
 
 });
+
+// wirepane: the JSON view used to change text that isn't JSON, and the strings of non-strict JSON
+describe("JSON body formatting", () => {
+
+    const formatJsonText = (text: string) => {
+        const buffer = Buffer.from(text);
+        return formatBuffer(
+            buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength) as ArrayBuffer,
+            'json'
+        );
+    };
+
+    it("should format strict JSON", () => {
+        expect(formatJsonText('{"a":[1,2]}')).to.equal('{\n  "a": [\n    1,\n    2\n  ]\n}');
+    });
+
+    it("should format non-strict JSON without changing its strings", () => {
+        expect(formatJsonText("{app_id:'1:123:ios:f4a2',time:'2026-07-04T06:00:00Z'}")).to.equal([
+            '{',
+            "  app_id: '1:123:ios:f4a2',",
+            "  time: '2026-07-04T06:00:00Z'",
+            '}'
+        ].join('\n'));
+    });
+
+    it("should show text that only starts like JSON as it was sent", () => {
+        expect(formatJsonText('404 page not found')).to.equal('404 page not found');
+        expect(formatJsonText('12:00:00 started')).to.equal('12:00:00 started');
+    });
+});

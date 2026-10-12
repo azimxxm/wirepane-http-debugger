@@ -10,13 +10,15 @@ import { styled } from '../../styles';
 import { ObservablePromise, isObservablePromise } from '../../util/observable';
 import { asError, unreachableCheck } from '../../util/error';
 import { stringToBuffer } from '../../util/buffer';
+import { sniffJsonSyntax } from '../../util/json';
 import { getHeaderValue } from '../../model/http/headers';
 
 import { ViewableContentType } from '../../model/events/content-types';
-import { Formatters, isEditorFormatter } from '../../model/events/body-formatting';
+import { EditorFormatter, Formatters, isEditorFormatter } from '../../model/events/body-formatting';
 import { ObservableCache } from '../../model/observable-cache';
 
 import { ContainerSizedEditor, SelfSizedEditor } from './base-editor';
+import { RELAXED_JSON_LANGUAGE } from './relaxed-json-language';
 import { LoadingCardContent } from '../common/loading-card';
 import { WarningIcon } from '../../icons';
 import { ContentMonoValue } from '../common/text-content';
@@ -166,6 +168,16 @@ export class ContentViewer extends React.Component<ContentViewerProps> {
         }
     }
 
+    // wirepane: JSON with unquoted keys or single quotes would get an error on every key in
+    // Monaco's JSON mode, so it's shown in a relaxed JSON mode instead.
+    @computed
+    private get editorLanguage() {
+        const { language } = this.formatter as EditorFormatter;
+        return language === 'json' && sniffJsonSyntax(this.contentBuffer) === 'relaxed-json'
+            ? RELAXED_JSON_LANGUAGE
+            : language;
+    }
+
     private readonly editorOptions = {
         readOnly: true
     };
@@ -181,7 +193,7 @@ export class ContentViewer extends React.Component<ContentViewerProps> {
                         contentId={this.props.contentId}
                         node={this.props.editorNode}
                         options={this.editorOptions}
-                        language={this.formatter.language}
+                        language={this.editorLanguage}
                         value={content!}
                         schema={this.props.schema}
                         expanded={this.props.expanded}
