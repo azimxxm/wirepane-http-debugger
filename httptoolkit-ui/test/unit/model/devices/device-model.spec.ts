@@ -14,7 +14,7 @@ import {
 } from '../../../../src/model/devices/device-model';
 import { MANUALLY_SENT_SOURCE, parseSource } from '../../../../src/model/http/sources';
 
-import { UA, deviceExchange, failedTls } from './device-test-helpers';
+import { UA, deviceExchange, failedTls, rawTunnel } from './device-test-helpers';
 
 const request = (userAgent: string | undefined, remoteIpAddress: string | undefined) => ({
     headers: userAgent ? { 'user-agent': userAgent } : {},
@@ -61,6 +61,11 @@ describe('Device model', () => {
 
         it('reads the client address of failed TLS connections too', () => {
             expect(getEventDeviceKey(failedTls('::ffff:192.168.0.40'))).to.equal('192.168.0.40');
+        });
+
+        it('reads the client address of non-HTTP connections (raw tunnels) too', () => {
+            expect(getEventDeviceKey(rawTunnel('::ffff:192.168.0.40'))).to.equal('192.168.0.40');
+            expect(getEventDeviceKey(rawTunnel('127.0.0.1'))).to.equal(THIS_MACHINE_KEY);
         });
 
         it("doesn't guess a device for requests without an address", () => {
@@ -142,6 +147,7 @@ describe('Device model', () => {
         it('reads the hostname of requests and connections', () => {
             expect(getEventHost(deviceExchange({ host: 'API.Example.com' }))).to.equal('api.example.com');
             expect(getEventHost(failedTls('192.168.0.23', 'Cert.Example.com'))).to.equal('cert.example.com');
+            expect(getEventHost(rawTunnel('192.168.0.23', 'MQTT.Example.com'))).to.equal('mqtt.example.com');
         });
     });
 });

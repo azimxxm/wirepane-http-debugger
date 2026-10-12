@@ -13,7 +13,7 @@ import {
     migrateSavedPanelState
 } from '../../../../src/model/devices/devices-store';
 
-import { MemoryStorage, UA, deviceExchange, failedTls } from './device-test-helpers';
+import { MemoryStorage, UA, deviceExchange, failedTls, rawTunnel } from './device-test-helpers';
 
 describe('Devices store', () => {
 
@@ -214,6 +214,18 @@ describe('Devices store', () => {
                 { host: 'example.com', count: 1 }
             ]);
             expect(device.apps[0].icon).to.equal(events[1].isHttp() && events[1].request.source.icon);
+        });
+
+        it('counts non-HTTP connections (raw tunnels) under the device that opened them', () => {
+            const tunnel = rawTunnel('192.168.0.23', 'mqtt.example.com');
+            add(deviceExchange({ ip: '192.168.0.23', ua: UA.iphoneSafari, host: 'example.com' }), tunnel);
+
+            const device = store.getDevice('192.168.0.23')!;
+            expect(device.eventCount).to.equal(2);
+            expect(device.hosts.map((host) => host.host)).to.deep.equal(['example.com', 'mqtt.example.com']);
+
+            store.select({ deviceKey: '192.168.0.23', host: 'mqtt.example.com' });
+            expect(events.filter((event) => store.selectionFilter!.matches(event))).to.deep.equal([tunnel]);
         });
 
         it('takes deleted requests back off the counts', () => {

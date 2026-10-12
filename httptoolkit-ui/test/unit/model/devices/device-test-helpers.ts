@@ -1,5 +1,6 @@
 import { HttpExchange } from '../../../../src/types';
 import { MANUALLY_SENT_SOURCE, parseSource } from '../../../../src/model/http/sources';
+import { RawTunnel } from '../../../../src/model/raw-tunnel';
 
 import { getExchangeData, getFailedTls } from '../../unit-test-helpers';
 
@@ -53,6 +54,18 @@ export function deviceExchange(options: {
 
 export const failedTls = (ip: string, host = 'example.com') =>
     getFailedTls({ remoteIpAddress: ip, upstreamHostname: host });
+
+let nextTunnelId = 0;
+
+// A non-HTTP connection the proxy tunnelled through, like an MQTT client's
+export const rawTunnel = (ip: string, host = 'mqtt.example.com', port = 1883) => new RawTunnel({
+    id: `raw-tunnel-${nextTunnelId++}`,
+    remoteIpAddress: ip,
+    remotePort: 50000,
+    destination: { hostname: host, port },
+    tags: [],
+    timingEvents: { startTime: Date.now(), connectTimestamp: 0 }
+});
 
 // An in-memory stand-in for localStorage
 export class MemoryStorage {
