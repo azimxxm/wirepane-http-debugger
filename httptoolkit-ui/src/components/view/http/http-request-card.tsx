@@ -13,6 +13,7 @@ import {
     CollapsibleCardProps
 } from '../../common/card';
 import { Pill } from '../../common/pill';
+import { HostnameText } from '../../common/hostname-text'; // wirepane: the real hostname
 import {
     CollapsibleSection,
     CollapsibleSectionSummary,
@@ -125,11 +126,7 @@ export const HttpRequestCard = observer((props: HttpRequestCardProps) => {
             <HttpVersionPill request={request} />
             <Pill color={getSummaryColor(exchange)}>
                 { exchange.isWebSocket() ? 'WebSocket ' : '' }
-                { request.method } {
-                    (request.parsedUrl.hostname || '')
-                    // Add some tiny spaces to split up parts of the hostname
-                    .replace(/\./g, '\u2008.\u2008')
-                }
+                { request.method } <HostnameText>{ request.parsedUrl.hostname || '' }</HostnameText>
             </Pill>
             <CollapsibleCardHeading onCollapseToggled={props.onCollapseToggled}>
                 Request

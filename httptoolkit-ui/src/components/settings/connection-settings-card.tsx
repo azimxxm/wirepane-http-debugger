@@ -4,7 +4,7 @@ import { observable, action, flow } from 'mobx';
 import { observer, inject } from "mobx-react";
 
 import { styled } from '../../styles';
-import { WarningIcon, Icon } from '../../icons';
+import { WarningIcon } from '../../icons';
 import { trackEvent } from '../../metrics';
 
 import { uploadFile } from '../../util/ui';
@@ -33,7 +33,8 @@ import { Select, TextInput } from '../common/inputs';
 import {
     SettingsSubheading,
     SettingsButton,
-    SettingsExplanation
+    SettingsExplanation,
+    SettingsIcon as Icon // wirepane: Phosphor icons, like the toolbars
 } from './settings-components';
 import { StringSettingsList, ConfigValueRow } from './string-settings-list';
 import { PROXY_HOST_REGEXES, normalizeProxyHost } from '../../model/http/proxy';
@@ -162,7 +163,7 @@ class UpstreamProxyConfig extends React.Component<{ rulesStore: RulesStore }> {
         } = this;
 
         return <>
-            <SettingsSubheading>Upstream Proxy</SettingsSubheading>
+            <SettingsSubheading>Upstream proxy</SettingsSubheading>
 
             <UpstreamProxySettings>
                 <UpstreamProxyDropdown
@@ -221,7 +222,7 @@ class UpstreamProxyConfig extends React.Component<{ rulesStore: RulesStore }> {
                         }
                         onClick={saveProxyHost}
                     >
-                        <Icon icon={['fas', 'save']} />
+                        <Icon icon={['fas', 'save']} title='Save the upstream proxy' />
                     </SettingsButton>
                 </> }
             </UpstreamProxySettings>
@@ -410,7 +411,7 @@ class ClientCertificateConfig extends React.Component<{ rulesStore: RulesStore }
 
         return <>
             <SettingsSubheading>
-                Client Certificates
+                Client certificates
             </SettingsSubheading>
             <ClientCertificatesList>
                 { Object.entries(clientCertificateHostMap).map(([host, cert]) => [
@@ -426,7 +427,7 @@ class ClientCertificateConfig extends React.Component<{ rulesStore: RulesStore }
                         key={`delete-${host}`}
                         onClick={() => this.removeClientCertificate(host)}
                     >
-                        <Icon icon={['far', 'trash-alt']} />
+                        <Icon icon={['far', 'trash-alt']} title={`Remove the certificate for ${host}`} />
                     </SettingsButton>
                 ]) }
 
@@ -441,7 +442,7 @@ class ClientCertificateConfig extends React.Component<{ rulesStore: RulesStore }
                 { this.clientCertState === undefined
                     ? <>
                         <SettingsButton onClick={() => this.certFileInputRef.current!.click()}>
-                            Load a client certificate
+                            Choose a certificate file…
                         </SettingsButton>
                         <input
                             ref={this.certFileInputRef}
@@ -492,7 +493,7 @@ class ClientCertificateConfig extends React.Component<{ rulesStore: RulesStore }
                     }
                     onClick={this.addClientCertificate}
                 >
-                    <Icon icon={['fas', 'plus']} />
+                    <Icon icon={['fas', 'plus']} title='Add this client certificate' />
                 </SettingsButton>
             </ClientCertificatesList>
             <SettingsExplanation>
@@ -582,7 +583,7 @@ class AdditionalCAConfig extends React.Component<{ rulesStore: RulesStore }> {
 
         return <>
             <SettingsSubheading>
-                Trusted CA Certificates
+                Trusted CA certificates
             </SettingsSubheading>
             <AdditionalCertificateList>
                 { additionalCaCertificates.map((cert) => {
@@ -605,7 +606,7 @@ class AdditionalCAConfig extends React.Component<{ rulesStore: RulesStore }> {
                             key={`delete-${serial}`}
                             onClick={() => this.removeCertificate(cert)}
                         >
-                            <Icon icon={['far', 'trash-alt']} />
+                            <Icon icon={['far', 'trash-alt']} title='Stop trusting this CA' />
                         </SettingsButton>
                     ]
                 }) }
@@ -614,7 +615,7 @@ class AdditionalCAConfig extends React.Component<{ rulesStore: RulesStore }> {
                     type='submit' // Ensures we can show validation messages here
                     ref={this.certFileButtonRef}
                 >
-                    Load a CA certificate
+                    Add a CA certificate…
                 </AddCertificateButton>
             </AdditionalCertificateList>
             <SettingsExplanation>
@@ -658,7 +659,7 @@ export class ConnectionSettingsCard extends React.Component<
                 <CollapsibleCardHeading onCollapseToggled={
                     cardProps.onCollapseToggled
                 }>
-                    Connection settings
+                    Connection
                 </CollapsibleCardHeading>
             </header>
 
@@ -687,7 +688,7 @@ export class ConnectionSettingsCard extends React.Component<
             </> }
 
             <SettingsSubheading>
-                Host HTTPS Whitelist
+                Hosts that skip strict HTTPS checks
             </SettingsSubheading>
 
             <StringSettingsList

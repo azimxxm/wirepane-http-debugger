@@ -12,7 +12,7 @@ import {
 } from 'react-beautiful-dnd';
 
 import { styled, css } from '../../styles';
-import { Icon } from '../../icons';
+import { UnifiedIcon as Icon } from '../common/toolbar-icons'; // wirepane: Phosphor, like the toolbars
 import { UnreachableCheck } from '../../util/error';
 
 import { getMethodColor, getSummaryColor } from '../../model/events/categorization';

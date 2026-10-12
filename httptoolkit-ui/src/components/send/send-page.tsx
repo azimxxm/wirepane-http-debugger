@@ -6,7 +6,7 @@ import * as HarFormat from 'har-format';
 
 import { styled } from '../../styles';
 import { useHotkeys } from '../../util/ui';
-import { formatShortcut } from '../../util/shortcuts';
+import { formatShortcut, toHotkeys } from '../../util/shortcuts';
 import { WithInjected } from '../../types';
 
 import { ApiError } from '../../services/server-api-types';
@@ -48,11 +48,14 @@ const SendPageKeyboardShortcuts = (props: {
     onCloseTab: () => void,
     onAbortRequest?: () => void
 }) => {
-    useHotkeys('Ctrl+Tab, Cmd+Tab', () => {
+    // wirepane: ⌘⇧] & ⌘⇧[ instead of Cmd+Tab, which never reaches the app on macOS
+    useHotkeys(`Ctrl+Tab, ${toHotkeys('Cmd+Shift+]')}`, (event) => {
+        event.preventDefault();
         props.onMoveSelection(1);
     }, [props.onMoveSelection]);
 
-    useHotkeys('Ctrl+Shift+Tab, Cmd+Shift+Tab', () => {
+    useHotkeys(`Ctrl+Shift+Tab, ${toHotkeys('Cmd+Shift+[')}`, (event) => {
+        event.preventDefault();
         props.onMoveSelection(-1);
     }, [props.onMoveSelection]);
 

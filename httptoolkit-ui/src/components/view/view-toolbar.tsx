@@ -24,7 +24,7 @@ import { SearchFilter } from './filters/search-filter';
 // which these labelled toolbar buttons replace:
 async function exportEventsAsHar(events: ReadonlyArray<ViewableEvent>) {
     const harContent = JSON.stringify(await generateHar(events));
-    const filename = `HTTPToolkit_${dateFns.format(Date.now(), 'YYYY-MM-DD_HH-mm')}.har`;
+    const filename = `Wirepane_${dateFns.format(Date.now(), 'YYYY-MM-DD_HH-mm')}.har`; // wirepane: our name
 
     saveFile(filename, 'application/har+json;charset=utf-8', harContent);
 }

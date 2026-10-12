@@ -473,6 +473,7 @@ export const GlobalStyles = createGlobalStyle`
 
     /* Theme colours for values that can only be a colour string, like client icon colours */
     :root {
+        --wp-text-primary: ${p => p.theme.mainColor};
         --wp-text-secondary: ${p => p.theme.mainLowlightColor};
         --wp-text-tertiary: ${p => p.theme.containerWatermark};
     }

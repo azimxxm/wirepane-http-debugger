@@ -16,6 +16,7 @@ import {
     CollapsibleCardProps,
 } from '../../common/card';
 import { Pill } from '../../common/pill';
+import { HostnameText } from '../../common/hostname-text'; // wirepane: the real hostname
 import { ContentLabelBlock, ContentLabel } from '../../common/text-content';
 import { EditableRawHeaders } from '../../common/editable-headers';
 import { TextInput, Select } from '../../common/inputs';
@@ -62,11 +63,7 @@ export class HttpBreakpointRequestCard extends React.Component<RequestBreakpoint
             <header>
                 <SourceIcon source={request.source} />
                 <Pill color={getSummaryColor(exchange)}>
-                    { method } {
-                        (request.parsedUrl.hostname || '')
-                        // Add some tiny spaces to split up parts of the hostname
-                        .replace(/\./g, '\u2008.\u2008')
-                    }
+                    { method } <HostnameText>{ request.parsedUrl.hostname || '' }</HostnameText>
                 </Pill>
                 <CollapsibleCardHeading onCollapseToggled={cardProps.onCollapseToggled}>
                     Request

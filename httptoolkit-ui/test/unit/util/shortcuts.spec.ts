@@ -1,6 +1,12 @@
 import { expect } from '../../test-setup';
 
-import { formatShortcut, toAccelerator, toAriaShortcut } from '../../../src/util/shortcuts';
+import {
+    formatAccelerator,
+    formatShortcut,
+    toAccelerator,
+    toAriaShortcut,
+    toHotkeys
+} from '../../../src/util/shortcuts';
 
 describe('Shortcut formatting', () => {
 
@@ -25,6 +31,29 @@ describe('Shortcut formatting', () => {
     it('should build aria-keyshortcuts values', () => {
         expect(toAriaShortcut('Cmd+M', true)).to.equal('Meta+M');
         expect(toAriaShortcut('Cmd+Shift+R', false)).to.equal('Control+Shift+R');
+    });
+
+    it('should show the Ctrl & Tab keys as symbols on macOS', () => {
+        expect(formatShortcut('Ctrl+Tab', true)).to.equal('⌃⇥');
+        expect(formatShortcut('Ctrl+Tab', false)).to.equal('Ctrl+Tab');
+        expect(formatShortcut('Cmd+Shift+]', true)).to.equal('⌘⇧]');
+        expect(formatShortcut('Cmd+,', true)).to.equal('⌘,');
+        expect(formatShortcut('Cmd+,', false)).to.equal('Ctrl+,');
+    });
+
+    it('should format Electron accelerators like shortcuts', () => {
+        expect(formatAccelerator('CmdOrCtrl+Shift+S', true)).to.equal('⌘⇧S');
+        expect(formatAccelerator('CmdOrCtrl+Shift+S', false)).to.equal('Ctrl+Shift+S');
+        expect(formatAccelerator('CommandOrControl+Backspace', true)).to.equal('⌘⌫');
+        expect(formatAccelerator('Control+Option+K', true)).to.equal('⌃⌥K');
+        expect(formatAccelerator('F2', true)).to.equal('F2');
+        expect(formatAccelerator(toAccelerator('Cmd+P'), false)).to.equal('Ctrl+P');
+    });
+
+    it('should listen for the platform modifier only', () => {
+        expect(toHotkeys('Cmd+K', true)).to.equal('Cmd+K');
+        expect(toHotkeys('Cmd+K', false)).to.equal('Ctrl+K');
+        expect(toHotkeys('Cmd+Shift+]', false)).to.equal('Ctrl+Shift+]');
     });
 
 });

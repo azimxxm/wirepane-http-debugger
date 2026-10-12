@@ -11,8 +11,10 @@ import { DeviceIcon } from './device-icon';
 
 // Sits between Source and Host in View's list, at a fixed width so the header & every
 // row line up. Long names end in "…", and the host & path give way first.
+export const DEVICE_COLUMN_WIDTH = 84;
+
 const DeviceColumn = styled.div<{ role: 'gridcell' | 'columnheader' }>`
-    flex: 0 0 84px;
+    flex: 0 0 ${DEVICE_COLUMN_WIDTH}px;
     padding: 3px 0;
     overflow: hidden;
 

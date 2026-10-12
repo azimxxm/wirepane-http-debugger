@@ -12,18 +12,24 @@ import {
 import { styled } from '../styles';
 import { WithInjected } from '../types';
 import { appHistory } from '../routing';
-import { useHotkeys, Ctrl } from '../util/ui';
+import { formatShortcut } from '../util/shortcuts';
 
 import { UiStore } from '../model/ui/ui-store';
 import { ProxyStore } from '../model/proxy-store';
 import {
-    serverVersion,
-    versionSatisfies,
-    MODIFY_RULE_SERVER_RANGE,
-    SERVER_SEND_API_SUPPORTED
-} from '../services/service-versions';
+    canUseMcp,
+    canVisitModify,
+    canVisitSend,
+    GO_INTERCEPT_SHORTCUT,
+    GO_MODIFY_SHORTCUT,
+    GO_SEND_SHORTCUT,
+    GO_VIEW_SHORTCUT,
+    REPORT_ISSUE_URL,
+    SETTINGS_SHORTCUT
+} from '../model/ui/app-actions';
 
 import { Rail, RailItem } from './rail';
+import { AppActionsHost } from './app-actions-host';
 import { StatusBar } from './status-bar';
 import { GuidedInterceptPage } from './intercept/guided-intercept-page';
 import { ConnectIPhonePage } from './intercept/phone/connect-iphone-page';
@@ -78,32 +84,8 @@ const Route = ({ children, ...props }: ExtendProps & RouteComponentProps): React
 	)
 };
 
-const AppKeyboardShortcuts = (props: {
-    navigate: (path: string) => void
-}) => {
-    useHotkeys('Ctrl+1,Cmd+1', (e) => {
-        props.navigate('/intercept');
-        e.preventDefault();
-    }, [props.navigate]);
-    useHotkeys('Ctrl+2,Cmd+2', (e) => {
-        props.navigate('/view');
-        e.preventDefault();
-    }, [props.navigate]);
-    useHotkeys('Ctrl+3,Cmd+3', (e) => {
-        props.navigate('/modify');
-        e.preventDefault();
-    }, [props.navigate]);
-    useHotkeys('Ctrl+4,Cmd+4', (e) => {
-        props.navigate('/send');
-        e.preventDefault();
-    }, [props.navigate]);
-    useHotkeys('Ctrl+9,Cmd+9', (e) => {
-        props.navigate('/settings');
-        e.preventDefault();
-    }, [props.navigate]);
-
-    return null;
-};
+// wirepane: the page shortcuts (⌘1–⌘4, and ⌘, or ⌘9 for Settings) are app actions now, bound
+// with the rest by AppActionsHost (model/ui/app-actions.ts)
 
 @inject('uiStore')
 @inject('proxyStore')
@@ -115,8 +97,7 @@ class App extends React.Component<{
 
     @computed
     get canUseMcp() {
-        const mcpPath = this.props.proxyStore.toolPaths?.mcp;
-        return !!mcpPath && mcpPath.length > 0;
+        return canUseMcp(this.props.proxyStore);
     }
 
     private closeZipExportOnOtherModal?: IReactionDisposer;
@@ -137,8 +118,7 @@ class App extends React.Component<{
     get canVisitSend() {
         // Hide Send option if the server is too old for proper support.
         // We show by default to avoid flicker in the most common case
-        return serverVersion.state !== 'fulfilled' ||
-            versionSatisfies(serverVersion.value, SERVER_SEND_API_SUPPORTED);
+        return canVisitSend();
     }
 
     @computed
@@ -146,7 +126,7 @@ class App extends React.Component<{
         return [
             {
                 name: 'Intercept',
-                title: `Connect clients to Wirepane (${Ctrl}+1)`,
+                title: `Connect clients to Wirepane (${formatShortcut(GO_INTERCEPT_SHORTCUT)})`,
                 icon: 'Plugs',
                 position: 'top',
                 type: 'router',
@@ -154,7 +134,7 @@ class App extends React.Component<{
             },
             {
                 name: 'View',
-                title: `View intercepted HTTP traffic (${Ctrl}+2)`,
+                title: `View intercepted HTTP traffic (${formatShortcut(GO_VIEW_SHORTCUT)})`,
                 icon: 'Rows',
                 position: 'top',
                 type: 'router',
@@ -162,15 +142,12 @@ class App extends React.Component<{
             },
 
             ...(
-                (
-                    // Hide Modify option if the server is too old for proper support.
-                    // We show by default to avoid flicker in the most common case
-                    serverVersion.state !== 'fulfilled' ||
-                    versionSatisfies(serverVersion.value, MODIFY_RULE_SERVER_RANGE)
-                )
+                // Hide Modify option if the server is too old for proper support.
+                // We show by default to avoid flicker in the most common case
+                canVisitModify()
                 ? [{
                     name: 'Modify',
-                    title: `Add rules to transform & mock HTTP traffic (${Ctrl}+3)`,
+                    title: `Add rules to transform & mock HTTP traffic (${formatShortcut(GO_MODIFY_SHORTCUT)})`,
                     icon: 'Pencil',
                     position: 'top',
                     type: 'router',
@@ -182,7 +159,7 @@ class App extends React.Component<{
             ...(this.canVisitSend
                 ? [{
                     name: 'Send',
-                    title: `Send HTTP requests directly (${Ctrl}+4)`,
+                    title: `Send HTTP requests directly (${formatShortcut(GO_SEND_SHORTCUT)})`,
                     icon: 'PaperPlaneTilt',
                     position: 'top',
                     type: 'router',
@@ -193,7 +170,7 @@ class App extends React.Component<{
 
             {
                 name: 'Settings',
-                title: `Reconfigure Wirepane (${Ctrl}+9)`,
+                title: `Reconfigure Wirepane (${formatShortcut(SETTINGS_SHORTCUT)})`,
                 icon: 'GearSix',
                 position: 'bottom',
                 type: 'router',
@@ -213,13 +190,15 @@ class App extends React.Component<{
             ),
 
             {
-                name: 'Give feedback',
-                title: "Send feedback: suggest features or report issues",
+                // A quiet icon in the rail's own colour, never an accent. The same page as
+                // Help → Report an Issue in the desktop menu bar, and "Report an issue" in ⌘K.
+                name: 'Send feedback',
+                title: 'Send feedback: report an issue or suggest a feature',
                 icon: 'ChatText',
                 position: 'bottom',
                 iconOnly: true,
                 type: 'web',
-                url: 'https://github.com/azimxxm/wirepane/issues/new'
+                url: REPORT_ISSUE_URL
             }
         ] as RailItem[];
     }
@@ -231,7 +210,7 @@ class App extends React.Component<{
         } = this.props.uiStore;
 
         return <LocationProvider history={appHistory}>
-            <AppKeyboardShortcuts navigate={appHistory.navigate} />
+            <AppActionsHost />
             <AppContainer>
                 <Rail items={this.menuItems} />
 

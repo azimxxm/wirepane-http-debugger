@@ -3,15 +3,26 @@ import * as React from 'react';
 import { observer } from 'mobx-react-lite';
 
 import { css, styled } from '../../styles';
+import { isMac } from '../../util/ui';
+import { formatShortcut, toAccelerator } from '../../util/shortcuts';
 
 import { RequestInput, SendRequest } from '../../model/send/send-request-model';
 import { getMethodThemeColor } from '../../model/events/categorization';
 import { ContextMenuItem } from '../../model/ui/context-menu';
+import { NEW_SEND_TAB_SHORTCUT } from '../../model/ui/app-actions';
 
 import { UnstyledButton } from '../common/inputs';
 import { IconButton } from '../common/icon-button';
 
 export const TAB_BAR_HEIGHT = '38px';
+
+// wirepane: macOS keeps Cmd+Tab for its app switcher, so tabs switch with ⌘⇧] and ⌘⇧[ there,
+// as in Safari & Xcode. Ctrl+Tab still works everywhere (send-page.tsx binds both).
+export const NEXT_TAB_SHORTCUT = isMac ? 'Cmd+Shift+]' : 'Ctrl+Tab';
+export const PREVIOUS_TAB_SHORTCUT = isMac ? 'Cmd+Shift+[' : 'Ctrl+Shift+Tab';
+export const CLOSE_TAB_SHORTCUT = 'Cmd+W';
+
+const SWITCH_TABS_HINT = `${formatShortcut(PREVIOUS_TAB_SHORTCUT)} and ${formatShortcut(NEXT_TAB_SHORTCUT)} switch tabs`;
 
 const TabsContainer = styled.div.attrs(() => ({
     role: 'tablist'
@@ -143,6 +154,9 @@ const SendTab = observer((props: {
         props.onContextMenu(event, props.sendRequest);
     }, [props.onContextMenu, props.sendRequest]);
 
+    const tabTitle = props.getTabTitle?.(props.sendRequest) ??
+        (request.url.replace(/^(https?|wss?):\/\//, '') || '');
+
     return <TabContainer
         selected={props.isSelectedTab}
         onClick={onTabClick}
@@ -152,20 +166,18 @@ const SendTab = observer((props: {
         <TabButton
             selected={props.isSelectedTab}
             tabIndex={props.isSelectedTab ? 0 : -1}
+            title={`${methodLabel} ${tabTitle || 'New request'}\n${SWITCH_TABS_HINT}`} // wirepane
         >
             <TabMethodMarker method={methodLabel}>
                 { methodLabel }
             </TabMethodMarker>
 
-            <TabName>{
-                props.getTabTitle?.(props.sendRequest) ??
-                (request.url.replace(/^(https?|wss?):\/\//, '') || '')
-            }</TabName>
+            <TabName>{ tabTitle }</TabName>
         </TabButton>
 
         {
             props.isSelectedTab && <CloseTabButton
-                title='Close this tab'
+                title={`Close this tab (${formatShortcut(CLOSE_TAB_SHORTCUT)})`}
                 icon={['fas', 'times']}
                 onClick={onCloseClick}
                 tabIndex={-1} // No focus - keyboard closes via 'Delete' instead
@@ -230,6 +242,7 @@ export const SendTabs = observer((props: {
             {
                 type: 'option',
                 label: 'Close Tab',
+                accelerator: toAccelerator(CLOSE_TAB_SHORTCUT), // wirepane
                 callback: () => props.onCloseTab(request)
             },
             {
@@ -265,7 +278,7 @@ export const SendTabs = observer((props: {
         }
 
         <AddTabButton
-            title='Add another tab to send a new request'
+            title={`Add another tab to send a new request (${formatShortcut(NEW_SEND_TAB_SHORTCUT)})`}
             icon={['fas', 'plus']}
             onKeyDown={onAddButtonKeyDown}
             onClick={() => props.onAddTab()}

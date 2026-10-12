@@ -10,7 +10,7 @@ import * as path from 'path';
 import * as crypto from 'crypto';
 import * as querystring from 'querystring';
 import { URL } from 'url';
-import { app, BrowserWindow, shell, Menu, dialog, session, ipcMain } from 'electron';
+import { app, BrowserWindow, shell, Menu, dialog, session, ipcMain, nativeTheme } from 'electron';
 import yargs from 'yargs';
 import * as semver from 'semver';
 const rmRF = (p: string) => fs.rm(p, { recursive: true, force: true });
@@ -114,7 +114,17 @@ const createWindow = () => {
 
     const window = new BrowserWindow({
         title: 'Wirepane',
-        backgroundColor: '#d8e2e6',
+        // wirepane: the UI's page colour for the system theme, so dark mode doesn't flash light
+        // while the UI loads (canvas tokens in httptoolkit-ui/src/styles.ts)
+        backgroundColor: nativeTheme.shouldUseDarkColors ? '#0B1220' : '#F4F7FB',
+
+        // wirepane: on macOS the navy rail runs up under the traffic lights, which sit at its
+        // top, clear of the logo (the UI adds that space in rail.tsx). Windows & Linux keep
+        // their usual title bar.
+        ...(process.platform === 'darwin' ? {
+            titleBarStyle: 'hiddenInset' as const,
+            trafficLightPosition: { x: 10, y: 12 }
+        } : {}),
 
         minWidth: 700,
         minHeight: 600,

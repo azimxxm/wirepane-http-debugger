@@ -64,4 +64,25 @@ describe("View's context menu", () => {
         option('Save 2 Requests to Collection…')!.callback(data);
         expect(saved).to.deep.equal([[first, second]]);
     });
+
+    it("shows View's shortcuts next to the commands that have one", () => {
+        const exchange = getExchangeData();
+        const { option } = buildMenu([exchange], exchange);
+
+        expect(option('Toggle Pinning')!.accelerator).to.equal('CmdOrCtrl+P');
+        expect(option('Resend Request')!.accelerator).to.equal('CmdOrCtrl+R');
+        expect(option('Create Matching Modify Rule')!.accelerator).to.equal('CmdOrCtrl+M');
+        expect(option('Delete')!.accelerator).to.equal('CmdOrCtrl+Backspace');
+        expect(option('Copy Request URL')!.accelerator).to.equal(undefined);
+    });
+
+    it("shows the shortcuts for a multi-selection too", () => {
+        const first = getExchangeData({ path: '/a' });
+        const second = getExchangeData({ path: '/b' });
+        const { option } = buildMenu([first, second], second);
+
+        expect(option('Toggle Pinning')!.accelerator).to.equal('CmdOrCtrl+P');
+        expect(option('Create 2 Matching Rules')!.accelerator).to.equal('CmdOrCtrl+M');
+        expect(option('Delete 2 Events')!.accelerator).to.equal('CmdOrCtrl+Backspace');
+    });
 });

@@ -8,7 +8,6 @@ import * as yaml from 'yaml';
 import * as swagger2OpenApi from 'swagger2openapi';
 
 import { styled } from '../../styles';
-import { Icon } from '../../icons';
 import { uploadFile } from '../../util/ui';
 import { attempt } from '../../util/promise';
 import { asError } from '../../util/error';
@@ -21,7 +20,7 @@ import {
     CollapsibleCardHeading,
     CollapsibleCardProps
 } from "../common/card";
-import { SettingsButton, SettingsExplanation } from './settings-components';
+import { SettingsButton, SettingsExplanation, SettingsIcon as Icon } from './settings-components'; // wirepane: Phosphor icons
 import { TextInput } from '../common/inputs';
 import { ApiStore } from '../../model/api/api-store';
 import { ContentLabel } from '../common/text-content';
@@ -100,7 +99,7 @@ export class ApiSettingsCard extends React.Component<
                 <CollapsibleCardHeading onCollapseToggled={
                     cardProps.onCollapseToggled
                 }>
-                    API settings
+                    API specifications
                 </CollapsibleCardHeading>
             </header>
 
@@ -119,7 +118,7 @@ export class ApiSettingsCard extends React.Component<
                                 { spec.info.title }
                             </Spec>
                             <DeleteButton onClick={() => this.deleteApi(baseUrl)}>
-                                <Icon icon={['far', 'trash-alt']} />
+                                <Icon icon={['far', 'trash-alt']} title={`Remove the ${spec.info.title} specification`} />
                             </DeleteButton>
                         </React.Fragment>
                     )
@@ -133,7 +132,7 @@ export class ApiSettingsCard extends React.Component<
                     >
                         { this.specProcessingInProgress
                             ? <Icon icon={['fas', 'spinner']} spin />
-                            : "Load an OpenAPI or Swagger spec"
+                            : "Load an OpenAPI or Swagger spec…"
                         }
                     </UploadSpecButton>
                     : <>
@@ -146,14 +145,14 @@ export class ApiSettingsCard extends React.Component<
                         <Spec>
                             { this.selectedSpec.info.title }
                             <UndoButton onClick={this.resetApiInputs}>
-                                <Icon icon={['fas', 'undo']} />
+                                <Icon icon={['fas', 'undo']} title='Choose another file' />
                             </UndoButton>
                         </Spec>
                         <AddButton
                             disabled={!this.selectedSpec || !this.enteredBaseUrl || !!this.baseUrlError}
                             onClick={this.saveApi}
                         >
-                            <Icon icon={['fas', 'save']} />
+                            <Icon icon={['fas', 'save']} title='Save this specification' />
                         </AddButton>
                     </>
                 }

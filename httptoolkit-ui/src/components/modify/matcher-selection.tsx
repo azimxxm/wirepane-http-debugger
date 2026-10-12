@@ -4,7 +4,7 @@ import { observer } from 'mobx-react';
 import { action, observable } from 'mobx';
 
 import { styled } from '../../styles';
-import { Icon } from '../../icons';
+import { UnifiedIcon as Icon } from '../common/toolbar-icons'; // wirepane: Phosphor, like the toolbars
 import { Button, Select } from '../common/inputs';
 
 import {

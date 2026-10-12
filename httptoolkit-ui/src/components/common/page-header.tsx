@@ -1,6 +1,7 @@
 import * as React from 'react';
 
-import { styled } from '../../styles';
+import { styled, css } from '../../styles';
+import { HAS_HIDDEN_TITLE_BAR } from '../../util/window-chrome';
 
 export const PAGE_HEADER_HEIGHT = 56;
 
@@ -19,6 +20,16 @@ const PageHeaderRoot = styled.header<{ compactBelow: number }>`
 
     background-color: ${p => p.theme.mainBackground};
     border-bottom: 1px solid ${p => p.theme.containerBorder};
+
+    /* With no title bar (the macOS desktop app), the header is where the window is dragged
+       from, like a toolbar. Its actions still take clicks. */
+    ${HAS_HIDDEN_TITLE_BAR && css`
+        -webkit-app-region: drag;
+
+        > :not(:first-child) {
+            -webkit-app-region: no-drag;
+        }
+    `}
 
     /* Action labels give way to icons (with tooltips) when the window gets narrow.
        A media query, because styled-components 5 can't parse container queries. */

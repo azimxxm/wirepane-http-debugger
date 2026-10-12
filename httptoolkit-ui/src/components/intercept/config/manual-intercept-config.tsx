@@ -78,7 +78,7 @@ const ExportCertificateButton = styled((p: { certContent: string, className?: st
     <PillButton
         className={p.className}
         onClick={() => saveFile(
-            'http-toolkit-ca-certificate.crt',
+            'wirepane-ca-certificate.crt', // wirepane: it's the Wirepane CA
             'application/x-x509-ca-cert',
             p.certContent
         )}

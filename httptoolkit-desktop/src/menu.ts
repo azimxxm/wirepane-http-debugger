@@ -1,6 +1,15 @@
 import * as path from 'path';
-import { app, Menu, MenuItemConstructorOptions, shell } from 'electron';
+import { app, BrowserWindow, Menu, MenuItemConstructorOptions, shell } from 'electron';
 import ElectronStore from 'electron-store';
+
+import {
+    AppActionSender,
+    buildCaptureMenu,
+    buildGoMenu,
+    buildReportIssueItem,
+    buildSettingsItem,
+    sendAppActionTo
+} from './app-action-menus.ts';
 
 const store = new ElectronStore();
 const AUTO_HIDE_SETTING_KEY = "autoHideMenuBar";
@@ -12,8 +21,19 @@ type MenuKey =
     | 'file'
     | 'edit'
     | 'view'
+    | 'go' // wirepane
+    | 'capture' // wirepane
     | 'window'
     | 'help';
+
+// wirepane: menu bar actions go to the focused window's UI, or the newest window when none has focus
+const getAppActionSender = (browserWindows: Electron.BrowserWindow[]): AppActionSender =>
+    (actionId, details, focusedWindow) => {
+        const target = (focusedWindow && BrowserWindow.fromId(focusedWindow.id))
+            || BrowserWindow.getFocusedWindow()
+            || browserWindows[browserWindows.length - 1];
+        if (target) sendAppActionTo(target.webContents, actionId, details);
+    };
 
 const getVersionMenuItems = (
     versions?: Record<string, string>
@@ -34,6 +54,8 @@ export const getMenu = (
     openNewWindow: () => void,
     componentVersions?: Record<string, string>
 ) => {
+    const sendAppAction = getAppActionSender(browserWindows); // wirepane
+
     const menuTemplate: { [key in MenuKey]?: MenuItemConstructorOptions } = {
         edit: {
             label: '&Edit',
@@ -64,6 +86,8 @@ export const getMenu = (
                 { role: 'toggleDevTools' }
             ]
         },
+        go: buildGoMenu(sendAppAction), // wirepane
+        capture: buildCaptureMenu(sendAppAction), // wirepane
         help: {
             label: '&Help',
             role: 'help',
@@ -72,10 +96,7 @@ export const getMenu = (
                     label: 'Open Documentation',
                     click () { shell.openExternal('https://httptoolkit.com/docs') }
                 },
-                {
-                    label: 'Share Your Feedback',
-                    click () { shell.openExternal('https://github.com/httptoolkit/httptoolkit/issues/new/choose') }
-                },
+                buildReportIssueItem((url) => shell.openExternal(url)), // wirepane: our own issues page
                 {
                     label: 'View Wirepane Logs',
                     click () { shell.showItemInFolder(path.join(app.getPath('logs'), 'last-run.log')) }
@@ -90,6 +111,8 @@ export const getMenu = (
             label: app.getName(),
             submenu: [
                 { role: 'about' },
+                { type: 'separator' },
+                buildSettingsItem(sendAppAction), // wirepane
                 { type: 'separator' },
                 { role: 'services' },
                 { type: 'separator' },
@@ -148,6 +171,9 @@ export const getMenu = (
                     accelerator: 'CommandOrControl+Shift+N',
                     click: openNewWindow
                 },
+                { type: 'separator' }, // wirepane
+                buildSettingsItem(sendAppAction), // wirepane
+                { type: 'separator' }, // wirepane
                 {
                     // This should close the Window, but look like Quit. End behaviour is that every
                     // Window _acts_ like a separate process, but is really just a separate window.
@@ -181,6 +207,8 @@ export const getMenu = (
         menuTemplate.file,
         menuTemplate.edit,
         menuTemplate.view,
+        menuTemplate.go, // wirepane
+        menuTemplate.capture, // wirepane
         menuTemplate.window,
         menuTemplate.help
     ].filter(Boolean) as MenuItemConstructorOptions[]);

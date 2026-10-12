@@ -58,6 +58,17 @@ interface DesktopApi {
     getPathForFile?: (file: File) => string | null;
 
     setComponentVersions?: (versions: Record<string, string>) => void;
+
+    /**
+     * wirepane: calls back with the id of each app action picked in the desktop's menu bar
+     * (see model/ui/app-actions.ts). Returns a function that stops listening.
+     */
+    onAppAction?: (callback: (actionId: string, details: DesktopAppActionDetails) => void) => () => void;
+}
+
+export interface DesktopAppActionDetails {
+    // True for a shortcut press, false for a click
+    triggeredByAccelerator: boolean;
 }
 
 interface NativeContextMenuDefinition {

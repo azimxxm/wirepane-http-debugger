@@ -7,12 +7,14 @@ import {
     Submenu,
     Separator,
     Item,
+    RightSlot,
     contextMenu
 } from 'react-contexify';
 
 import { styled } from '../styles';
 
 import { UnreachableCheck } from '../util/error';
+import { formatAccelerator } from '../util/shortcuts';
 
 import { ContextMenuItem, ContextMenuState } from '../model/ui/context-menu';
 
@@ -58,6 +60,7 @@ export class HtmlContextMenu<T> extends React.Component<{
                 disabled={item.enabled === false}
             >
                 { item.label }
+                { item.accelerator && <RightSlot>{ formatAccelerator(item.accelerator) }</RightSlot> /* wirepane */ }
             </Item>
         } else if (item.type === 'submenu') {
             return <Submenu
@@ -82,11 +85,16 @@ const ThemedMenu = styled(Menu)`
     --contexify-separator-color: ${p => p.theme.containerBorder};
 
     --contexify-rightSlot-color: ${p => p.theme.containerWatermark};
-    --contexify-activeRightSlot-color: ${p => p.theme.mainColor};
+    --contexify-activeRightSlot-color: ${p => p.theme.selectionColor};
 
     --contexify-arrow-color: ${p => p.theme.containerWatermark};
-    --contexify-activeArrow-color: ${p => p.theme.mainColor};
+    --contexify-activeArrow-color: ${p => p.theme.selectionColor};
 
-    --contexify-activeItem-color: #fff;
-    --contexify-activeItem-bgColor: #3498db;
+    --contexify-activeItem-color: ${p => p.theme.selectionColor}; /* wirepane: teal, not upstream's blue */
+    --contexify-activeItem-bgColor: ${p => p.theme.selectionBackground};
+
+    /* wirepane: keeps shortcuts clear of long labels */
+    .contexify_rightSlot {
+        padding-left: 24px;
+    }
 `;

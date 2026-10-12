@@ -31,7 +31,7 @@ import {
     useLanAddresses
 } from './phone-setup-parts';
 
-// The CA keeps HTTP Toolkit's name: it's shared with the official app (see CLAUDE.md)
+// Wirepane's own CA, separate from the official app's ca.pem (see CLAUDE.md, Branding)
 const CA_NAME = 'Wirepane CA';
 const CERTIFICATE_FILENAME = 'wirepane-ca-certificate.crt';
 

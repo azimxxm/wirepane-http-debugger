@@ -3,14 +3,13 @@ import { observer } from 'mobx-react';
 
 import { ArrowIcon, Icon } from '../../../icons';
 import { RTCStream } from '../../../types';
-import { describeEventCategory } from '../../../model/events/categorization';
 import { getReadableSize } from '../../../util/buffer';
 import { DeviceCell } from '../../devices/device-marker'; // wirepane: device markers
+import { OptionalColumnCells, RowAttentionMarker, TypeCell } from './list-columns'; // wirepane: list columns
 
 import {
     TrafficEventListRow,
     RowPin,
-    RowMarker,
     EventTypeColumn,
     Source,
     RTCEventLabel,
@@ -59,7 +58,7 @@ export const RTCStreamRow = observer((p: {
         {...p.rowProps}
     >
         <RowPin pinned={pinned}/>
-        <RowMarker role='gridcell' category={category} title={describeEventCategory(category)} />
+        <RowAttentionMarker event={event} />
         <EventTypeColumn role='gridcell'>
             { !event.closeState && <ConnectedSpinnerIcon /> } WebRTC {
                 event.isRTCDataChannel()
@@ -68,6 +67,7 @@ export const RTCStreamRow = observer((p: {
                     'Media'
             }
         </EventTypeColumn>
+        <TypeCell event={event} />
         <Source role='gridcell' title={event.rtcConnection.source.summary}>
             <Icon
                 {...event.rtcConnection.source.icon}
@@ -99,6 +99,7 @@ export const RTCStreamRow = observer((p: {
                     </>
             }
         </RTCEventDetails>
+        <OptionalColumnCells event={event} />
     </TrafficEventListRow>;
 });
 

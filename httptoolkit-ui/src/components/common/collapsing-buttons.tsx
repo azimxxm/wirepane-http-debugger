@@ -96,7 +96,7 @@ export const CollapsingButtons = (p: { children: React.ReactNode, className?: st
         </VisibleButtonsContainer>
         { hiddenChildren.length > 0 && <HiddenButtonsWrapper>
             <MenuButton
-                icon={['fas', 'caret-down']}
+                icon='CaretDown' // wirepane: Phosphor, like the toolbars
                 title="Show more"
             />
             <HiddenButtonsContainer

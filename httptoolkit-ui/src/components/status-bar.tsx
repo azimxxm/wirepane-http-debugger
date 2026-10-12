@@ -5,9 +5,7 @@ import { Link } from '@reach/router';
 
 import { styled, css } from '../styles';
 import { PhosphorIcon } from '../icons';
-import { useHotkeys, copyToClipboard } from '../util/ui';
 import { formatShortcut, toAriaShortcut } from '../util/shortcuts';
-import { logError } from '../errors';
 
 import { EventsStore } from '../model/events/events-store';
 import { ProxyStore } from '../model/proxy-store';
@@ -15,15 +13,15 @@ import { RulesStore } from '../model/rules/rules-store';
 import { TrafficSource } from '../model/http/sources';
 import { countActiveUserRules, getConnectedClients } from '../model/traffic-summary';
 import { DevicesStore } from '../model/devices/devices-store';
+// ⌘⇧R itself is bound with the other app actions, by AppActionsHost:
+import { TOGGLE_RECORDING_SHORTCUT } from '../model/ui/app-actions';
+import { copyProxyAddress, getProxyAddress, proxyAddressCopy } from '../model/ui/proxy-address';
 
 import { UnstyledButton } from './common/inputs';
 import { ClientIcon } from './common/client-icon';
 import { DeviceIcon } from './devices/device-icon';
 
 export const STATUS_BAR_HEIGHT = 28;
-
-const TOGGLE_RECORDING_SHORTCUT = 'Cmd+Shift+R';
-const COPIED_FEEDBACK_MS = 1500;
 
 const StatusBarRoot = styled.footer<{ recording: boolean }>`
     flex-shrink: 0;
@@ -136,15 +134,6 @@ const LiveRegion = styled.span`
     clip-path: inset(50%);
 `;
 
-const StatusBarShortcuts = (props: { onToggleRecording: () => void }) => {
-    useHotkeys('Ctrl+Shift+r, Cmd+Shift+r', (event) => {
-        event.preventDefault();
-        props.onToggleRecording();
-    }, [props.onToggleRecording]);
-
-    return null;
-};
-
 const ClientsItem = (props: { clients: TrafficSource[] }) => {
     const { clients } = props;
     const connectShortcut = formatShortcut('Cmd+1');
@@ -205,12 +194,7 @@ export const StatusBar = inject('eventsStore', 'proxyStore', 'rulesStore', 'devi
     const proxyStore = props.proxyStore!;
     const rulesStore = props.rulesStore!;
 
-    const [copied, setCopied] = React.useState(false);
-    React.useEffect(() => {
-        if (!copied) return;
-        const timer = setTimeout(() => setCopied(false), COPIED_FEEDBACK_MS);
-        return () => clearTimeout(timer);
-    }, [copied]);
+    const { copied } = proxyAddressCopy; // Also set when ⌘K or the menu bar copies it
 
     const { isPaused, togglePause, events } = eventsStore;
     const proxyAddress = `localhost:${proxyStore.httpProxyPort}`;
@@ -224,15 +208,7 @@ export const StatusBar = inject('eventsStore', 'proxyStore', 'rulesStore', 'devi
             ? 'paused'
             : 'recording';
 
-    const copyProxyAddress = () => {
-        copyToClipboard(`http://${proxyAddress}`)
-            .then(() => setCopied(true))
-            .catch((e) => logError(e));
-    };
-
     return <StatusBarRoot recording={recordingState === 'recording'} aria-label='Status'>
-        <StatusBarShortcuts onToggleRecording={togglePause} />
-
         <StatusButton
             onClick={togglePause}
             aria-pressed={!isPaused}
@@ -253,13 +229,13 @@ export const StatusBar = inject('eventsStore', 'proxyStore', 'rulesStore', 'devi
         </StatusButton>
 
         <StatusButton
-            onClick={copyProxyAddress}
-            title={`Copy the proxy address: http://${proxyAddress}`}
+            onClick={() => copyProxyAddress(proxyStore)}
+            title={`Copy the proxy address: ${getProxyAddress(proxyStore)}`}
         >
             { copied
                 ? <>
                     <PhosphorIcon icon='Check' size={14} aria-hidden={true} />
-                    <span>Copied <MonoValue>http://{ proxyAddress }</MonoValue></span>
+                    <span>Copied <MonoValue>{ getProxyAddress(proxyStore) }</MonoValue></span>
                 </>
                 : <span>Proxy <MonoValue>{ proxyAddress }</MonoValue></span>
             }

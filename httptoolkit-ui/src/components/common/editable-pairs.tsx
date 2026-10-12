@@ -6,7 +6,7 @@ import { disposeOnUnmount, observer } from 'mobx-react';
 import { styled } from '../../styles';
 
 import { Button, TextInput } from './inputs';
-import { Icon } from '../../icons';
+import { UnifiedIcon as Icon } from './toolbar-icons'; // wirepane: Phosphor, like the toolbars
 
 export type Pair = { key: string, value: string, disabled?: true };
 export type PairsArray = Array<Pair>;

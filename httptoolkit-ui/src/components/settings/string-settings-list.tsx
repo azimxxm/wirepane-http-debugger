@@ -3,11 +3,10 @@ import { observable, action, computed } from 'mobx';
 import { observer } from 'mobx-react';
 
 import { styled } from '../../styles';
-import { Icon } from '../../icons';
 
 import { InputValidationFunction } from '../component-utils';
 import { TextInput } from '../common/inputs';
-import { SettingsButton } from './settings-components';
+import { SettingsButton, SettingsIcon as Icon } from './settings-components'; // wirepane: Phosphor icons
 
 const StringListContainer = styled.div`
     width: 100%;
@@ -57,7 +56,7 @@ export class StringSettingsList extends React.Component<{
                     key={`delete-${value}`}
                     onClick={() => onDelete(value)}
                 >
-                    <Icon icon={['far', 'trash-alt']} />
+                    <Icon icon={['far', 'trash-alt']} title={`Remove ${value}`} />
                 </SettingsButton>
             ]) }
 
@@ -73,7 +72,7 @@ export class StringSettingsList extends React.Component<{
                 }
                 onClick={this.addHost}
             >
-                <Icon icon={['fas', 'plus']} />
+                <Icon icon={['fas', 'plus']} title='Add' />
             </SettingsButton>
         </StringListContainer>;
     }

@@ -5,7 +5,8 @@ import { observer, inject } from "mobx-react";
 
 import { styled } from '../../styles';
 import { isWindows } from '../../util/ui';
-import { WarningIcon, Icon } from '../../icons';
+import { WarningIcon } from '../../icons';
+import { FloppyDisk, FolderOpen, ToggleLeft, ToggleRight, Trash } from '@phosphor-icons/react'; // wirepane
 
 import { isValidPortConfiguration, ProxyStore } from '../../model/proxy-store';
 import { isValidHostnamePattern } from '../../model/network';
@@ -37,25 +38,22 @@ import {
 } from './settings-components';
 import { StringSettingsList } from './string-settings-list';
 
+// wirepane: the card's one primary action, at the top right, clear of the left-aligned title
 const RestartApp = styled(SettingsButton).attrs(() => ({
     children: 'Restart app to activate',
+    highlight: true,
     onClick: () => window.location.reload()
 }))`
     position: absolute;
-    top: 18px;
-    left: 20px;
-    font-weight: bold;
+    top: 14px;
+    right: 20px;
 
-    &:not(:disabled) {
-        background-color: ${p => p.theme.popColor};
-    }
-
-    ${(p: { visible: boolean }) => !p.visible && 'display: none;'}
+    ${(p: { visible: boolean }) => !p.visible && '&& { display: none; }'}
 `;
 
-const UnsavedIcon = styled(Icon).attrs(() => ({
-    icon: ['fas', 'save'],
-}))`
+const UnsavedIcon = styled((p: { title: string, className?: string }) => // wirepane: Phosphor
+    <FloppyDisk className={p.className} size={16} alt={p.title} />
+)`
     margin-left: 10px;
     color: ${p => p.theme.warningColor};
 `;
@@ -290,7 +288,7 @@ export class ProxySettingsCard extends React.Component<
                 <CollapsibleCardHeading onCollapseToggled={
                     cardProps.onCollapseToggled
                 }>
-                    Proxy settings
+                    Proxy
                 </CollapsibleCardHeading>
             </header>
             <RestartApp
@@ -349,7 +347,7 @@ export class ProxySettingsCard extends React.Component<
             {
                 versionSatisfies(serverVersion.value, TLS_PASSTHROUGH_SUPPORTED) && <>
                     <SettingsSubheadingRow>
-                        <SettingsSubheading>TLS Passthrough</SettingsSubheading>
+                        <SettingsSubheading>TLS passthrough</SettingsSubheading>
 
                         { !_.isEqual(tlsInterceptionConfig, currentTlsInterceptionConfig) &&
                             <UnsavedIcon title="Restart app to apply changes" />
@@ -366,9 +364,10 @@ export class ProxySettingsCard extends React.Component<
                                 ? 'Exclude hostnames'
                                 : 'Intercept only these hostnames'
                             }
-                            <Icon icon={['fas',
-                                tlsMode === 'passthrough' ? 'toggle-on' : 'toggle-off'
-                            ]} />
+                            { tlsMode === 'passthrough'
+                                ? <ToggleRight size={20} weight='fill' aria-hidden={true} />
+                                : <ToggleLeft size={20} aria-hidden={true} />
+                            }
                         </TlsPassthroughModeToggle>
                     </SettingsSubheadingRow>
 
@@ -403,7 +402,7 @@ export class ProxySettingsCard extends React.Component<
             {
                 versionSatisfies(serverVersion.value, INITIAL_HTTP2_RANGE) && <>
                     <SettingsSubheadingRow>
-                        <SettingsSubheading>HTTP/2 Support</SettingsSubheading>
+                        <SettingsSubheading>HTTP/2 support</SettingsSubheading>
 
                         { http2Enabled !== http2CurrentlyEnabled &&
                             <UnsavedIcon title="Restart app to apply changes" />
@@ -429,7 +428,7 @@ export class ProxySettingsCard extends React.Component<
             {
                 versionSatisfies(serverVersion.value, KEY_LOG_FILE_SUPPORTED) && <>
                     <SettingsSubheadingRow>
-                        <SettingsSubheading>TLS Key Log File</SettingsSubheading>
+                        <SettingsSubheading>TLS key log file</SettingsSubheading>
 
                         { keyLogFilePath !== currentKeyLogFilePath &&
                             <UnsavedIcon title="Restart app to apply changes" />
@@ -442,19 +441,23 @@ export class ProxySettingsCard extends React.Component<
                                 ? <SettingsButton
                                     onClick={this.setTlsKeyFilePathFromDialog}
                                 >
-                                    Select where to save the TLS keylog file
+                                    Choose where to save it…
                                 </SettingsButton>
                                 : <TlsKeyLogButtonsContainer>
                                     { keyLogFilePath }
                                     <SettingsButton
                                         onClick={this.setTlsKeyFilePathFromDialog}
+                                        title='Choose another file'
+                                        aria-label='Choose another file'
                                     >
-                                        <Icon icon={['fas', 'folder-open']} />
+                                        <FolderOpen size={16} aria-hidden={true} />
                                     </SettingsButton>
                                     <SettingsButton
                                         onClick={this.clearTlsKeyFilePath}
+                                        title='Stop logging TLS keys'
+                                        aria-label='Stop logging TLS keys'
                                     >
-                                        <Icon icon={['far', 'trash-alt']} />
+                                        <Trash size={16} aria-hidden={true} />
                                     </SettingsButton>
                                 </TlsKeyLogButtonsContainer>
                             : <>

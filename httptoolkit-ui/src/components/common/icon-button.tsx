@@ -4,6 +4,7 @@ import { styled } from '../../styles'
 import { Icon, IconProp, IconKey, PhosphorIcon } from '../../icons';
 
 import { UnstyledButton, UnstyledButtonLink } from './inputs';
+import { getToolbarIcon, ToolbarIcon } from './toolbar-icons'; // wirepane: Phosphor in toolbars
 
 export const IconButton = styled((p: {
     className?: string,
@@ -24,7 +25,9 @@ export const IconButton = styled((p: {
         onClick={p.onClick}
         onKeyDown={p.onKeyDown}
     >
-        { Array.isArray(p.icon)
+        { getToolbarIcon(p.icon)
+            ? <ToolbarIcon definition={getToolbarIcon(p.icon)!} />
+        : Array.isArray(p.icon)
             ? <Icon
                 icon={p.icon}
                 size={p.iconSize}
@@ -73,10 +76,13 @@ export const IconButtonLink = styled((p: {
         target={p.target}
         rel={p.rel}
     >
-        <Icon
-            icon={p.icon}
-            fixedWidth={p.fixedWidth ? true : false}
-        />
+        { getToolbarIcon(p.icon)
+            ? <ToolbarIcon definition={getToolbarIcon(p.icon)!} />
+            : <Icon
+                icon={p.icon}
+                fixedWidth={p.fixedWidth ? true : false}
+            />
+        }
     </UnstyledButtonLink>
 )`
     color: ${p => p.theme.mainColor};

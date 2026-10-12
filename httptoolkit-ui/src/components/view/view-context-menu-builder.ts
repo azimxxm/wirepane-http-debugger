@@ -4,6 +4,7 @@ import { action, runInAction } from 'mobx';
 import { CollectedEvent, HttpExchangeView, WebSocketStream } from '../../types';
 
 import { copyToClipboard } from '../../util/ui';
+import { toAccelerator } from '../../util/shortcuts';
 
 import { AccountStore } from '../../model/account/account-store';
 import { UiStore } from '../../model/ui/ui-store';
@@ -17,6 +18,12 @@ import {
 } from '../../model/ui/snippet-formats';
 import { ContextMenuItem } from '../../model/ui/context-menu';
 import { Filter, HostnameFilter } from '../../model/filters/search-filters';
+
+// wirepane: View's own shortcuts for these commands (view-page.tsx), shown in the menus
+const PIN_ACCELERATOR = toAccelerator('Cmd+P');
+const RESEND_ACCELERATOR = toAccelerator('Cmd+R');
+const CREATE_RULE_ACCELERATOR = toAccelerator('Cmd+M');
+const DELETE_ACCELERATOR = toAccelerator('Cmd+Backspace');
 
 export class ViewEventContextMenuBuilder {
 
@@ -62,12 +69,14 @@ export class ViewEventContextMenuBuilder {
             {
                 type: 'option',
                 label: 'Toggle Pinning',
+                accelerator: PIN_ACCELERATOR,
                 callback: () => this.callbacks.onPin()
             },
             ...(httpCount > 0 ? [{
                 type: 'option' as const,
                 enabled: isPaidUser,
                 label: `Create ${httpCount} Matching Rule${httpCount !== 1 ? 's' : ''}`,
+                accelerator: CREATE_RULE_ACCELERATOR,
                 callback: () => this.callbacks.onBuildRuleFromSelectedExchanges()
             }] : []),
             ...(httpCount > 0 && this.callbacks.onSaveToCollection ? [{
@@ -81,6 +90,7 @@ export class ViewEventContextMenuBuilder {
             {
                 type: 'option',
                 label: `Delete ${count} Event${count !== 1 ? 's' : ''}`,
+                accelerator: DELETE_ACCELERATOR,
                 callback: () => this.callbacks.onDeleteSelection()
             }
         ];
@@ -103,6 +113,7 @@ export class ViewEventContextMenuBuilder {
             {
                 type: 'option',
                 label: 'Toggle Pinning',
+                accelerator: PIN_ACCELERATOR,
                 callback: action((data: HttpExchangeView) => { data.pinned = !data.pinned; })
             },
             {
@@ -139,6 +150,8 @@ export class ViewEventContextMenuBuilder {
                     type: 'option',
                     enabled: isPaidUser,
                     label: 'Resend Request',
+                    // ⌘R only resends plain HTTP requests, not WebSockets
+                    accelerator: event.isWebSocket() ? undefined : RESEND_ACCELERATOR,
                     callback: (data: HttpExchangeView) => this.callbacks.onPrepareToResendRequest!(data)
                 }
             ] as const : []),
@@ -146,6 +159,7 @@ export class ViewEventContextMenuBuilder {
                 type: 'option',
                 enabled: isPaidUser,
                 label: `Create Matching Modify Rule`,
+                accelerator: CREATE_RULE_ACCELERATOR,
                 callback: this.callbacks.onBuildRuleFromExchange
             },
             ...(this.callbacks.onSaveToCollection && !event.isWebSocket() ? [{
@@ -200,6 +214,7 @@ export class ViewEventContextMenuBuilder {
             {
                 type: 'option',
                 label: 'Delete',
+                accelerator: DELETE_ACCELERATOR,
                 callback: this.callbacks.onDelete
             }
         ];
@@ -220,11 +235,13 @@ export class ViewEventContextMenuBuilder {
             {
                 type: 'option',
                 label: 'Toggle Pinning',
+                accelerator: PIN_ACCELERATOR,
                 callback: action((data: CollectedEvent) => { data.pinned = !data.pinned; })
             },
             {
                 type: 'option',
                 label: 'Delete',
+                accelerator: DELETE_ACCELERATOR,
                 callback: this.callbacks.onDelete
             }
         ], event);

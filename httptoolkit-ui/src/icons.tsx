@@ -333,11 +333,12 @@ export const SourceIcons = {
     Okhttp: { icon: ['fab', 'android'], color: '#78C257' }, // Popular Android HTTP lib
     Fbandroidsdk: { icon: ['fab', 'android'], color: '#78C257' }, // FB Android SDK
 
-    Iphone: { icon: ['fab', 'apple'], color: '#000' },
-    iOS: { icon: ['fab', 'apple'], color: '#000' },
-    Ios: { icon: ['fab', 'apple'], color: '#000' },
-    Ipad: { icon: ['fab', 'apple'], color: '#000' },
-    Darwin: { icon: ['fab', 'apple'], color: '#000' },
+    // wirepane: the theme's text colour, not black, so the logo shows on dark rows too
+    Iphone: { icon: ['fab', 'apple'], color: 'var(--wp-text-primary)' },
+    iOS: { icon: ['fab', 'apple'], color: 'var(--wp-text-primary)' },
+    Ios: { icon: ['fab', 'apple'], color: 'var(--wp-text-primary)' },
+    Ipad: { icon: ['fab', 'apple'], color: 'var(--wp-text-primary)' },
+    Darwin: { icon: ['fab', 'apple'], color: 'var(--wp-text-primary)' },
 
     Docker: { icon: ['fab', 'docker'], color: '#0db7ed' },
     Terminal: { icon: ['fas', 'terminal'], color: '#20c20e' },

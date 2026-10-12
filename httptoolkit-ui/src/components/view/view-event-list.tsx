@@ -18,7 +18,6 @@ import { HEADER_FOOTER_HEIGHT } from './view-event-list-footer';
 import { ViewEventContextMenuBuilder } from './view-context-menu-builder';
 
 import {
-    TableHeaderRow,
     MarkerHeader,
     Method,
     Status,
@@ -26,10 +25,18 @@ import {
     Host,
     PathAndQuery,
     RowMarker,
-    RowPin
+    RowPin,
+    TrafficEventListRow
 } from './event-rows/event-row-components';
 import { EventRow, EventRowProps } from './event-rows/event-row';
 import { DeviceColumnHeader } from '../devices/device-marker'; // wirepane: device markers
+import { // wirepane: list columns
+    HOST_MIN_WIDTH,
+    OptionalColumnHeaders,
+    PATH_MIN_WIDTH,
+    TypeColumnHeader
+} from './event-rows/list-columns';
+import { ListHeaderRow } from './list-options'; // wirepane: columns menu
 
 const SCROLL_BOTTOM_MARGIN = 5; // If you're in the last 5 pixels of the scroll area, we say you're at the bottom
 
@@ -76,6 +83,20 @@ const ListContainer = styled.div<{ role: 'grid' }>`
     box-sizing: border-box;
 
     font-size: ${p => p.theme.textSize};
+
+    /* wirepane: the host & path never shrink away. Past the width the visible columns need
+       (set by the header, list-options.tsx), the list scrolls sideways instead. */
+    ${TrafficEventListRow} {
+        min-width: var(--wp-list-min-width, 0px);
+    }
+
+    [role=row] > ${Host} {
+        min-width: ${HOST_MIN_WIDTH}px;
+    }
+
+    [role=row] > ${PathAndQuery} {
+        min-width: ${PATH_MIN_WIDTH}px;
+    }
 
     /* The selection fill shows focus, so the list only gets an outline when no row is active */
     & > div > div[tabindex="0"]:focus:not(:focus-visible),
@@ -166,15 +187,17 @@ export class ViewEventList extends React.Component<ViewEventListProps> {
         const { events, filteredEvents, isPaused } = this.props;
 
         return <ListContainer role="grid">
-            <TableHeaderRow role="row">
-                <MarkerHeader role="columnheader" aria-label="Category" />
+            <ListHeaderRow>{ /* wirepane: with the columns menu */ }
+                <MarkerHeader role="columnheader" aria-label="Markers" />
                 <Method role="columnheader">Method</Method>
                 <Status role="columnheader">Status</Status>
+                <TypeColumnHeader />
                 <Source role="columnheader">Source</Source>
                 <DeviceColumnHeader />
                 <Host role="columnheader">Host</Host>
                 <PathAndQuery role="columnheader">Path and query</PathAndQuery>
-            </TableHeaderRow>
+                <OptionalColumnHeaders />
+            </ListHeaderRow>
 
             {
                 events.length === 0

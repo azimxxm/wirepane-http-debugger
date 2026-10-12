@@ -3,10 +3,12 @@ import { isMac } from './ui';
 // Display names for shortcut keys: macOS symbols, or plain names elsewhere.
 const MAC_KEY_SYMBOLS: { [key: string]: string } = {
     'Cmd': '⌘',
+    'Ctrl': '⌃',
     'Shift': '⇧',
     'Alt': '⌥',
     'Backspace': '⌫',
-    'Enter': '↵'
+    'Enter': '↵',
+    'Tab': '⇥'
 };
 
 const OTHER_KEY_NAMES: { [key: string]: string } = {
@@ -42,5 +44,35 @@ export function toAccelerator(shortcut: string): string {
 export function toAriaShortcut(shortcut: string, mac: boolean = isMac): string {
     return shortcut.split('+').map((key) =>
         key === 'Cmd' ? (mac ? 'Meta' : 'Control') : key
+    ).join('+');
+}
+
+// Electron's names for modifier keys, as our shortcut format writes them:
+const ACCELERATOR_MODIFIERS: { [key: string]: string } = {
+    'CmdOrCtrl': 'Cmd',
+    'CommandOrControl': 'Cmd',
+    'Command': 'Cmd',
+    'Control': 'Ctrl',
+    'Option': 'Alt'
+};
+
+/**
+ * Formats an Electron accelerator like 'CmdOrCtrl+Shift+S' for display, the same way
+ * as formatShortcut: '⌘⇧S' on macOS and 'Ctrl+Shift+S' elsewhere.
+ */
+export function formatAccelerator(accelerator: string, mac: boolean = isMac): string {
+    const shortcut = accelerator.split('+')
+        .map((key) => ACCELERATOR_MODIFIERS[key] ?? key)
+        .join('+');
+    return formatShortcut(shortcut, mac);
+}
+
+/**
+ * The react-hotkeys-hook keys for a shortcut: 'Cmd+K' listens for ⌘K on macOS and
+ * Ctrl+K elsewhere, so it never takes over a text field's Ctrl+K on macOS.
+ */
+export function toHotkeys(shortcut: string, mac: boolean = isMac): string {
+    return shortcut.split('+').map((key) =>
+        key === 'Cmd' ? (mac ? 'Cmd' : 'Ctrl') : key
     ).join('+');
 }

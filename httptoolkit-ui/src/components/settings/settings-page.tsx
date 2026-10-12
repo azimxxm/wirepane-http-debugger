@@ -1,178 +1,94 @@
 import * as _ from 'lodash';
 import * as React from 'react';
 import { observer, inject } from "mobx-react";
+import { ArrowsLeftRight, BookOpen, Globe, Palette, Pulse, Sparkle } from '@phosphor-icons/react';
 
 import { WithInjected } from '../../types';
-import { styled, Theme, ThemeName } from '../../styles';
-import { uploadFile } from '../../util/ui';
 
 import { UiStore } from '../../model/ui/ui-store';
+import { ProxyStore } from '../../model/proxy-store';
 import { serverVersion, versionSatisfies, PORT_RANGE_SERVER_RANGE } from '../../services/service-versions';
 
-import { CollapsibleCard, CollapsibleCardHeading } from '../common/card';
 import { PageHeader, PageLayout } from '../common/page-header';
-import { TabbedOptionsContainer, Tab, TabsContainer } from '../common/tabbed-options';
-import { ContainerSizedEditor } from '../editor/base-editor';
-
-import amIUsingHtml from '../../amiusing.html';
 
 import { ProxySettingsCard } from './proxy-settings-card';
 import { ConnectionSettingsCard } from './connection-settings-card';
 import { ApiSettingsCard } from './api-settings-card';
+// wirepane: sections with a list on the left, the status first & "Appearance" for themes
+import { SettingsLayout, SettingsSection, SettingsSectionInfo } from './settings-layout';
+import { SettingsStatusCard } from './settings-status-card';
+import { AppearanceSettingsCard } from './appearance-settings-card';
+import { AiSettingsCard } from './ai-settings-card';
 
 interface SettingsPageProps {
     uiStore: UiStore;
+    proxyStore: ProxyStore;
 }
 
-const SettingsPageScrollContainer = styled.div`
-    height: 100%;
-    width: 100%;
-    overflow-y: auto;
-`;
-
-const SettingPageContainer = styled.section`
-    margin: 0px auto 20px;
-    padding: 40px;
-    max-width: 800px;
-    position: relative;
-
-    * {
-        transition: background-color 0.3s, margin-bottom 0.1s;
-    }
-`;
-
-const ThemeColors = styled.div`
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    border: 3px solid #999;
-    margin: auto 20px;
-`;
-
-const ThemeColorBlock = styled.div<{ themeColor: keyof Theme }>`
-    width: 60px;
-    height: 60px;
-    background-color: ${p => p.theme[p.themeColor]};
-`;
-
-const EditorContainer = styled.div`
-    border: 3px solid #999;
-    height: 300px;
-    flex-grow: 1;
-    margin: auto 0;
-`;
-
 @inject('uiStore')
+@inject('proxyStore')
 @observer
 class SettingsPage extends React.Component<SettingsPageProps> {
 
     render() {
-        const { uiStore } = this.props;
+        const { uiStore, proxyStore } = this.props;
         const cardProps = uiStore.settingsCardProps;
+
+        const hasProxySettings = _.isString(serverVersion.value) &&
+            versionSatisfies(serverVersion.value, PORT_RANGE_SERVER_RANGE);
+        // The same check as the rail's AI item
+        const canUseMcp = !!proxyStore.toolPaths?.mcp?.length;
+
+        const sections: SettingsSectionInfo[] = [
+            { id: 'settings-status', label: 'Status', icon: Pulse },
+            { id: 'settings-appearance', label: 'Appearance', icon: Palette },
+            ...(hasProxySettings ? [
+                { id: 'settings-proxy', label: 'Proxy', icon: ArrowsLeftRight },
+                { id: 'settings-connection', label: 'Connection', icon: Globe }
+            ] : []),
+            { id: 'settings-api', label: 'API specifications', icon: BookOpen },
+            ...(canUseMcp ? [{ id: 'settings-ai', label: 'AI assistants', icon: Sparkle }] : [])
+        ];
 
         return <PageLayout><PageHeader
             title='Settings'
-            purpose='Proxy port, certificates, upstream proxy and appearance.'
-        /><SettingsPageScrollContainer>
-            <SettingPageContainer>
+            purpose='What is running, how Wirepane looks, and how the proxy handles connections.'
+        />
+            <SettingsLayout sections={sections}>
+                <SettingsSection id='settings-status' label='Status'>
+                    <SettingsStatusCard />
+                </SettingsSection>
+
+                <SettingsSection id='settings-appearance' label='Appearance'>
+                    <AppearanceSettingsCard {...cardProps.themes} />
+                </SettingsSection>
+
                 {
-                    _.isString(serverVersion.value) &&
-                    versionSatisfies(serverVersion.value, PORT_RANGE_SERVER_RANGE) && <>
-                        <ProxySettingsCard {...cardProps.proxy} />
-                        <ConnectionSettingsCard {...cardProps.connection} />
+                    hasProxySettings && <>
+                        <SettingsSection id='settings-proxy' label='Proxy'>
+                            <ProxySettingsCard {...cardProps.proxy} />
+                        </SettingsSection>
+                        <SettingsSection id='settings-connection' label='Connection'>
+                            <ConnectionSettingsCard {...cardProps.connection} />
+                        </SettingsSection>
                     </>
                 }
 
-                <ApiSettingsCard {...cardProps.api} />
+                <SettingsSection id='settings-api' label='API specifications'>
+                    <ApiSettingsCard {...cardProps.api} />
+                </SettingsSection>
 
-                <CollapsibleCard {...cardProps.themes}>
-                    <header>
-                        <CollapsibleCardHeading onCollapseToggled={
-                            cardProps.themes.onCollapseToggled
-                        }>
-                            Themes
-                        </CollapsibleCardHeading>
-                    </header>
-                    <TabbedOptionsContainer>
-                        <TabsContainer
-                            onClick={async (value: ThemeName | 'automatic' | 'custom') => {
-                                if (value === 'custom') {
-                                    const themeFile = await uploadFile('text', ['.htktheme', '.htk-theme', '.json']);
-                                    if (!themeFile) return;
-                                    try {
-                                        const customTheme = uiStore.buildCustomTheme(themeFile);
-                                        uiStore.setTheme(customTheme);
-                                    } catch (e: any) {
-                                        alert(e.message || e);
-                                    }
-                                } else {
-                                    uiStore.setTheme(value);
-                                }
-                            }}
-                            isSelected={(value: ThemeName | 'automatic' | 'custom') =>
-                                uiStore.themeName === value
-                            }
-                        >
-                            <Tab
-                                icon='MagicWand'
-                                value='automatic'
-                            >
-                                Automatic
-                            </Tab>
-                            <Tab
-                                icon='Sun'
-                                value='light'
-                            >
-                                Light
-                            </Tab>
-                            <Tab
-                                icon='Moon'
-                                value='dark'
-                            >
-                                Dark
-                            </Tab>
-                            <Tab
-                                icon='CircleHalf'
-                                value='high-contrast'
-                            >
-                                High Contrast
-                            </Tab>
-                            <Tab
-                                icon='Swatches'
-                                value='custom'
-                            >
-                                Custom
-                            </Tab>
-                        </TabsContainer>
-                        <ThemeColors>
-                            <ThemeColorBlock themeColor='mainColor' />
-                            <ThemeColorBlock themeColor='mainBackground' />
-                            <ThemeColorBlock themeColor='highlightColor' />
-                            <ThemeColorBlock themeColor='highlightBackground' />
-                            <ThemeColorBlock themeColor='primaryInputColor' />
-                            <ThemeColorBlock themeColor='primaryInputBackground' />
-                            <ThemeColorBlock themeColor='containerWatermark' />
-                            <ThemeColorBlock themeColor='containerBorder' />
-                            <ThemeColorBlock themeColor='mainLowlightBackground' />
-                            <ThemeColorBlock themeColor='containerBackground' />
-                        </ThemeColors>
-
-                        <EditorContainer>
-                            <ContainerSizedEditor
-                                contentId={null}
-                                language='html'
-                                defaultValue={amIUsingHtml}
-                            />
-                        </EditorContainer>
-                    </TabbedOptionsContainer>
-                </CollapsibleCard>
-            </SettingPageContainer>
-        </SettingsPageScrollContainer></PageLayout>;
+                { canUseMcp && <SettingsSection id='settings-ai' label='AI assistants'>
+                    <AiSettingsCard />
+                </SettingsSection> }
+            </SettingsLayout>
+        </PageLayout>;
     }
 }
 
 // Annoying cast required to handle the store prop nicely in our types
 const InjectedSettingsPage = SettingsPage as unknown as WithInjected<
     typeof SettingsPage,
-    'uiStore'
+    'uiStore' | 'proxyStore'
 >;
 export { InjectedSettingsPage as SettingsPage };

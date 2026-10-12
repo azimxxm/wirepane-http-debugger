@@ -59,5 +59,16 @@ contextBridge.exposeInMainWorld('desktopApi', {
     setComponentVersions: (versions: Record<string, string>) =>
         ipcInvoke('set-component-versions', versions),
 
-    getPathForFile: (file: File) => webUtils.getPathForFile(file) || null
+    getPathForFile: (file: File) => webUtils.getPathForFile(file) || null,
+
+    // wirepane: menu bar clicks (app-action-menus.ts, whose channel name this repeats, as the
+    // sandboxed preload can't import it). Returns a function that stops listening.
+    onAppAction: (callback: (actionId: string, details: { triggeredByAccelerator: boolean }) => void) => {
+        const listener = (_event: unknown, actionId: unknown, details?: { triggeredByAccelerator?: unknown }) => {
+            if (typeof actionId !== 'string') return;
+            callback(actionId, { triggeredByAccelerator: details?.triggeredByAccelerator === true });
+        };
+        electron.ipcRenderer.on('wirepane:app-action', listener);
+        return () => { electron.ipcRenderer.removeListener('wirepane:app-action', listener); };
+    }
 });

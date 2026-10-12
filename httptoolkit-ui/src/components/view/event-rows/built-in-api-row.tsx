@@ -4,15 +4,14 @@ import { observer } from 'mobx-react';
 
 import { Icon } from '../../../icons';
 import { HttpExchange } from '../../../types';
-import { describeEventCategory } from '../../../model/events/categorization';
 
 import { ViewEventContextMenuBuilder } from '../view-context-menu-builder';
 import { DeviceCell } from '../../devices/device-marker'; // wirepane: device markers
+import { OptionalColumnCells, RowAttentionMarker, TypeCell } from './list-columns'; // wirepane: list columns
 
 import {
     TrafficEventListRow,
     RowPin,
-    RowMarker,
     EventTypeColumn,
     Source,
     BuiltInApiRequestDetails,
@@ -61,10 +60,11 @@ export const BuiltInApiRow = observer((p: {
         onContextMenu={p.contextMenuBuilder.getContextMenuCallback(p.exchange)}
     >
         <RowPin pinned={pinned}/>
-        <RowMarker role='gridcell' category={category} title={describeEventCategory(category)} />
+        <RowAttentionMarker event={p.exchange} />
         <EventTypeColumn role='gridcell'>
             { api.service.shortName }: { apiOperationName }
         </EventTypeColumn>
+        <TypeCell event={p.exchange} />
         <Source role='gridcell' title={request.source.summary}>
             <Icon
                 {...request.source.icon}
@@ -75,6 +75,7 @@ export const BuiltInApiRow = observer((p: {
         <BuiltInApiRequestDetails role='gridcell'>
             { apiRequestDescription }
         </BuiltInApiRequestDetails>
+        <OptionalColumnCells event={p.exchange} />
     </TrafficEventListRow>
 });
 

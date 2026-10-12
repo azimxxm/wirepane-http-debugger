@@ -2,18 +2,20 @@ import * as _ from 'lodash';
 import * as React from 'react';
 import { inject, observer } from 'mobx-react';
 
-import { Icon, PhosphorIcon, WarningIcon } from '../../../icons';
+import { Icon, WarningIcon } from '../../../icons';
 import { HttpExchange } from '../../../types';
-import {
-    getSummaryColor,
-    describeEventCategory
-} from '../../../model/events/categorization';
 import { areStepsModifying } from '../../../model/rules/rules';
 import { nameStepClass } from '../../../model/rules/rule-descriptions';
 
 import { StatusCode } from '../../common/status-code';
 import { ViewEventContextMenuBuilder } from '../view-context-menu-builder';
 import { DeviceCell } from '../../devices/device-marker'; // wirepane: device markers
+import { // wirepane: list columns & the row marker
+    OptionalColumnCells,
+    RowAttentionMarker,
+    RuleChangedIcon,
+    TypeCell
+} from './list-columns';
 
 type StatusValue = React.ComponentProps<typeof StatusCode>['status'];
 
@@ -30,7 +32,6 @@ function getExchangeStatus(exchange: HttpExchange): StatusValue {
 import {
     TrafficEventListRow,
     RowPin,
-    RowMarker,
     Method,
     MethodName,
     Status,
@@ -81,7 +82,7 @@ export const ExchangeRow = inject('uiStore')(observer((p: {
         onContextMenu={contextMenuBuilder.getContextMenuCallback(exchange)}
     >
         <RowPin aria-label={pinned ? 'Pinned' : undefined} pinned={pinned}/>
-        <RowMarker role='gridcell' category={category} title={describeEventCategory(category)} />
+        <RowAttentionMarker event={exchange} />
         <Method role='gridcell' pinned={pinned}>
             <MethodName httpMethod={request.method}>{ request.method }</MethodName>
         </Method>
@@ -108,6 +109,7 @@ export const ExchangeRow = inject('uiStore')(observer((p: {
                 />
             }
         </Status>
+        <TypeCell event={exchange} />
         <Source role='gridcell'>
             <Icon
                 title={request.source.summary}
@@ -117,15 +119,13 @@ export const ExchangeRow = inject('uiStore')(observer((p: {
             {
                 exchange.matchedRule &&
                 areStepsModifying(exchange.matchedRule.stepTypes) &&
-                <PhosphorIcon
-                    icon='Pencil'
+                <RuleChangedIcon // wirepane: teal like the row marker, red is for failures
                     alt={`Handled by ${
                         exchange.matchedRule.stepTypes.length === 1
                         ? nameStepClass(exchange.matchedRule.stepTypes[0])
                         : 'multi-step'
                     } rule`}
                     size='20px'
-                    color={getSummaryColor('mutative')}
                 />
             }
         </Source>
@@ -136,6 +136,7 @@ export const ExchangeRow = inject('uiStore')(observer((p: {
         <PathAndQuery role='gridcell' title={ request.parsedUrl.pathname + request.parsedUrl.search }>
             { request.parsedUrl.pathname + request.parsedUrl.search }
         </PathAndQuery>
+        <OptionalColumnCells event={exchange} />
     </TrafficEventListRow>;
 }));
 

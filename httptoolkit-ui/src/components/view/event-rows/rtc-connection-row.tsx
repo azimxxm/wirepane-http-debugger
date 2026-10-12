@@ -3,13 +3,12 @@ import { observer } from 'mobx-react';
 
 import { ArrowIcon, Icon } from '../../../icons';
 import { RTCConnection } from '../../../types';
-import { describeEventCategory } from '../../../model/events/categorization';
 import { DeviceCell } from '../../devices/device-marker'; // wirepane: device markers
+import { OptionalColumnCells, RowAttentionMarker, TypeCell } from './list-columns'; // wirepane: list columns
 
 import {
     TrafficEventListRow,
     RowPin,
-    RowMarker,
     EventTypeColumn,
     Source,
     RTCConnectionDetails,
@@ -43,10 +42,11 @@ export const RTCConnectionRow = observer((p: {
         {...p.rowProps}
     >
         <RowPin pinned={pinned}/>
-        <RowMarker role='gridcell' category={category} title={describeEventCategory(category)} />
+        <RowAttentionMarker event={event} />
         <EventTypeColumn role='gridcell'>
             { !event.closeState && <ConnectedSpinnerIcon /> } WebRTC
         </EventTypeColumn>
+        <TypeCell event={event} />
         <Source role='gridcell' title={event.source.summary}>
             <Icon
                 {...event.source.icon}
@@ -61,6 +61,7 @@ export const RTCConnectionRow = observer((p: {
                 event.remoteURL || '?'
             }
         </RTCConnectionDetails>
+        <OptionalColumnCells event={event} />
     </TrafficEventListRow>;
 });
 

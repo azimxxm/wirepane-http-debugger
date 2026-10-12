@@ -3,7 +3,7 @@ import * as React from 'react';
 import { observer } from 'mobx-react';
 
 import { styled, Theme, ThemeProps, css } from '../../styles';
-import { Icon } from '../../icons';
+import { CaretDown, CaretUp } from '@phosphor-icons/react'; // wirepane: Phosphor, like the toolbars
 
 interface CollapseIconProps extends ThemeProps<Theme> {
     className?: string;
@@ -12,13 +12,10 @@ interface CollapseIconProps extends ThemeProps<Theme> {
     headerAlignment: 'left' | 'right';
 }
 
-const CollapseIcon = styled((props: CollapseIconProps) =>
-    <Icon
-        className={props.className}
-        icon={['fas', props.collapsed ? 'chevron-down' : 'chevron-up']}
-        onClick={props.onClick}
-    />
-)`
+const CollapseIcon = styled((props: CollapseIconProps) => {
+    const Caret = props.collapsed ? CaretDown : CaretUp;
+    return <Caret className={props.className} size={16} onClick={props.onClick} />;
+})`
     cursor: pointer;
     user-select: none;
 

@@ -289,7 +289,7 @@ class ModifyPage extends React.Component<ModifyPageProps> {
             serializeRules(this.props.rulesStore.draftRules)
         );
 
-        const filename = `HTTPToolkit_${
+        const filename = `Wirepane_${ // wirepane: our name
             dateFns.format(Date.now(), 'YYYY-MM-DD_HH-mm')
         }.htkrules`;
 
