@@ -8,7 +8,7 @@ Developerlar va QA uchun bepul, ochiq kodli HTTP(S) debugger. U brauzer, iPhone,
 
 ## O'rnatish
 
-Tayyor installer [GitHub Releases](https://github.com/azimxxm/wirepane-http-debugger/releases) sahifasida. Eng oxirgi versiyani oching va faylni yuklab oling:
+Installer [GitHub Releases](https://github.com/azimxxm/wirepane-http-debugger/releases) sahifasida chiqadi (birinchi release hali chiqmagan). Eng oxirgi versiyani oching va faylni yuklab oling:
 
 | Tizim                                                  | Fayl                               |
 | ------------------------------------------------------ | ---------------------------------- |
@@ -122,7 +122,7 @@ O'zgartirgan kodingiz saqlanib qoladi. Conflict chiqsa, uni oddiy `git merge`dag
   2. Server o'zini yangilamaydi: `update-requested` e'tiborsiz qoldiriladi, oclif'ning update plugin'i olib tashlandi. Server'ni ishga tushiruvchi skript faqat app ichidagi server'ni ishga tushiradi. Rasmiy app'ning `~/.local/share/httptoolkit-server` papkasiga tegilmaydi.
   3. UI app ichida va `wirepane://app` manzilidan ochiladi. Release server faqat shu origin'ga ruxsat beradi. Sozlamalar va Send tab'lari app qayta ochilganda ham saqlanadi.
   4. App ad-hoc imzolanadi, `.pkg` imzosiz, notarize yo'q. Build sertifikatsiz Mac'da ishlaydi.
-  - [x] Birinchi release **v1.0.0** (2026-10-12): faqat macOS arm64 `.pkg`. Egasi uni o'z Mac'ida o'rnatib sinadi.
+  - [ ] Birinchi release **v1.0.0**: faqat macOS arm64 `.pkg`, egasi aytganda. Egasi `.pkg`ni o'z Mac'ida o'rnatib sinadi (2026-10-12).
   - [ ] Windows (setup `.exe`, `.zip`) va Linux (`.AppImage`, `.deb`, `.rpm`): **tez orada**, egasi aytganda chiqariladi. Hammasi imzosiz; `./scripts/build-release.sh <mac|win|linux>` va GitHub Actions'dagi `release.yml` tayyor. Birinchi CI run'da mac build o'tdi, Windows va Linux build'lari tugashidan oldin to'xtatildi.
   - Akkaunt kelgach: Developer ID imzosi, hardened runtime va notarize. Ular `ENABLE_SIGNING=true` bilan yoqiladigan yo'lga qo'shiladi, imzosiz yo'l zaxira bo'lib qoladi.
 - [x] Barcha Pro feature'lar hamma uchun bepul. Akkaunt, login va to'lov yo'q. Map Local, Map Remote, mock, rewrite, delay, block, Settings (proxy, connection, API, themes), saqlanadigan rules, HAR import/export va MCP/CLI cheklovsiz ishlaydi.

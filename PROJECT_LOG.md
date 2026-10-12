@@ -2,10 +2,10 @@
 
 ## 2026-10-12
 
-### Released v1.0.0 (macOS arm64 .pkg only)
+### v1.0.0 release held back (macOS arm64 .pkg only, when the owner says)
 
 - **Merged:** `feature/rebrand` fast-forwarded into `main` and pushed to `azimxxm/wirepane-http-debugger`.
-- **Release:** GitHub release `v1.0.0` with one file, `Wirepane-1.0.0-mac-arm64.pkg`: the build the owner installed and tested ("ishlash yaxshi"). Its SHA-256 is in the release notes.
+- **Release:** not made. It was going to hold one file, `Wirepane-1.0.0-mac-arm64.pkg` (the build the owner installed and tested), but the owner stopped it: first fix that some iPhone apps' requests don't show in View, then release when the owner says. The empty draft it left was deleted.
 - **Windows and Linux:** "coming soon" until the owner says. The first CI run (`38241881241`) built mac fine; the Windows and Linux builds were cancelled before they finished, so they have never completed in CI yet.
 
 ### Pre-release fixes (a58bfce..67e523a, not pushed)
