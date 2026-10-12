@@ -37,7 +37,9 @@ export interface AddPeerResult {
 type WireGuardVpnOptions =
     | { action: 'start' }
     | { action: 'add-peer', name: string }
-    | { action: 'remove-peer', peer: string };
+    | { action: 'remove-peer', peer: string }
+    // The UI's Stop button: the REST API has no deactivate route, so it comes through activate
+    | { action: 'stop' };
 
 const DEFAULT_PEER_NAME = 'iPhone';
 const MAX_PEER_NAME_LENGTH = 64;
@@ -63,6 +65,8 @@ function parseOptions(options: unknown): WireGuardVpnOptions {
             return { action: 'start' };
         case 'add-peer':
             return { action, name: cleanPeerName(name) };
+        case 'stop':
+            return { action };
         case 'remove-peer':
             if (typeof peer !== 'string' || !PEER_ID_PATTERN.test(peer)) {
                 throw new Error('remove-peer needs the id of the peer to remove');
@@ -132,6 +136,11 @@ export class WireGuardVpnInterceptor implements Interceptor {
             throw new Error(`Invalid proxy port: ${proxyPort}`);
         }
         const options = parseOptions(rawOptions);
+
+        if (options.action === 'stop') {
+            await this.deactivate(proxyPort);
+            return this.getMetadata();
+        }
 
         return this.serialize(async () => {
             const sidecar = await this.ensureRunning(proxyPort);
