@@ -100,7 +100,7 @@ export class ErrorBoundary extends React.Component<{
                 </ErrorOutput> }
                 <ButtonContainer>
                     <ButtonLink href={
-                        `https://github.com/azimxxm/wirepane/issues/new?template=bug.yml&title=[UI Crash]%3A+${
+                        `https://github.com/azimxxm/wirepane-http-debugger/issues/new?template=bug.yml&title=[UI Crash]%3A+${
                             this.error.message || ''
                         }`
                     }>

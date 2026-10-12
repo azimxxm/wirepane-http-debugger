@@ -63,7 +63,7 @@ export const DisconnectedWarning = inject('proxyStore')(observer((props: {
             <p>
                 In the meantime, some features may be unavailable. If this doesn't resolve
                 quickly, or happens frequently, please <a
-                    href="https://github.com/azimxxm/wirepane/issues/new?template=bug.yml"
+                    href="https://github.com/azimxxm/wirepane-http-debugger/issues/new?template=bug.yml"
                     target="_blank"
                     rel="noreferrer"
                 >report a bug</a> and share as much information as possible to help

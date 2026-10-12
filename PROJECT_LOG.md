@@ -26,7 +26,7 @@
 ### Done (branch `feature/rebrand`, not pushed)
 
 - **Setup.** `CLAUDE.md` (from `init`, imports README). `.md` files are tracked. Fixed the UI dev-server crash on Apple Silicon without Rosetta.
-- **Wirepane brand.** Name, logo (`brand/`, regenerate with `./brand/build-icons.sh`), bundle ID `com.wirepane.app`. GitHub repo renamed to `azimxxm/wirepane`, with description and topics.
+- **Wirepane brand.** Name, logo (`brand/`, regenerate with `./brand/build-icons.sh`), bundle ID `com.wirepane.app`. GitHub repo renamed to `azimxxm/wirepane-http-debugger`, with description and topics.
 - **Free.** Every Pro feature is free: no account, login or checkout.
 - **Docs.** Design critique and plan (`docs/design-plan.md`, `docs/design/critique-2026-10-10.md`), Postman research (`docs/research/postman.md`), collections plan (`docs/collections-plan.md`).
 - **Redesign phase 1:**

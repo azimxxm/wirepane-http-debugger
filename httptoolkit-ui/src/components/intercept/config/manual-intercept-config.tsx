@@ -124,7 +124,7 @@ const ManualInterceptConfig = inject('proxyStore')(
                     </p>
                     <p>
                         Want your client to be supported automatically? <Nowrap>
-                            <a href='https://github.com/azimxxm/wirepane/issues/new'>
+                            <a href='https://github.com/azimxxm/wirepane-http-debugger/issues/new'>
                                 Send some feedback
                             </a>
                         </Nowrap>.

@@ -387,7 +387,7 @@ describe('App actions', () => {
                 'openMcpModal',
                 'toggleCommandPalette'
             ]);
-            expect(REPORT_ISSUE_URL).to.equal('https://github.com/azimxxm/wirepane/issues/new');
+            expect(REPORT_ISSUE_URL).to.equal('https://github.com/azimxxm/wirepane-http-debugger/issues/new');
         });
 
     });

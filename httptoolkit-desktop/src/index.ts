@@ -323,7 +323,7 @@ if (!amMainInstance) {
             logError(`Renderer gone: ${details.reason}`);
             showErrorAlert(
                 "UI crashed",
-                "The Wirepane UI stopped unexpected.\n\nPlease file an issue at github.com/azimxxm/wirepane."
+                "The Wirepane UI stopped unexpected.\n\nPlease file an issue at github.com/azimxxm/wirepane-http-debugger."
             );
 
             setImmediate(() => {
@@ -571,7 +571,7 @@ if (!amMainInstance) {
                 'Wirepane hit an error',
                 `${error.message}.\n\n` +
                 `See ${LAST_RUN_LOG_PATH} for more details.\n\n` +
-                `Please file an issue at github.com/azimxxm/wirepane.`
+                `Please file an issue at github.com/azimxxm/wirepane-http-debugger.`
             );
 
             // Retry limited times, but not for near-immediate failures.

@@ -57,7 +57,7 @@ export const APP_ACTION_SECTIONS: readonly AppActionSection[] = [
 ];
 
 export const DOCS_URL = 'https://httptoolkit.com/docs';
-export const REPORT_ISSUE_URL = 'https://github.com/azimxxm/wirepane/issues/new';
+export const REPORT_ISSUE_URL = 'https://github.com/azimxxm/wirepane-http-debugger/issues/new';
 
 // Shortcuts in util/shortcuts.ts's format: 'Cmd' is ⌘ on macOS and Ctrl elsewhere.
 export const GO_INTERCEPT_SHORTCUT = 'Cmd+1';

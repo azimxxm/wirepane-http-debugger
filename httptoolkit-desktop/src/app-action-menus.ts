@@ -14,7 +14,7 @@ export const APP_ACTION_CHANNEL = 'wirepane:app-action';
 
 export const DOCS_URL = 'https://httptoolkit.com/docs';
 // The same page as the feedback button at the bottom of the UI's rail:
-export const REPORT_ISSUE_URL = 'https://github.com/azimxxm/wirepane/issues/new';
+export const REPORT_ISSUE_URL = 'https://github.com/azimxxm/wirepane-http-debugger/issues/new';
 
 export interface AppActionDetails {
     // True for a shortcut press, false for a click. The UI drops a shortcut it already handled itself.

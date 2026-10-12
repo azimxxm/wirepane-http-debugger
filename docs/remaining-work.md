@@ -99,7 +99,7 @@ Reja va tafsilotlar: [`docs/send-v2-plan.md`](send-v2-plan.md).
 - [x] **macOS menu bar ikonkasi** (2026-10-12): `httptoolkit-desktop/src/menu-bar-icon.ts`. Menyusi: Show Wirepane, New Window, Quit.
 - [x] **Buyruqlar** (`7105308`):
   - bitta app-actions ro'yxati (`httptoolkit-ui/src/model/ui/app-actions.ts`), undan ⌘K paneli (`components/command-palette.tsx`);
-  - macOS menyulari: App → Settings… ⌘,; **Go** (⌘1–⌘4, ⌘K); **Capture** (Pause ⌘⇧R, Clear ⌘⇧⌫, Copy proxy address, Import HAR ⌘O, Export HAR); Help → Report an issue (`azimxxm/wirepane`).
+  - macOS menyulari: App → Settings… ⌘,; **Go** (⌘1–⌘4, ⌘K); **Capture** (Pause ⌘⇧R, Clear ⌘⇧⌫, Copy proxy address, Import HAR ⌘O, Export HAR); Help → Report an issue (`azimxxm/wirepane-http-debugger`).
   - Menyu bosilganda buyruq UI'ga IPC orqali boradi (`wirepane:app-action`, `desktopApi.onAppAction`).
   - Send tab'lari ⌘⇧] / ⌘⇧[ bilan almashadi. Context menyularda accelerator'lar ko'rinadi.
 - [x] **Ko'rinish** (`7105308`):

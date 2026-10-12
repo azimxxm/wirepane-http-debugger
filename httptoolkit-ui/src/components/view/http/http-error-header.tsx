@@ -280,7 +280,7 @@ export const HttpErrorHeader = (p: {
                 Because this method is unrecognized, Wirepane doesn't know how it should
                 be handled, and cannot safely forward it on elsewhere. If you think this
                 method should be supported, please <a
-                    href='https://github.com/azimxxm/wirepane/issues/new'
+                    href='https://github.com/azimxxm/wirepane-http-debugger/issues/new'
                 >
                     get in touch
                 </a>.
@@ -290,7 +290,7 @@ export const HttpErrorHeader = (p: {
                 The client may be using a newer or experimental HTTP version that HTTP
                 Toolkit doesn't yet support. If you think this version should be supported,
                 please <a
-                    href='https://github.com/azimxxm/wirepane/issues/new'
+                    href='https://github.com/azimxxm/wirepane-http-debugger/issues/new'
                 >
                     get in touch
                 </a>.

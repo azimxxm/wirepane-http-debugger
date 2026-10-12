@@ -8,7 +8,7 @@ Developerlar va QA uchun bepul, ochiq kodli HTTP(S) debugger. U brauzer, iPhone,
 
 ## O'rnatish
 
-Tayyor installer'lar [GitHub Releases](https://github.com/azimxxm/wirepane/releases) sahifasida. Eng oxirgi versiyani oching va o'z tizimingiz uchun faylni yuklab oling:
+Tayyor installer'lar [GitHub Releases](https://github.com/azimxxm/wirepane-http-debugger/releases) sahifasida. Eng oxirgi versiyani oching va o'z tizimingiz uchun faylni yuklab oling:
 
 | Tizim                                                  | Fayl                                                                                                    |
 | ------------------------------------------------------ | ------------------------------------------------------------------------------------------------------- |
@@ -44,8 +44,8 @@ Bruno — open-core loyiha. GitHub'dagi kod to'liq MIT litsenziyasida, shuning u
 Kerak: macOS, Node.js 24, git.
 
 ```bash
-git clone https://github.com/azimxxm/wirepane.git ~/Documents/wirepane
-cd ~/Documents/wirepane
+git clone https://github.com/azimxxm/wirepane-http-debugger.git ~/Documents/wirepane-http-debugger
+cd ~/Documents/wirepane-http-debugger
 ./setup.sh   # bir marta: Bruno package'larini build qiladi (~25 s, ~290 MB), keyin uchala papkada npm ci
 ./start.sh   # app ochiladi. Cmd+Q bosilsa, hammasi to'xtaydi
 ```
@@ -105,7 +105,7 @@ O'zgartirgan kodingiz saqlanib qoladi. Conflict chiqsa, uni oddiy `git merge`dag
 
 - [x] Hamma kod bitta repoda va local source'dan bitta app bo'lib ishlaydi (dev rejim).
 - [ ] O'z brendimiz — **Wirepane**:
-  - [x] Nom, GitHub repo (`azimxxm/wirepane`), bundle ID (`com.wirepane.app`), `productName`, oyna va menu sarlavhalari, UI, terminal va CLI/MCP matnlari.
+  - [x] Nom, GitHub repo (`azimxxm/wirepane-http-debugger`), bundle ID (`com.wirepane.app`), `productName`, oyna va menu sarlavhalari, UI, terminal va CLI/MCP matnlari.
   - [x] Logo va ikonka. Manbasi `brand/icon.svg`. `./brand/build-icons.sh` undan barcha fayllarni (`.icns`, `.ico`, PNG, UI logosi, loading wordmark) qayta yasaydi.
   - [ ] UI redesign ([reja](docs/design-plan.md), [tahlil](docs/design/critique-2026-10-10.md)). Rejada 3 bosqich bor:
     1. Logoga mos ranglar va shriftlar.

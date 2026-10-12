@@ -124,7 +124,7 @@ test.describe('Menu bar app actions', () => {
         (item.click as Function)();
 
         expect(item.label).toBe('Report an Issue…');
-        expect(opened).toEqual(['https://github.com/azimxxm/wirepane/issues/new']);
+        expect(opened).toEqual(['https://github.com/azimxxm/wirepane-http-debugger/issues/new']);
         expect(REPORT_ISSUE_URL).toBe(opened[0]);
     });
 
