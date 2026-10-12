@@ -4,7 +4,9 @@
 //     CPU this runs on (../build/server/<target>, e.g. darwin-arm64)
 //   - the UI production build of ../httptoolkit-ui with its API specs compressed
 //     (../build/ui, scripts/assemble-ui.cjs), served from wirepane://app (src/bundled-ui.ts)
-// ./scripts/build-release.sh <mac|win|linux> builds both and then runs this, on that OS.
+//   - the VPN helper, the Rust sidecar of ../wirepane-tunnel (../build/tunnel/<target>,
+//     scripts/build-tunnel.sh), which the server starts for VPN mode
+// ./scripts/build-release.sh <mac|win|linux> builds all three and then runs this, on that OS.
 //
 // Nothing is signed: there's no Apple Developer account or code signing certificate yet
 // (CLAUDE.md, "Distribution"). macOS gets an unsigned .pkg holding an ad-hoc signed arm64
@@ -34,6 +36,8 @@ if (!/^\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$/.test(PRODUCT_VERSION)) {
 const SERVER_TARGET = process.env.WIREPANE_SERVER_TARGET || `${process.platform}-${process.arch}`;
 const SERVER_RELEASE = `../build/server/${SERVER_TARGET}/httptoolkit-server`;
 const UI_BUILD = '../build/ui';
+const TUNNEL_BUILD = `../build/tunnel/${SERVER_TARGET}`;
+const TUNNEL_BINARY = SERVER_TARGET.startsWith('win32-') ? 'wirepane-tunnel.exe' : 'wirepane-tunnel';
 
 const signed = process.env.ENABLE_SIGNING === 'true';
 const config = signed
@@ -43,7 +47,8 @@ const config = signed
 const serverLauncher = SERVER_TARGET.startsWith('win32-') ? 'httptoolkit-server.cmd' : 'httptoolkit-server';
 for (const [file, what] of [
     [path.join(SERVER_RELEASE, 'bin', serverLauncher), `server release for ${SERVER_TARGET}`],
-    [path.join(UI_BUILD, 'index.html'), 'UI build']
+    [path.join(UI_BUILD, 'index.html'), 'UI build'],
+    [path.join(TUNNEL_BUILD, TUNNEL_BINARY), `VPN helper for ${SERVER_TARGET}`]
 ]) {
     if (!fs.existsSync(path.join(PROJECT_DIR, file))) {
         throw new Error(`The ${what} is missing (${path.resolve(PROJECT_DIR, file)}). Build everything with ./scripts/build-release.sh`);
@@ -58,6 +63,9 @@ config.extraResources = [
     // root of a file set, and the server needs its node_modules
     { from: path.dirname(SERVER_RELEASE), filter: [`${path.basename(SERVER_RELEASE)}/**/*`] },
     { from: UI_BUILD, to: 'httptoolkit-ui' },
+    // Resources/wirepane-tunnel/wirepane-tunnel[.exe]: src/index.ts hands its path to the server. On
+    // macOS electron-builder signs it with the app (any binary in the app gets the ad-hoc signature).
+    { from: TUNNEL_BUILD, to: 'wirepane-tunnel', filter: [TUNNEL_BINARY] },
     'httptoolkit-ctl{,.*}',
     'httptoolkit-mcp{,.*}'
 ];
@@ -76,7 +84,14 @@ config.mac = {
     // The UI is data only (scripts, fonts, compressed specs). The app's own signature seals those
     // files anyway, while signing each "binary-looking" one gave all 2500 specs a signature of
     // their own and slowed the build down.
-    signIgnore: ['/Contents/Resources/httptoolkit-ui/']
+    signIgnore: ['/Contents/Resources/httptoolkit-ui/'],
+    extendInfo: {
+        ...config.mac?.extendInfo,
+        // VPN mode: a phone sends its traffic to the helper over the local network, and macOS asks
+        // the user to allow that once, showing this text
+        NSLocalNetworkUsageDescription:
+            'Wirepane uses your local network to receive traffic from phones you connect with VPN mode.'
+    }
 };
 config.pkg = { ...config.pkg, artifactName: artifactName('mac') };
 config.dmg = { ...config.dmg, artifactName: artifactName('mac') };

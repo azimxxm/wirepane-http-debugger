@@ -7,11 +7,12 @@
 # Steps:
 #   1. Bruno's packages (scripts/build-bruno.sh, skips what is up to date)
 #   2. the server release for this OS (scripts/build-server.sh)
-#   3. the UI production build, with no telemetry keys and no update service worker, then
+#   3. the VPN helper, the Rust sidecar in wirepane-tunnel/ (scripts/build-tunnel.sh, needs Rust)
+#   4. the UI production build, with no telemetry keys and no update service worker, then
 #      build/ui with its API specs compressed (scripts/assemble-ui.cjs)
-#   4. the desktop app and its installers (httptoolkit-desktop: npm run build), in
+#   5. the desktop app and its installers (httptoolkit-desktop: npm run build), in
 #      httptoolkit-desktop/dist
-# Every run rebuilds steps 2-4 from the current code. File names carry Wirepane's version, the
+# Every run rebuilds steps 2-5 from the current code. File names carry Wirepane's version, the
 # VERSION file at the repo root (or $WIREPANE_VERSION), e.g. Wirepane-1.0.0-mac-arm64.pkg.
 # It ends by listing the files it made. .github/workflows/release.yml runs it on each OS.
 set -euo pipefail
@@ -69,6 +70,8 @@ unset SENTRY_DSN SENTRY_AUTH_TOKEN POSTHOG_KEY REPORT_URI ACCOUNTS_API
 echo "==> Building Wirepane $version for $platform ($target)"
 "$ROOT/scripts/build-bruno.sh"
 "$ROOT/scripts/build-server.sh" "$target"
+# Before the long UI build, so a Rust problem shows up early
+"$ROOT/scripts/build-tunnel.sh" "$target"
 
 echo "==> Building the UI (httptoolkit-ui/dist)"
 # Shown as the UI version in the app, e.g. 27a9f71fd or 27a9f71fd-dirty

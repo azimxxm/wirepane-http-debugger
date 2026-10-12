@@ -66,10 +66,13 @@ jobs:
         include:
           - platform: mac # Apple Silicon: .pkg and .zip
             os: macos-14
+            rust-target: aarch64-apple-darwin
           - platform: win # x64: NSIS installer .exe and .zip
             os: windows-2022
+            rust-target: x86_64-pc-windows-msvc
           - platform: linux # x64: .AppImage, .deb and .rpm
             os: ubuntu-22.04
+            rust-target: x86_64-unknown-linux-musl # static, so it runs on any distribution
     runs-on: ${{ matrix.os }}
     timeout-minutes: 90
     defaults:
@@ -97,11 +100,21 @@ jobs:
             httptoolkit-ui/package-lock.json
             httptoolkit-desktop/package-lock.json
 
-      - name: Install rpmbuild (for the .rpm)
+      - name: Install rpmbuild (for the .rpm) and musl-tools (C compiler for the VPN helper's static build)
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y rpm
+          sudo apt-get install -y rpm musl-tools
+
+      # rustup is on all three runner images. scripts/build-tunnel.sh builds the VPN helper
+      # (wirepane-tunnel/, Rust) for this OS's own Rust target. The crate asks for a recent Rust
+      # (rust-version in its Cargo.toml), so bring the image's stable up to date first.
+      - name: Add the Rust target of the VPN helper
+        run: |
+          rustup update stable --no-self-update
+          rustup target add ${{ matrix.rust-target }}
+          rustc --version
+          cargo --version
 
       - name: Install dependencies
         run: ./setup.sh

@@ -473,12 +473,18 @@ if (!amMainInstance) {
         const serverBinPath = path.join(RESOURCES_PATH, 'httptoolkit-server', 'bin', binName);
         const serverBinCommand = isWindows ? `"${serverBinPath}"` : serverBinPath;
 
+        // wirepane: the VPN helper ships in Resources/wirepane-tunnel (scripts/build-tunnel.sh). The
+        // server runs it for VPN mode and reports VPN mode as unavailable when this isn't set.
+        const tunnelBinPath = path.join(RESOURCES_PATH, 'wirepane-tunnel', isWindows ? 'wirepane-tunnel.exe' : 'wirepane-tunnel');
+        const hasTunnelBin = await fs.access(tunnelBinPath).then(() => true, () => false);
+
         const envVars = {
             ...process.env,
 
             HTK_SERVER_TOKEN: AUTH_TOKEN,
             HTK_DESKTOP_EXE: app.getPath('exe'),
             HTK_DESKTOP_RESOURCES: RESOURCES_PATH,
+            ...(hasTunnelBin ? { WIREPANE_TUNNEL_BINPATH: tunnelBinPath } : {}), // wirepane:
             NODE_SKIP_PLATFORM_CHECK: '1',
             OPENSSL_CONF: undefined, // Not relevant to us, and if set this can crash Node.js
 
