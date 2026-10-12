@@ -43,7 +43,8 @@ const PageContent = styled.div`
 `;
 
 /**
- * A phone setup page: the header with a way back to all sources, then the content.
+ * A phone setup page: "Intercept › <phone>" in the toolbar, with Intercept as the way
+ * back to all sources (⌘[ too), then the content.
  */
 export const PhoneSetupLayout = (props: {
     title: string,
@@ -51,15 +52,16 @@ export const PhoneSetupLayout = (props: {
     onBack: () => void,
     children: React.ReactNode
 }) => <PageLayout>
-    <PageHeader title={props.title} purpose={props.purpose}>
-        <ActionButton
-            icon='ArrowLeft'
-            title='Back to all sources on the Intercept page'
-            onClick={props.onBack}
-        >
-            Intercept
-        </ActionButton>
-    </PageHeader>
+    <PageHeader
+        title={props.title}
+        purpose={props.purpose}
+        parent={{
+            label: 'Intercept',
+            description: 'Back to all sources on the Intercept page',
+            onSelect: props.onBack,
+            shortcut: 'Cmd+['
+        }}
+    />
     <PageScroll>
         <PageContent>
             { props.children }

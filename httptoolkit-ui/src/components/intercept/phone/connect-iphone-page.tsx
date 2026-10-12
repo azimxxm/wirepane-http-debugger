@@ -74,7 +74,7 @@ export const ConnectIPhonePage = inject('proxyStore', 'eventsStore')(observer((p
     const { certContent } = proxyStore;
 
     return <PhoneSetupLayout
-        title='Connect iPhone or iPad'
+        title='iPhone or iPad'
         purpose="Send an iPhone's or iPad's traffic through Wirepane over Wi-Fi."
         onBack={() => navigate('/intercept')}
     >

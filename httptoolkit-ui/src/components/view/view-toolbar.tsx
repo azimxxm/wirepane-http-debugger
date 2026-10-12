@@ -18,14 +18,15 @@ import { ActionButton } from '../common/action-button';
 import { HarImportProblemDialog } from '../common/har-import-problem-dialog';
 import { SearchFilter } from './filters/search-filter';
 
-// The filter sits in the page header, so its growing tag list & its suggestions
+// The filter sits in the window toolbar, so its growing tag list & its suggestions
 // drop down over the list instead of up, as they did in the old footer.
 const FilterSlot = styled.div`
     flex: 1 1 320px;
+    width: 320px; /* Its natural width too, so the page title gives way before it does */
     min-width: 200px;
     max-width: 560px;
     align-self: flex-start;
-    margin-top: 11px; /* Centred in the header, at the filter's resting height */
+    margin-top: 8px; /* Centred in the toolbar at the filter's resting height (35px of 51px) */
 
     position: relative;
     display: flex;
@@ -45,8 +46,8 @@ const FilteredCount = styled.span`
 `;
 
 /**
- * The View page's toolbar, shown inside its page header: the traffic filter, and
- * the list actions. Pausing lives in the status bar.
+ * The View page's part of the window toolbar: the traffic filter, and the list
+ * actions. Pausing lives in the status bar.
  */
 export const ViewToolbar = inject('eventsStore')(observer((props: {
     eventsStore?: EventsStore,

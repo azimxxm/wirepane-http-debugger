@@ -17,12 +17,14 @@ import "@fontsource/dm-mono/500.css";
 import reset from 'styled-reset';
 
 // Desktop type scale: 11px rail labels & badges, 12px captions & column headers,
-// 13px inputs & buttons, 14px body text & list rows, 16px card titles, 22px page titles.
+// 13px inputs & buttons, 14px body text & list rows, 15px page titles in the window
+// toolbar, 16px card titles, 22px headings.
 const fontSizes = {
     tinyTextSize: '11px',
     smallPrintSize: '12px',
     textInputFontSize: '13px',
     textSize: '14px',
+    toolbarTitleSize: '15px',
     subHeadingSize: '16px',
     headingSize: '16px',
     largeHeadingSize: '22px',

@@ -340,10 +340,12 @@ const CommandGroupRows = observer((props: {
  */
 export const CommandPalette = observer((props: {
     actions: readonly AppAction[],
+    // Text that's already in the search when it opens, e.g. typed into the toolbar's field
+    initialQuery?: string,
     onRun: (action: AppAction) => void,
     onClose: () => void
 }) => {
-    const [query, setQuery] = React.useState('');
+    const [query, setQuery] = React.useState(props.initialQuery ?? '');
     const [activeId, setActiveId] = React.useState<string | undefined>();
 
     const idPrefix = React.useId();
@@ -364,6 +366,12 @@ export const CommandPalette = observer((props: {
     const focusOnOpen = React.useCallback((input: HTMLInputElement | null) => {
         input?.setAttribute('autofocus', '');
     }, []);
+
+    // With text already typed in, carry on typing after it
+    const onSearchFocus = (event: React.FocusEvent<HTMLInputElement>) => {
+        const input = event.currentTarget;
+        input.setSelectionRange(input.value.length, input.value.length);
+    };
 
     const move = (distance: number) => {
         if (choosable.length === 0) return;
@@ -415,6 +423,7 @@ export const CommandPalette = observer((props: {
                     placeholder='Type a command, or search for one…'
                     spellCheck={false}
                     autoComplete='off'
+                    onFocus={onSearchFocus}
                     value={query}
                     onChange={(event) => {
                         setQuery(event.target.value);

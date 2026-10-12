@@ -29,6 +29,7 @@ import {
 } from '../model/ui/app-actions';
 
 import { Rail, RailItem } from './rail';
+import { AppToolbar } from './app-toolbar'; // wirepane
 import { AppActionsHost } from './app-actions-host';
 import { StatusBar } from './status-bar';
 import { GuidedInterceptPage } from './intercept/guided-intercept-page';
@@ -46,9 +47,17 @@ import { McpModal } from './mcp/mcp-modal';
 import { CollectionsDialogs } from './collections/collections-dialogs';
 import { ZipExportDialog } from './view/zip-export-dialog';
 
+// wirepane: the toolbar along the top, then the rail and the page below it
 const AppContainer = styled.div`
     display: flex;
+    flex-direction: column;
     height: 100%;
+`;
+
+const AppBody = styled.div`
+    flex: 1 1 auto;
+    min-height: 0;
+    display: flex;
 `;
 
 // The current page, with the status bar below it
@@ -212,7 +221,8 @@ class App extends React.Component<{
         return <LocationProvider history={appHistory}>
             <AppActionsHost />
             <AppContainer>
-                <Rail items={this.menuItems} />
+                <AppToolbar />
+                <AppBody><Rail items={this.menuItems} />
 
                 <MainColumn>
                     <PageSlot>
@@ -230,7 +240,7 @@ class App extends React.Component<{
                         </Router>
                     </PageSlot>
                     <StatusBar />
-                </MainColumn>
+                </MainColumn></AppBody>
 
                 <DisconnectedWarning />
             </AppContainer>

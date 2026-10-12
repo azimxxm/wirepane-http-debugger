@@ -133,6 +133,7 @@ export const AppActionsHost = inject(
 
         { commandPaletteState.isOpen && <CommandPalette
             actions={runner.actions.filter((action) => !action.hiddenInPalette)}
+            initialQuery={commandPaletteState.initialQuery}
             onRun={runFromPalette}
             onClose={closeCommandPalette}
         /> }

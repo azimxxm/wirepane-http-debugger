@@ -38,6 +38,7 @@ import { SelfSizedEditor } from '../editor/base-editor';
 
 import { ViewEventList } from './view-event-list';
 import { ViewToolbar } from './view-toolbar';
+import { describeOpenEvent, describeSelection } from './open-event-title'; // wirepane
 import { NoTrafficState, SelectRequestState } from './view-empty-states';
 import { ViewEventContextMenuBuilder } from './view-context-menu-builder';
 import { PaneOuterContainer } from './view-details-pane';
@@ -283,6 +284,19 @@ class ViewPage extends React.Component<ViewPageProps> {
         return this.isMultiSelection || this.selectedEvent !== undefined;
     }
 
+    // wirepane: what's open in the inspector, for the toolbar's "View › GET /todos/1"
+    @computed
+    get openEventTitle(): string | undefined {
+        if (this.isMultiSelection) return describeSelection(this.props.uiStore.selectedEventIds.size);
+        return this.selectedEvent && describeOpenEvent(this.selectedEvent);
+    }
+
+    private readonly viewCrumb = {
+        label: 'View',
+        description: 'Close the inspector and show the whole list',
+        onSelect: () => this.onClearSelection()
+    };
+
     @computed
     get selectedEvents(): ReadonlyArray<CollectedEvent> {
         const { selectedEventIds } = this.props.uiStore;
@@ -526,9 +540,11 @@ class ViewPage extends React.Component<ViewPageProps> {
             />
 
             <PageHeader
-                title='View'
+                title={this.openEventTitle ?? 'View'}
+                parent={this.openEventTitle ? this.viewCrumb : undefined}
                 purpose='Every request that passes through Wirepane. Select one to inspect it.'
                 compactBelow={1180}
+                shortcutsBelow={1400}
             >
                 <ViewToolbar
                     searchInputRef={this.searchInputRef}

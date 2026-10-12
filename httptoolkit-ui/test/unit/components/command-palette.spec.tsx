@@ -174,4 +174,24 @@ describe('Command palette', () => {
         expect(closed).to.equal(1);
     });
 
+    it('can open with text already typed in, filtered, with the caret after it', () => {
+        ReactDOM.unmountComponentAtNode(container);
+        ReactDOM.render(
+            <ThemeProvider theme={lightTheme}>
+                <CommandPalette
+                    actions={ACTIONS}
+                    initialQuery='exp'
+                    onRun={(action) => ran.push(action.id)}
+                    onClose={() => closed++}
+                />
+            </ThemeProvider>,
+            container
+        );
+
+        expect(input().value).to.equal('exp');
+        expect(optionLabels()).to.deep.equal(['Export HAR…']);
+        expect(document.activeElement).to.equal(input());
+        expect([input().selectionStart, input().selectionEnd]).to.deep.equal([3, 3]);
+    });
+
 });

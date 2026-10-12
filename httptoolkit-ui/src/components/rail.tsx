@@ -1,15 +1,11 @@
 import * as React from 'react';
 import { observer } from 'mobx-react';
 import { Link, Match } from '@reach/router';
-import * as dedent from 'dedent';
 
 import { styled, css } from '../styles';
 import { IconKey, PhosphorIcon } from '../icons';
-import { UI_VERSION, desktopVersion, serverVersion } from '../services/service-versions';
 
 import { UnstyledButton } from './common/inputs';
-import logo from '../images/logo-icon.svg';
-import { HAS_HIDDEN_TITLE_BAR, TRAFFIC_LIGHTS_INSET } from '../util/window-chrome'; // wirepane
 
 export const RAIL_WIDTH = 64;
 
@@ -27,12 +23,14 @@ export interface RailItem {
     iconOnly?: boolean;
 }
 
+// Below the window toolbar (app-toolbar.tsx), which has the Wirepane mark and, on macOS,
+// the traffic lights
 const RailNav = styled.nav`
     width: ${RAIL_WIDTH}px;
     flex-shrink: 0;
     height: 100%;
     box-sizing: border-box;
-    padding-bottom: 6px;
+    padding: 4px 0 6px;
 
     position: relative;
     z-index: 5;
@@ -46,25 +44,6 @@ const RailNav = styled.nav`
     box-shadow: inset -1px 0 0 ${p => p.theme.railEdge};
 
     user-select: none;
-`;
-
-// wirepane: room for macOS's traffic lights in the desktop app, which has no title bar
-// there. The window can be dragged by it, like a title bar.
-const TrafficLightsInset = styled.div`
-    flex-shrink: 0;
-    height: ${TRAFFIC_LIGHTS_INSET}px;
-    -webkit-app-region: drag;
-`;
-
-const RailLogo = styled.img.attrs(() => ({
-    src: logo,
-    alt: 'Wirepane'
-}))`
-    display: block;
-    width: 36px;
-    height: 36px;
-    margin: 12px auto 10px;
-    -webkit-user-drag: none;
 `;
 
 const railItemStyles = css`
@@ -198,23 +177,6 @@ export const Rail = observer((props: { items: Array<RailItem> }) => {
     const bottomItems = props.items.filter((item) => item.position === 'bottom');
 
     return <RailNav aria-label='Main navigation'>
-        { HAS_HIDDEN_TITLE_BAR && <TrafficLightsInset aria-hidden={true} /> }
-        <RailLogo
-            title={dedent`
-                UI version: ${UI_VERSION.slice(0, 8)}
-                Desktop version: ${
-                    desktopVersion.state === 'fulfilled'
-                        ? desktopVersion.value
-                        : 'Unknown'
-                }
-                Server version: ${
-                    serverVersion.state === 'fulfilled'
-                        ? serverVersion.value
-                        : 'Unknown'
-                }
-            `}
-        />
-
         { topItems.map((item) => <RailEntry key={item.name} item={item} />) }
         <Separator />
         { bottomItems.map((item) => <RailEntry key={item.name} item={item} />) }

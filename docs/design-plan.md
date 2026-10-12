@@ -33,7 +33,7 @@ Source of the findings: the baseline critique of 2026-10-10 (overall grade **D**
    - Green, amber, red and sky info are used only for HTTP outcomes.
 2. **Hover is never the same as selection.**
 3. **The app always shows its state.** A status bar on every page shows recording, proxy address, clients, request count and active rules.
-4. **Page title equals the nav label**, followed by a one-line purpose and the page's actions on the right.
+4. **Page title equals the nav label**, followed by a one-line purpose and the page's actions on the right, all in the window toolbar. Sub-pages show a breadcrumb that starts with the nav label ("Intercept › iPhone or iPad").
 5. **No dead-end empty state.** Each one says what will appear and offers the next action as a button.
 6. **Keyboard-first.** Every action has a shortcut, and every shortcut is visible in the menu bar, in tooltips, or in the ⌘K palette. Focus rings stay visible (`:focus-visible`).
 7. **At most one solid accent button per view.** The wire gradient is used only for the active rail bar and the recording hairline, and never behind text.
@@ -104,6 +104,13 @@ The high-contrast theme keeps its black and white surfaces and takes the dark ac
 - [x] **Settings.** Sectioned layout, status first, "Appearance". (P2-7)
 - [x] **Window chrome.** Background matches the theme; `hiddenInset` title bar. (P2-8)
 - [x] **Leftover names.** HAR names `Wirepane_*.har`, the "Wirepane CA" copy and the host pill. (P2-9, P2-10)
+
+### Unified toolbar (2026-10-12)
+
+- [x] **Window toolbar.** One 52 px toolbar across the top of the window, like Mail's or Proxyman's (`components/app-toolbar.tsx`): the 24 px mark, the page title (15/600) with its purpose under it (12 px), a flexible space, a "Search or run a command ⌘K" field that opens the palette (an icon below 1100 px), then the page's actions. `PageHeader` renders into it, so pages start right below it. The rail starts below it too.
+- [x] **macOS title bar.** In the desktop app the toolbar is the title bar: its first 92 px stay clear for the traffic lights (`trafficLightPosition` {18, 19} centres them), its empty space drags the window, and double-clicking it zooms (macOS does that for drag regions since Electron 23). Elsewhere it starts 20 px in, with the mark over the rail.
+- [x] **Breadcrumbs.** "Intercept › iPhone or iPad" and "Intercept › Android" (⌘[ goes back), and "View › GET /todos/1" while a request is open, where View closes the inspector. (critique 2026-10-12 P2-6)
+- [x] **Status bar.** The "⌘K Commands" chip is gone: the toolbar's field is the way in.
 
 ### Later
 

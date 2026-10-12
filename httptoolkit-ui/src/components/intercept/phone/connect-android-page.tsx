@@ -294,7 +294,7 @@ export const ConnectAndroidPage = inject('proxyStore', 'eventsStore', 'intercept
     const hasNetwork = proxyStore.externalNetworkAddresses.length > 0;
 
     return <PhoneSetupLayout
-        title='Connect Android'
+        title='Android'
         purpose="Send an Android phone's or emulator's traffic through Wirepane."
         onBack={() => navigate('/intercept')}
     >

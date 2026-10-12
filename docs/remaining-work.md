@@ -112,7 +112,7 @@ Reja va tafsilotlar: [`docs/send-v2-plan.md`](send-v2-plan.md).
 
 **Qolgan kichik ishlar:**
 
-- Egasi ko'rinadigan oynada bir marta tekshirishi kerak: `hiddenInset` traffic light'lari rail logosiga tegmayaptimi; menu bar ikonkasining menyusi.
+- Egasi ko'rinadigan oynada bir marta tekshirishi kerak: traffic light'lar 52 px toolbar'ning o'rtasida turibdimi (`trafficLightPosition` {18, 19}), toolbar'ning bo'sh joyini ikki marta bosish oynani kattalashtiradimi; menu bar ikonkasining menyusi.
 - "Compact rows" zichlik sozlamasi.
 - Modify editor'laridagi to'liq teal kvadrat tugmalar (faqat ikonkalari almashgan).
 - Native menyudagi "Pause/Resume Recording" yorlig'i holatga qarab o'zgarmaydi (buning uchun UI → desktop IPC kerak).

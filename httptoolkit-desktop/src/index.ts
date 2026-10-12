@@ -126,12 +126,12 @@ const createWindow = () => {
         // while the UI loads (canvas tokens in httptoolkit-ui/src/styles.ts)
         backgroundColor: nativeTheme.shouldUseDarkColors ? '#0B1220' : '#F4F7FB',
 
-        // wirepane: on macOS the navy rail runs up under the traffic lights, which sit at its
-        // top, clear of the logo (the UI adds that space in rail.tsx). Windows & Linux keep
-        // their usual title bar.
+        // wirepane: on macOS the UI's 52px toolbar (app-toolbar.tsx) is the title bar. The traffic
+        // lights sit at its left end, vertically centred: y 19 + 7 (half a 14px button) = 26.
+        // The UI keeps its first 92px clear for them. Windows & Linux keep their usual title bar.
         ...(process.platform === 'darwin' ? {
             titleBarStyle: 'hiddenInset' as const,
-            trafficLightPosition: { x: 10, y: 12 }
+            trafficLightPosition: { x: 18, y: 19 }
         } : {}),
 
         minWidth: 700,
