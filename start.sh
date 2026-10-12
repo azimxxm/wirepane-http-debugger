@@ -5,6 +5,8 @@
 #   httptoolkit-desktop -> Electron window that loads the local UI
 # Quitting the app (Cmd+Q) or pressing Ctrl+C stops everything.
 # Extra arguments go to Electron, e.g. ./start.sh --remote-debugging-port=9222
+# ./start.sh --no-window runs only the server and the UI, with no app window on screen: for
+# headless browser checks while someone else uses the Mac. Ctrl+C or a kill stops them.
 set -uo pipefail
 
 ROOT="$(cd "$(dirname "$0")" && pwd)"
@@ -72,6 +74,12 @@ wait_until_ready() {
   done
 }
 
+NO_WINDOW=false
+ELECTRON_ARGS=()
+for arg in "$@"; do
+  if [ "$arg" = "--no-window" ]; then NO_WINDOW=true; else ELECTRON_ARGS+=("$arg"); fi
+done
+
 for repo in httptoolkit-server httptoolkit-ui httptoolkit-desktop; do
   [ -d "$ROOT/$repo/node_modules" ] || fail "$repo is not installed yet. Run ./setup.sh first."
 done
@@ -101,10 +109,16 @@ echo "Server is ready on :$SERVER_PORT"
 wait_until_ready "UI" "$LOG_DIR/ui.log" "$UI_TIMEOUT_SECONDS" "$UI_URL"
 echo "UI is ready on $UI_URL"
 
+if $NO_WINDOW; then
+  echo "Running without the app window. Press Ctrl+C to stop."
+  wait
+  exit 0
+fi
+
 echo "Opening the app..."
 cd "$ROOT/httptoolkit-desktop" || fail "httptoolkit-desktop folder is missing"
 ./node_modules/.bin/tsx ./build-setup/skip-server.ts || fail "could not create the desktop dev server stub"
 npm run --silent build:src || fail "desktop TypeScript build failed"
 # The Dock and app menu show the bundle's name and icon: make the dev Electron.app say Wirepane
 "$ROOT/scripts/brand-dev-electron.sh" || echo "Could not brand the dev Electron app, it will show as Electron"
-HTK_DEV=true APP_URL="$UI_URL" ./node_modules/.bin/electron . "$@"
+HTK_DEV=true APP_URL="$UI_URL" ./node_modules/.bin/electron . ${ELECTRON_ARGS[@]+"${ELECTRON_ARGS[@]}"}
