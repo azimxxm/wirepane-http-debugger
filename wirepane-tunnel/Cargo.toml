@@ -1,0 +1,40 @@
+[package]
+name = "wirepane-tunnel"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.95"
+license = "AGPL-3.0-or-later"
+description = "Wirepane VPN-mode sidecar: WireGuard server in userspace that feeds every TCP flow to the Mockttp SOCKS5 port"
+publish = false
+
+[lib]
+name = "wirepane_tunnel"
+path = "src/lib.rs"
+
+[[bin]]
+name = "wirepane-tunnel"
+path = "src/main.rs"
+
+[dependencies]
+# Pinned to the release that mitmproxy 12.2.3 resolves to (mitmproxy-rs>=0.12.6,<0.13 -> 0.12.11).
+mitmproxy = { git = "https://github.com/mitmproxy/mitmproxy_rs", tag = "v0.12.11" }
+boringtun = { version = "0.7.1", default-features = false }
+smoltcp = "0.13.1"
+tokio = { version = "1.47.1", features = ["macros", "net", "rt-multi-thread", "sync", "time", "io-util", "io-std"] }
+anyhow = "1.0.97"
+log = "0.4.27"
+data-encoding = "2.8.0"
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1", features = ["preserve_order"] }
+getrandom = "0.2"
+
+[dev-dependencies]
+tempfile = "3"
+
+[profile.release]
+codegen-units = 1
+lto = true
+opt-level = "s"
+strip = true
+# panic stays "unwind" on purpose: the front-end wraps packet handling in catch_unwind and each flow is its own
+# tokio task, so one bad packet or flow can not take the whole sidecar down.
