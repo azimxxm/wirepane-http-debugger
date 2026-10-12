@@ -94,7 +94,11 @@ O'zgartirgan kodingiz saqlanib qoladi. Conflict chiqsa, uni oddiy `git merge`dag
   2. Auto-update'ni o'chirish: `httptoolkit-server/src/index.ts` (`update-requested`) va `package.json` → `oclif.update`. Aks holda rasmiy server bizning server o'rniga yuklanib qoladi.
   3. UI build'ini (`httptoolkit-ui` → `npm run build`) app ichiga qo'shish va `APP_URL`ni unga yo'naltirish.
   4. `httptoolkit-desktop/package.json` faylida signing va notarize sozlamalarini o'zgartirish (`appId` va `productName` allaqachon Wirepane). `build-setup/setup-server.ts` server'ni GitHub release'dan yuklamasin, `../httptoolkit-server`dan yig'sin.
-  5. Apple Developer sertifikatisiz tarqatish: Apple Silicon (`arm64`) uchun ad-hoc imzolangan `.app` yoki `.pkg`. Brauzerdan yuklangan imzosiz `.app` yoki `.pkg`ni Gatekeeper to'xtatadi: foydalanuvchi System Settings → Privacy & Security → **Open Anyway** bosishi kerak bo'ladi. `curl` bilan yuklangan faylga esa quarantine belgisi qo'yilmaydi, shuning uchun `curl … | sh` install skripti ogohlantirishsiz o'rnatadi.
+  5. **Tarqatish: `.pkg` installer, Apple Developer akkauntisiz.** Akkaunt hali yo'q (egasi ariza beradi), shuning uchun:
+     - app ad-hoc imzolanadi va imzosiz `.pkg` ichida Apple Silicon (`arm64`) uchun tarqatiladi;
+     - notarize qilinmaydi va build sertifikatsiz Mac'da ishlashi kerak.
+
+     Brauzerdan yuklangan `.pkg`ni Gatekeeper birinchi marta to'xtatadi: o'ng tugma → Open yoki System Settings → Privacy & Security → **Open Anyway**. `curl … | sh` bilan o'rnatilsa ogohlantirish chiqmaydi. Akkaunt kelgach, Developer ID imzosi va notarize qo'shiladi.
 - [x] Barcha Pro feature'lar hamma uchun bepul. Akkaunt, login va to'lov yo'q. Map Local, Map Remote, mock, rewrite, delay, block, Settings (proxy, connection, API, themes), saqlanadigan rules, HAR import/export va MCP/CLI cheklovsiz ishlaydi.
 - [ ] Proxyman'dagi feature'lar:
   - [x] Telefon ulash ekrani: iPhone va Android uchun IP, port, sertifikat QR'i va jonli holat, port qayta yuklashda o'zgarmaydi.

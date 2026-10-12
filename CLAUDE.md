@@ -20,6 +20,15 @@ These keep the "HTTP Toolkit" name on purpose, don't rename them:
 
 The logo source is `brand/icon.svg`, and `brand/tray-template.svg` is its one-colour menu bar version. `./brand/build-icons.sh` regenerates every icon and logo file from it (`httptoolkit-desktop/src/icons/*`, `httptoolkit-ui/src/images/logo-icon.svg` and `loading-logo.png`), so change the source and rerun the script instead of editing those files.
 
+## Distribution: no Apple Developer account (yet)
+
+There is no Apple Developer account, so nothing may depend on one. The owner is applying for one; until it arrives:
+
+- Wirepane ships as an **unsigned `.pkg` installer** for Apple Silicon (`arm64`). It holds an ad-hoc signed `Wirepane.app` (`codesign --sign -`), which Apple Silicon needs to run it at all.
+- No Developer ID signing and no notarization. No `notarize: true`, `forceCodeSigning`, `CSC_*` identities, provisioning profiles or App Store steps in the default build. The build must work on a Mac with no certificates.
+- Gatekeeper blocks a downloaded unsigned `.pkg` on the first open. The user right-clicks → Open, or goes to System Settings → Privacy & Security → **Open Anyway**. The release notes and README say so. A `curl … | sh` install avoids the quarantine flag.
+- When the account arrives, signing and notarization are added on top: a Developer ID Application/Installer identity, hardened runtime, notarization. The unsigned path stays as a fallback.
+
 ## Repo layout
 
 Three upstream HTTP Toolkit projects, imported with `git subtree --squash` (no upstream history):

@@ -174,7 +174,12 @@ README'dagi "O'zimizning `.app`imizni yig'ish" bo'limi:
 4. `build-setup/setup-server.ts` server'ni GitHub release'dan emas, `../httptoolkit-server` dan yig'sin.
 5. `package.json`dagi `extraMetadata.author` va `maintainer` o'z ma'lumotlarimizga almashtirilsin.
 
-**Tarqatish:** Apple Developer sertifikatisiz, ad-hoc imzolangan arm64 `.app`. Brauzerdan yuklangan imzosiz `.app` yoki `.pkg`ni Gatekeeper to'xtatadi ("Open Anyway"). `curl … | sh` bilan o'rnatilsa ogohlantirish chiqmaydi.
+**Tarqatish (egasining qarori, 2026-10-12):** imzosiz **`.pkg`** installer, ichida ad-hoc imzolangan arm64 `Wirepane.app`. Apple Developer akkaunti yo'q, egasi ariza beradi. Shuning uchun:
+
+- barcha qoidalar akkauntsiz ishlaydi (CLAUDE.md, "Distribution" bo'limi);
+- notarize va Developer ID imzosi akkaunt kelgach qo'shiladi.
+
+Gatekeeper birinchi ochishda to'xtatadi: o'ng tugma → Open yoki "Open Anyway". `curl … | sh` bilan o'rnatilsa ogohlantirish chiqmaydi.
 
 ## 8. Collections davomi
 
