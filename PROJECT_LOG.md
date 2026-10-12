@@ -78,6 +78,16 @@
 
 **Next, in order:** check the menu bar icon → redo the iPhone test with Wirepane CA → design phase 3 (menu bar menus, ⌘K, ⌘,).
 
+### 2026-10-12
+
+- **Devices panel** in View (`15d7517`): one row per device by client IP, with its apps and domains; `device=`, `client-ip=`, `app=` filters.
+- **Unsigned `.pkg`** (`84177fc`), built from our own server and UI (`./scripts/build-pkg.sh`). New rule: build it only when the owner says "done, publish". The release-only follow-ups are on the publish checklist (`docs/remaining-work.md` §7).
+- **No-screen rule:** the dev app runs as `./start.sh --no-window`; UI checks run in headless Chrome or a hidden Electron (`WIREPANE_HIDDEN_WINDOW=1`).
+- **Redesign phase 3 done** (`7105308`): command palette, Go and Capture menus, list Type and optional columns, sectioned Settings, Phosphor icons, hidden-inset title bar. Also fixed the dark-mode Apple icon and the `code` key redaction (`8069552`).
+- Tests: UI 1398, server 96, desktop build OK.
+
+**Next for v1:** design re-critique (§4) → small leftovers → iPhone test with the owner (§5) → the owner says "publish" → publish checklist (§7).
+
 > The full list of remaining work, with details and acceptance criteria, is in `docs/remaining-work.md`.
 
 ### Next, in order

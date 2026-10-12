@@ -93,28 +93,32 @@ Reja va tafsilotlar: [`docs/send-v2-plan.md`](send-v2-plan.md).
 - Unload bo'lmasdan yopilgan sahifalarning proxy sessiyalari server qayta ishga tushguncha qoladi. Buni tuzatish uchun server tomonida idle sessiyalarni tozalash kerak.
 - Haqiqiy iPhone va Android'da hali tekshirilmagan (5-bo'lim).
 
-## 3. Dizayn 3-bosqich
+## 3. Dizayn 3-bosqich: tayyor (2026-10-12)
 
 - [x] **Dock nomi va ikonkasi** (2026-10-10). Dev rejimda Dock "Electron" deb ko'rsatardi. `start.sh` endi dev Electron.app'ni Wirepane nomi va ikonkasi bilan belgilaydi (`scripts/brand-dev-electron.sh`).
-- [x] **macOS menu bar ikonkasi** (2026-10-12): `httptoolkit-desktop/src/menu-bar-icon.ts`, menyusi Show Wirepane, New Window va Quit. Ishga tushgan app'da bitta status ikonkasi borligi tekshirildi. Menyuni egasi bosib ko'rishi kerak. Keyinroq menyuga proxy holati va Recording tugmasini qo'shish mumkin.
+- [x] **macOS menu bar ikonkasi** (2026-10-12): `httptoolkit-desktop/src/menu-bar-icon.ts`. Menyusi: Show Wirepane, New Window, Quit.
+- [x] **Buyruqlar** (`7105308`):
+  - bitta app-actions ro'yxati (`httptoolkit-ui/src/model/ui/app-actions.ts`), undan ⌘K paneli (`components/command-palette.tsx`);
+  - macOS menyulari: App → Settings… ⌘,; **Go** (⌘1–⌘4, ⌘K); **Capture** (Pause ⌘⇧R, Clear ⌘⇧⌫, Copy proxy address, Import HAR ⌘O, Export HAR); Help → Report an issue (`azimxxm/wirepane`).
+  - Menyu bosilganda buyruq UI'ga IPC orqali boradi (`wirepane:app-action`, `desktopApi.onAppAction`).
+  - Send tab'lari ⌘⇧] / ⌘⇧[ bilan almashadi. Context menyularda accelerator'lar ko'rinadi.
+- [x] **Ko'rinish** (`7105308`):
+  - request ro'yxatida **Type** ustuni, ixtiyoriy Time / Duration / Size ustunlari (header'da right-click), marker faqat breakpoint, xato va rule uchun;
+  - Settings bo'limlarga ajratildi: Status, Appearance, Proxy, Connection, API, AI;
+  - toolbar'larda Phosphor ikonkalari;
+  - macOS'da `hiddenInset` title bar va temaga mos oyna foni;
+  - `Wirepane_<sana>.har` nomlari va host pill.
+- [x] **Xatolar:** dark mode'dagi qora Apple ikonkasi; export'da `code` kalitining secret deb yashirilishi (`8069552`).
 
-Tafsilotlar `docs/design-plan.md` (Phase 3) va `docs/design/critique-2026-10-10.md` (P1-2, P1-6, P2-4, P2-5, P2-7, P2-8, P2-9, P2-10) da.
+**Qolgan kichik ishlar:**
 
-- **Menu bar** (`httptoolkit-desktop/src/menu.ts`):
-  - App menyusida "Settings… ⌘,".
-  - **Go** menyusi: Intercept ⌘1, View ⌘2, Modify ⌘3, Send ⌘4, Command Palette ⌘K.
-  - **Capture** menyusi: Pause ⌘⇧R, Clear, Copy proxy address, Import HAR ⌘O, Export HAR.
-  - Help menyusidagi "Share Your Feedback" `azimxxm/wirepane` ga borsin.
-- **⌘K command palette.** Mavjud modal asosida, sahifalar va asosiy buyruqlar bilan. Monaco ichida ⌘K'ni ushlamasin.
-- **Shortcut'lar:** right-click menyulariga accelerator'lar qo'shilsin. Send'dagi Cmd+Tab ⌘⇧] / ⌘⇧[ ga almashtirilsin.
-- **Ro'yxat:** toolbar'larda bitta ikonka to'plami (Phosphor). Request ro'yxatida rangli chiziq o'rniga "Type" ustuni va faqat kerak bo'lganda marker; ixtiyoriy Time, Duration va Size ustunlari.
-- **Settings:** bo'limli layout, tepada proxy holati, "Appearance".
-- **Oyna:** fon rangi temaga mos, `hiddenInset` title bar.
-- **Mayda ishlar:**
-  - HAR fayl nomi `Wirepane_*.har`;
-  - host pill'dagi bo'shliqlar olib tashlansin (`jsonplaceholder . typicode . com` ko'rinishida chiqyapti);
-  - View ochilganda ro'yxat atrofida keraksiz focus ring chiqmasin.
-- **Faqat dev rejimda:** macOS menu bar'da "Electron" yozuvi. Yig'ilgan `.app`da "Wirepane" bo'ladi.
+- Egasi ko'rinadigan oynada bir marta tekshirishi kerak: `hiddenInset` traffic light'lari rail logosiga tegmayaptimi; menu bar ikonkasining menyusi.
+- "Compact rows" zichlik sozlamasi.
+- Modify editor'laridagi to'liq teal kvadrat tugmalar (faqat ikonkalari almashgan).
+- View ochilganda ro'yxat atrofida keraksiz focus ring chiqmasligi tekshirilsin.
+- Native menyudagi "Pause/Resume Recording" yorlig'i holatga qarab o'zgarmaydi (buning uchun UI → desktop IPC kerak).
+- View toolbar'idagi Import/Export HAR hali o'z funksiyalarini `alert()` bilan ishlatadi: `model/events/har-files.ts`ga o'tkazilsin. `Wirepane_` nomini yasaydigan ikki joy (`har-files.ts`, `util/export-filenames.ts`) birlashtirilsin.
+- 1400px kenglikda Devices paneli ochiq bo'lsa, ko'p ustun host'ni qisqartiradi.
 
 ## 4. Dizaynni qayta tekshirish
 
@@ -249,6 +253,8 @@ Proxyman'dan (README):
 Yashirilgan interceptor'lar: `fresh-safari`, `ios-device`, `network-device`, `virtualbox-machine`, `system-proxy`, `existing-arc`. Ularning server tomoni yo'q. Kerak bo'lsa o'zimiz yozamiz, masalan `ios-device` aynan Connect a phone ekrani bo'ladi.
 
 ## 10. Kichik ishlar
+
+- **Test type'lari:** `tsc -p test/unit` 6 ta xato beradi (request-mapping, device-model, http-body, traffic-summary spec'larida). Karma type-check qilmaydi, shuning uchun testlar o'tadi. Shularni tuzatish kerak.
 
 - **Brend:** `wirepane.com`, `.dev`, `.app` domenlarini olish va trademark tekshiruvi (USPTO, WIPO).
 - **Git:** egasi so'rasa `feature/rebrand`ni push qilish yoki `main`ga merge qilish.
