@@ -334,6 +334,20 @@ Binary sizes were **not measured**. Measuring them is part of the spike.
 - USB packet capture without root via the `pcapd` service (pymobiledevice3 / go-ios), which may also attribute packets to processes.
 - Binary sizes and throughput of the sidecar (measure in the spike).
 
+## 14. Real-device test (2026-10-12)
+
+The owner's iPhone 13 Pro Max (iOS 26.6.1) with the official WireGuard app, against mitmproxy 12.2.3's WireGuard mode on the Mac (`uvx --from mitmproxy mitmdump --mode wireguard`, run from the terminal, using the Wirepane CA so no new certificate was needed). Same apps as the proxy-mode capture a few minutes earlier:
+
+| App | Wi-Fi proxy mode | WireGuard (VPN) mode |
+| --- | --- | --- |
+| Jett (Flutter, `uz.multibroker.jett.mobile`) | only its native SDKs (Firebase, Sentry, Facebook, Amplitude) and 2 WebView requests | `api.jett.uz` 44 requests decrypted (UA `iPhone iOS 26.6.1 random_uuid: …`), plus `chart.jett.uz` |
+| Road24 (Flutter, `uz.kashapp.road24`) | only Firebase, Google and Sentry | 29 API requests decrypted: `api.road24.uz` (users/me, cars, fines, parking, token refresh with UA `Dart/3.10 (dart:io)`), `gw.road24.uz`, `core.yordam24.uz` |
+| TelecomTV (`TelecomTV/…`, `lifestream:iphone`) | nothing | `uztel.server-api.lfstrm.tv` 94 requests and its images, decrypted |
+| OddiyTV | the video stream (AppleCoreMedia) and AppMetrica only | its API host `app.api.odtv.uz` refuses the certificate during the handshake: pinned, host visible only |
+| Apple push, `wps.apple.com` | — | refuse the certificate (pinned): VPN mode must pass these through untouched, or push notifications stop while it's on |
+
+So the core assumption holds on a real device: once the traffic arrives through the tunnel, Flutter apps on iOS trust the user-installed, fully trusted Wirepane CA, and only pinned hosts stay opaque. No UDP flows and no raw TCP flows were seen in this short run; DNS went through the tunnel's resolver (108 queries). The Local Network question (TN3179) is still open for the packaged app, because a terminal-launched process is exempt.
+
 ## Sources
 
 1. [mitmproxy: Proxy Modes](https://docs.mitmproxy.org/stable/concepts/modes/): WireGuard, local and transparent mode facts (port, keys, no admin, UDP support, IPv6 limits).

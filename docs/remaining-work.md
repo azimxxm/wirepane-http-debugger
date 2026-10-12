@@ -271,6 +271,13 @@ Gatekeeper birinchi ochishda to'xtatadi: o'ng tugma → Open yoki "Open Anyway".
 
 **Reja:** [`docs/research/phone-vpn-mode.md`](research/phone-vpn-mode.md).
 
+**Holat (2026-10-12):** egasi boshladi ("Flutter ilovalarini ko'ra olishimiz kerak, Proxyman ko'ra olmaydi"). Haqiqiy iPhone'dagi test o'tdi: mitmproxy WireGuard rejimida Jett, Road24 va TelecomTV'ning o'z API'lari ochiq ko'rindi (research, 14-bo'lim). Qadamlar:
+
+1. [ ] Rust sidecar `wirepane-tunnel/` (WireGuard → SOCKS5 + teglar → Mockttp, DNS, QUIC block, UDP relay) — boshlandi.
+2. [ ] Server: `wireguard-vpn` interceptor, kalitlar, QR config, lifecycle, event relay; Mockttp'da SOCKS custom-metadata.
+3. [ ] UI: iPhone/Android sahifasida "Capture all apps (VPN)", QR, holat; qurilmani teg bo'yicha aniqlash; pinned host'lar (Apple push, iCloud) uchun passthrough.
+4. [ ] Packaging: sidecar'ni app ichiga qo'shish, `NSLocalNetworkUsageDescription`, packaged app'da Local Network ruxsatini tekshirish.
+
 - Kichik Rust sidecar `wirepane-tunnel` mitmproxy_rs (MIT: boringtun + smoltcp) ustiga quriladi va root talab qilmaydi.
 - Telefon rasmiy **WireGuard** ilovasini ishlatadi, sozlama QR orqali beriladi.
 - TCP oqimlar Mockttp'ga SOCKS5 orqali asl manzil va qurilma tegi bilan uzatiladi.
