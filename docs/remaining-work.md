@@ -104,7 +104,7 @@ Reja va tafsilotlar: [`docs/send-v2-plan.md`](send-v2-plan.md).
 ## 3. Dizayn 3-bosqich
 
 - [x] **Dock nomi va ikonkasi** (2026-10-10). Dev rejimda Dock "Electron" deb ko'rsatardi. `start.sh` endi dev Electron.app'ni Wirepane nomi va ikonkasi bilan belgilaydi (`scripts/brand-dev-electron.sh`).
-- [ ] **macOS menu bar ikonkasi** qo'shildi (`httptoolkit-desktop/src/menu-bar-icon.ts`; menyusi: Show Wirepane, New Window, Quit), lekin hali ishlab turganda ko'rilmagan. Keyingi `./start.sh`da paydo bo'lishini va menyu ishlashini tekshirish kerak. Keyinroq menyuga proxy holati va Recording tugmasini qo'shish mumkin.
+- [x] **macOS menu bar ikonkasi** (2026-10-12): `httptoolkit-desktop/src/menu-bar-icon.ts`, menyusi Show Wirepane, New Window va Quit. Ishga tushgan app'da bitta status ikonkasi borligi tekshirildi. Menyuni egasi bosib ko'rishi kerak. Keyinroq menyuga proxy holati va Recording tugmasini qo'shish mumkin.
 
 Tafsilotlar `docs/design-plan.md` (Phase 3) va `docs/design/critique-2026-10-10.md` (P1-2, P1-6, P2-4, P2-5, P2-7, P2-8, P2-9, P2-10) da.
 
