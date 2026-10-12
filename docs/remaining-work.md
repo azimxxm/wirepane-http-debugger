@@ -1,4 +1,4 @@
-# Qolgan ishlar (2026-10-10 holati)
+# Qolgan ishlar (2026-10-12 holati)
 
 > **Bu fayl keyingi sessiyalar uchun asosiy ish ro'yxati.**
 >
@@ -19,8 +19,8 @@
 | 0   | ~~**Devices paneli (View):** qaysi request qaysi qurilmadan kelgani, Proxyman'dagi kabi~~ **tayyor** (2026-10-12) | Egasi 2–3 telefon ulasa View chalkash bo'ladi            | M         |
 | 1   | ~~**Send v2:** fayl, rasm va media yuborish, Form, GraphQL, WebSocket~~ **tayyor** (2026-10-10)                   | API testing'ning asosiy qismi, egasi so'radi             | L         |
 | 2   | ~~**Connect a phone** ekrani va barqaror port~~ **tayyor** (2026-10-10)                                           | iPhone va Android'ni ulash hozir chalkash, port siljiydi | M         |
-| 3   | **Dizayn 3-bosqich:** menu bar, ⌘K, ⌘,                                                                            | Desktop konventsiyalari                                  | M         |
-| 4   | Dizaynni qayta tekshirish (`design-critic`)                                                                       | Qabul mezonlari                                          | S         |
+| 3   | ~~**Dizayn 3-bosqich:** menu bar, ⌘K, ⌘,~~ **tayyor** (2026-10-12)                                                | Desktop konventsiyalari                                  | M         |
+| 4   | ~~Dizaynni qayta tekshirish (`design-critic`)~~ **bajarildi** (2026-10-12)                                        | Qabul mezonlari                                          | S         |
 | 5   | **iPhone testi** egasi bilan                                                                                      | Haqiqiy qurilmada tekshiruv                              | S         |
 | 6   | **Maxfiylik:** upstream'ga telemetriya yuborilmasligi (asosiy qismi tayyor)                                       | "Hech narsa sizib chiqmaydi" va'dasi                     | S, **P0** |
 | 7   | ~~O'z `.app`imizni yig'ish~~ **yig'ildi**: macOS, Windows, Linux (2026-10-12). CI va o'rnatishni egasi tekshiradi | Oxirgi natija                                            | L         |
@@ -152,7 +152,7 @@ Hisobot: [`docs/design/critique-2026-10-12.md`](design/critique-2026-10-12.md). 
   2. Safari'da `http://wirepane.cert/certificate` → Allow.
   3. VPN & Device Management → Wirepane CA → Install.
   4. Settings → General → About → Certificate Trust Settings → Wirepane CA yoqiladi.
-- **Proxy porti:** oxirgi marta 8040 edi. Telefondagi port app'dagi Intercept → iPhone or iPad ekranidagi port bilan bir xil bo'lishi kerak.
+- **Proxy porti:** 2026-10-12 dan beri 9473 (9473–9999 oralig'idan, oldin 8000/8040 edi). Telefondagi port app'dagi Intercept → iPhone or iPad ekranidagi port bilan bir xil bo'lishi kerak.
 - **Devices paneli tayyor bo'lgach:** 2 ta qurilma bilan tekshirish (iPhone va Mac).
 
 - Mac IP `192.168.0.156` (o'zgarishi mumkin). Port status bar'da ko'rinadi.
@@ -176,11 +176,11 @@ Hisobot: [`docs/design/critique-2026-10-12.md`](design/critique-2026-10-12.md). 
 
 Versiya — repo ildizidagi `VERSION` fayli: **1.0.0**. App va server'ning ichki versiyasi `1.27.2` bo'lib qoladi, chunki UI feature'larni shu versiyaga qarab yoqadi. Shuning uchun Finder, Windows'dagi ilovalar ro'yxati va `apt` hali `1.27.2` ko'rsatadi. `1.0.0` esa fayl nomlarida, release tag'ida, macOS'dagi About oynasida ("1.0.0 (based on HTTP Toolkit 1.27.2)") va Settings → Status'da ko'rinadi.
 
-| Tizim | Buyruq (o'sha tizimning o'zida) | Fayllar (`httptoolkit-desktop/dist/`) |
-| --- | --- | --- |
-| macOS, Apple Silicon | `./scripts/build-release.sh mac` (yoki `./scripts/build-pkg.sh`) | `Wirepane-1.0.0-mac-arm64.pkg`, `Wirepane-1.0.0-mac-arm64.zip` |
-| Windows x64 | `./scripts/build-release.sh win` (Git Bash'da) | `Wirepane-1.0.0-win-x64-setup.exe`, `Wirepane-1.0.0-win-x64.zip` |
-| Linux x64 | `./scripts/build-release.sh linux` (`rpmbuild` kerak) | `Wirepane-1.0.0-linux-x86_64.AppImage`, `Wirepane-1.0.0-linux-amd64.deb`, `Wirepane-1.0.0-linux-x86_64.rpm` |
+| Tizim                | Buyruq (o'sha tizimning o'zida)                                  | Fayllar (`httptoolkit-desktop/dist/`)                                                                       |
+| -------------------- | ---------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| macOS, Apple Silicon | `./scripts/build-release.sh mac` (yoki `./scripts/build-pkg.sh`) | `Wirepane-1.0.0-mac-arm64.pkg`, `Wirepane-1.0.0-mac-arm64.zip`                                              |
+| Windows x64          | `./scripts/build-release.sh win` (Git Bash'da)                   | `Wirepane-1.0.0-win-x64-setup.exe`, `Wirepane-1.0.0-win-x64.zip`                                            |
+| Linux x64            | `./scripts/build-release.sh linux` (`rpmbuild` kerak)            | `Wirepane-1.0.0-linux-x86_64.AppImage`, `Wirepane-1.0.0-linux-amd64.deb`, `Wirepane-1.0.0-linux-x86_64.rpm` |
 
 GitHub'da `.github/workflows/release.yml` uchala tizimda yig'adi va draft release `v1.0.0` yaratadi: 7 ta fayl, `SHA256SUMS.txt` va `.github/release-notes.md`dagi matn. Hammasi imzosiz, `GITHUB_TOKEN`dan boshqa secret kerak emas.
 
@@ -234,7 +234,7 @@ Tekshirilgan (2026-10-12, 1.0.0, shu Mac'da):
 4. ~~**Yashirin rejimdagi app SIGTERM bilan yopilmaydi**~~ — **xato emas** (2026-10-12). Tayyor app SIGTERM'da 2 s ichida yopiladi va server bilan birga hamma jarayonlari to'xtaydi. Oldingi kuzatish mening test xatoim edi: Bash tool zsh'da ishlaydi va `kill -TERM $PIDS` ro'yxatni bo'lmagan, shuning uchun signal yuborilmagan.
 5. [x] **Build va tekshiruv** (2026-10-12): `./scripts/build-pkg.sh`, `codesign --verify --deep --strict`, `pkgutil --check-signature`, yashirin ishga tushirish. Natijalar yuqorida.
 6. [ ] **Egasi bilan:** `.pkg`ni yuklab, Gatekeeper oqimini sinash (o'ng tugma → Open).
-7. [x] **Collections release'da ochilmasdi** (egasi o'rnatilgan `.pkg`da topdi, tuzatildi 2026-10-12). Birinchi ochishda "n.grammar is not a function", keyingilarida "Cannot access 'e_' before initialization" chiqardi. Sabab: rspack ohm-js'ning ESM build'ini olgan, unda faqat `default` export bor. Dev'da Node `main` (CommonJS)ni yuklaydi, shuning uchun u yerda ishlardi. Tuzatish: `httptoolkit-server/rspack.config.js` `../bruno` ichidagi hamma narsani Node kabi resolve qiladi (`mainFields: ['main', 'module']`). `build-server.sh` endi har bir release'da `.bru` collection o'qish va Postman import'ini tekshiradi: tuzatishsiz bu tekshiruv yiqiladi.
+7. [x] **Collections release'da ochilmasdi** (egasi o'rnatilgan `.pkg`da topdi, tuzatildi 2026-10-12). Birinchi ochishda "n.grammar is not a function", keyingilarida "Cannot access 'e\_' before initialization" chiqardi. Sabab: rspack ohm-js'ning ESM build'ini olgan, unda faqat `default` export bor. Dev'da Node `main` (CommonJS)ni yuklaydi, shuning uchun u yerda ishlardi. Tuzatish: `httptoolkit-server/rspack.config.js` `../bruno` ichidagi hamma narsani Node kabi resolve qiladi (`mainFields: ['main', 'module']`). `build-server.sh` endi har bir release'da `.bru` collection o'qish va Postman import'ini tekshiradi: tuzatishsiz bu tekshiruv yiqiladi.
 8. [ ] **Windows va Linux:** birinchi CI yig'ishi va qo'lda sinov (yuqoridagi "Qoldi").
 
 **Tarqatish (egasining qarori, 2026-10-12):** imzosiz **`.pkg`** installer, ichida ad-hoc imzolangan arm64 `Wirepane.app`. Windows va Linux installer'lari ham imzosiz (2026-10-12). Apple Developer akkaunti yo'q, egasi ariza beradi. Shuning uchun:
@@ -275,10 +275,11 @@ Gatekeeper birinchi ochishda to'xtatadi: o'ng tugma → Open yoki "Open Anyway".
 
 **Arzon interim yaxshilanishlar:**
 
-- `unknown-protocol` passthrough (raw tunnels) hozir hech qachon yoqilmaydi: `featureFlags` doim bo'sh (`proxy-store.ts`, `account-store.ts`). Yoqilsa, HTTP bo'lmagan TCP ulanishlar yopilish o'rniga tunnel bo'lib ko'rinadi.
+- [x] **Raw tunnels** (2026-10-12): `account-store.ts`dagi `FEATURE_FLAGS = ['raw-tunnels']`. HTTP yoki TLS bo'lmagan TCP ulanishlar yopilmaydi, manziliga o'tadi va View'da "Non-HTTP connection to …" qatori bo'lib, o'z qurilmasi ostida ko'rinadi. Frida orqali ushlangan ilovalar proxy'ga SOCKS5 orqali ulanadi (upstream ikkalasini bitta flag bilan yoqadi).
+  - **Qoldi, mockttp bug'i:** client yozishni tugatib FIN yuborsa (`printf … | nc`), mockttp tunnel'ni darhol yopadi va server javobi yo'qoladi (2 MB javobning 761 KB'i keldi). Sababi `passthroughSocket`da client socket'i `allowHalfOpen=false`. Tuzatish: raw TCP socket'larda `allowHalfOpen = true`, yaxshisi mockttp'ga upstream PR. Server tomonida `MockttpServer.prototype.passthroughSocket`ni o'rash ham sinab ko'rildi, lekin bu mockttp'ning ichki API'si va rspack bundle'ida alohida tekshirish kerak, shuning uchun qo'shilmadi.
 - Pinning qiladigan host'lar uchun bir bosishda TLS passthrough.
 - iPhone sahifasida qaysi trafik ko'rinishi va qaysi ko'rinmasligi haqida tushuntirish.
-- Sertifikatni **Safari'da** ochish kerakligi (Chrome'da ochilmaydi), QR esa default brauzerda ochiladi.
+- [x] **Safari** (2026-10-12): iPhone sahifasining 3-qadami sertifikatni Safari'da ochishni aytadi (Chrome bo'sh sahifa ko'rsatadi), QR ostida default brauzer haqida ogohlantirish bor, 3-qadamda AirDrop uchun "Save certificate (.crt)" tugmasi.
 
 ## 9. "Bitta dastur" uchun qolgan feature'lar
 
@@ -308,7 +309,9 @@ Yashirilgan interceptor'lar: `fresh-safari`, `ios-device`, `network-device`, `vi
 
 ## 10. Kichik ishlar
 
-- **Test type'lari:** `tsc -p test/unit` 6 ta xato beradi (request-mapping, device-model, http-body, traffic-summary spec'larida). Karma type-check qilmaydi, shuning uchun testlar o'tadi. Shularni tuzatish kerak.
+- [x] **Test type'lari** (2026-10-12): `(cd httptoolkit-ui && npx tsc -p test/unit --noEmit)` xatosiz. `test/unit/tsconfig.json`da `skipLibCheck` (dev server'ning ForkTsChecker'i kabi) va `.tsx` spec'lar ham tekshiriladi.
+- [x] **O'z dialoglarimiz** (2026-10-12): `alert()` va `confirm()` o'rniga `model/ui/dialogs.ts` (`messageDialog`, `confirmDialog`) va `components/common/dialog-host.tsx`. Yangi kodda ham shularni ishlatish kerak. Faqat `src/index.html`dagi startup `alert()` qoldi: u bundle umuman ochilmaganda ishlaydi, React yo'q paytda. Uning matnida hali httptoolkit.com va github.com/httptoolkit havolalari bor.
+- [x] **Dev UI porti** (2026-10-12): 8080 → 45458 (`automation/webpack.dev.ts`, `start.sh`), server'ning 45456/45457 portlari yonida.
 
 - **Brend:** `wirepane.com`, `.dev`, `.app` domenlarini olish va trademark tekshiruvi (USPTO, WIPO).
 - **Git:** egasi so'rasa `feature/rebrand`ni push qilish yoki `main`ga merge qilish.
