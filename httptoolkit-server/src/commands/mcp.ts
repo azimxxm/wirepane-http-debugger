@@ -186,7 +186,7 @@ function getDefaultHtkExeCandidates(): string[] {
     }
 
     // Linux (default for deb/rpm at least)
-    return ['/opt/Wirepane/httptoolkit'];
+    return ['/opt/Wirepane/wirepane']; // wirepane: our deb/rpm executable name
 }
 
 async function getLaunchableHtkExePath(): Promise<string | null> {

@@ -45,9 +45,14 @@ interface PendingRequest {
 
 export const REQUEST_TIMEOUT_MS = 30_000;
 
+// wirepane: our own names, so the official HTTP Toolkit app's CLI socket is never taken over (the
+// server removes an existing socket before it listens). bridge-client.ts looks for the same names.
+export const CTL_SOCKET_NAME = 'wirepane-ctl.sock';
+export const CTL_PIPE_PATH = '\\\\.\\pipe\\wirepane-ctl';
+
 export async function getSocketPath(): Promise<string> {
     if (process.platform === 'win32') {
-        return '\\\\.\\pipe\\httptoolkit-ctl';
+        return CTL_PIPE_PATH;
     }
 
     let socketDir: string;
@@ -63,7 +68,7 @@ export async function getSocketPath(): Promise<string> {
         }
     }
 
-    return path.join(socketDir, 'httptoolkit-ctl.sock');
+    return path.join(socketDir, CTL_SOCKET_NAME);
 }
 
 export class UiOperationBridge extends EventEmitter {

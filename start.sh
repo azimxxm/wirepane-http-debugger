@@ -87,6 +87,10 @@ for port in "$SERVER_PORT" "$MOCKTTP_PORT" "$UI_PORT"; do
   require_free_port "$port"
 done
 
+# Settings > Status shows Wirepane's version, which the UI build reads from here
+WIREPANE_VERSION="$(tr -d '[:space:]' < "$ROOT/VERSION")"
+export WIREPANE_VERSION
+
 mkdir -p "$LOG_DIR"
 trap cleanup EXIT
 trap 'exit 130' INT

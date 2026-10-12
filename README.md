@@ -2,9 +2,27 @@
 
 Developerlar va QA uchun bepul, ochiq kodli HTTP(S) debugger. U brauzer, iPhone, Android, Docker va boshqa ilovalarning trafigini ushlaydi va ko'rsatadi, mock va rewrite qiladi. Proxyman'ga muqobil.
 
-**Maqsad:** 5 ta yoki 10 ta tool o'rniga **bitta dastur**. Wirepane trafikni ushlash va debug qilish (Proxyman, Charles), API client, collections, testlar, mock va hujjat (Postman, Bruno) hamda file orqali ulashishni bitta joyda qiladi. U developerlar, QA va boshlovchilar uchun bepul bo'ladi va odamlarni pullik tool'larga qaramlikdan xalos qiladi. Bruno kodi bizning kodimiz sifatida olinadi va kerakli joylarda o'zgartiriladi; Bruno bilan 1:1 bo'lishi shart emas. Asosi — [HTTP Toolkit](https://httptoolkit.com) ochiq kodi. Hammasi bitta repoda: UI, server va desktop bitta app bo'lib ishga tushadi. Oxirgi natija — bitta o'rnatiladigan `Wirepane.app` (bundle ID: `com.wirepane.app`).
+**Maqsad:** 5 ta yoki 10 ta tool o'rniga **bitta dastur**. Wirepane trafikni ushlash va debug qilish (Proxyman, Charles), API client, collections, testlar, mock va hujjat (Postman, Bruno) hamda file orqali ulashishni bitta joyda qiladi. U developerlar, QA va boshlovchilar uchun bepul bo'ladi va odamlarni pullik tool'larga qaramlikdan xalos qiladi. Bruno kodi bizning kodimiz sifatida olinadi va kerakli joylarda o'zgartiriladi; Bruno bilan 1:1 bo'lishi shart emas. Asosi — [HTTP Toolkit](https://httptoolkit.com) ochiq kodi. Hammasi bitta repoda: UI, server va desktop bitta app bo'lib ishga tushadi. Oxirgi natija — macOS, Windows va Linux uchun bitta o'rnatiladigan dastur (macOS'da `Wirepane.app`, bundle ID: `com.wirepane.app`).
 
 > Wirepane [HTTP Toolkit](https://httptoolkit.com) asosida yasalgan, lekin rasmiy HTTP Toolkit emas va u bilan bog'liq emas.
+
+## O'rnatish
+
+Tayyor installer'lar [GitHub Releases](https://github.com/azimxxm/wirepane/releases) sahifasida. Eng oxirgi versiyani oching va o'z tizimingiz uchun faylni yuklab oling:
+
+| Tizim                                                  | Fayl                                                                                                    |
+| ------------------------------------------------------ | ------------------------------------------------------------------------------------------------------- |
+| macOS 12 yoki yangiroq, Apple Silicon (M1 va yangiroq) | `Wirepane-<versiya>-mac-arm64.pkg`                                                                      |
+| Windows 10 va 11, x64                                  | `Wirepane-<versiya>-win-x64-setup.exe` (yoki o'rnatmasdan ishlaydigan `Wirepane-<versiya>-win-x64.zip`) |
+| Linux, x64                                             | `.deb` (Ubuntu, Debian), `.rpm` (Fedora) yoki `.AppImage` (istalgan distributiv)                        |
+
+Installer'lar hali imzolanmagan: Apple Developer akkaunti ham, kod imzolash sertifikati ham yo'q. Shuning uchun birinchi ochishda tizim ogohlantiradi:
+
+- **macOS:** `.pkg`ni ikki marta bosing. macOS uni tekshira olmaganini aytsa: `.pkg` ustida o'ng tugma → **Open** → **Open**, yoki System Settings → Privacy & Security → **Open Anyway**. Keyin qadamlardan o'ting: app `/Applications`ga o'rnatiladi ("faqat men uchun" tanlansa, `~/Applications`ga). App ham shunday to'xtatilsa, unda ham o'ng tugma → **Open**.
+- **Windows:** setup `.exe`ni ishga tushiring. "Windows protected your PC" (SmartScreen) chiqsa: **More info** → **Run anyway**. `.zip`ni esa ochib, ichidagi `Wirepane.exe`ni ishga tushirish kifoya.
+- **Linux:** `sudo apt install ./Wirepane-<versiya>-linux-amd64.deb` yoki `sudo dnf install ./Wirepane-<versiya>-linux-x86_64.rpm`. AppImage uchun: `chmod +x Wirepane-<versiya>-linux-x86_64.AppImage`, keyin uni ishga tushiring. Ubuntu 24.04 va yangiroqda AppImage ochilmasa, uni `--no-sandbox` bilan ishga tushiring yoki `.deb`ni o'rnating.
+
+Har bir faylning SHA-256'i release'dagi `SHA256SUMS.txt`da. HTTPS trafikni ko'rish uchun qurilma **Wirepane CA** sertifikatiga ishonishi kerak: buni app'dagi **Intercept** sahifasi har bir qurilma uchun ko'rsatadi.
 
 ## Asosiy source'lar
 
@@ -36,19 +54,19 @@ Finder'dan ochish: `Start Wirepane.command` faylini ikki marta bosing. Log'lar `
 
 **Boshqa Mac'da davom ettirish:** `git pull` → `./setup.sh` → `./start.sh`. `setup.sh` faqat dependency'lar o'zgarganda kerak.
 
-### O'rnatiladigan `.pkg` yig'ish
+### Installer'larni yig'ish
+
+Har bir installer o'z tizimida yig'iladi:
 
 ```bash
-./scripts/build-pkg.sh   # Bruno, server, UI va desktop'ni yig'adi, oxirida .pkg qayerdaligini chiqaradi
+./scripts/build-release.sh mac     # Apple Silicon Mac'da: .pkg va .zip (./scripts/build-pkg.sh ham shuni qiladi)
+./scripts/build-release.sh win     # Windows x64'da, Git Bash ichida: setup .exe va .zip
+./scripts/build-release.sh linux   # Linux x64'da: .AppImage, .deb va .rpm (.rpm uchun rpmbuild kerak)
 ```
 
-Natija: `httptoolkit-desktop/dist/Wirepane-<versiya>-arm64.pkg` (Apple Silicon uchun, ~210 MB). Uning ichida ad-hoc imzolangan `Wirepane.app` bor. Server ham, UI ham shu repo'dagi koddan yig'iladi. Internetdan faqat Node.js bir marta yuklanadi va `build/cache`da saqlanadi. Apple Developer akkaunti va sertifikat kerak emas. Yig'ish bir necha daqiqa oladi.
+Skript Bruno, server, UI va desktop'ni yig'adi va oxirida fayllarni ko'rsatadi: `httptoolkit-desktop/dist/Wirepane-<versiya>-...`. Versiya — repo ildizidagi `VERSION` fayli (hozir `1.0.0`). Server ham, UI ham shu repo'dagi koddan yig'iladi. Internetdan faqat Node.js (har tizim uchun bir marta, `build/cache`da saqlanadi) va npm package'lari yuklanadi. Sertifikat yoki akkaunt kerak emas. Mac'da yig'ish bir necha daqiqa oladi.
 
-Foydalanuvchi uni shunday o'rnatadi:
-
-1. `.pkg`ni ikki marta bosadi va qadamlardan o'tadi. App `/Applications`ga o'rnatiladi ("faqat men uchun" tanlansa, `~/Applications`ga).
-2. Internetdan yuklangan `.pkg`ni macOS birinchi ochishda to'xtatadi, chunki u imzosiz. Unda `.pkg` ustida o'ng tugma → **Open** → **Open**. Yoki System Settings → Privacy & Security → **Open Anyway**.
-3. Wirepane'ni Applications'dan ochadi. Agar app ham shunday to'xtatilsa, unda ham o'ng tugma → **Open**.
+**GitHub Actions:** `.github/workflows/release.yml` uchala tizimda yig'adi va hamma fayllarni draft GitHub release'ga (`v<versiya>`) qo'yadi. Ishga tushirish: Actions → Release → **Run workflow** (versiya bo'sh qolsa, `VERSION`dan olinadi) yoki `v1.0.0` kabi tag push qilish. Draft tekshirilgach, qo'lda **Publish** qilinadi.
 
 ## Nimani qayerda o'zgartirish
 
@@ -109,6 +127,7 @@ O'zgartirgan kodingiz saqlanib qoladi. Conflict chiqsa, uni oddiy `git merge`dag
   3. UI app ichida va `wirepane://app` manzilidan ochiladi. Release server faqat shu origin'ga ruxsat beradi. Sozlamalar va Send tab'lari app qayta ochilganda ham saqlanadi.
   4. App ad-hoc imzolanadi, `.pkg` imzosiz, notarize yo'q. Build sertifikatsiz Mac'da ishlaydi.
   - [ ] Egasi tekshiradi: `.pkg`ni boshqa (toza) foydalanuvchida o'rnatish va Gatekeeper oqimi.
+  - [ ] Windows (setup `.exe`, `.zip`) va Linux (`.AppImage`, `.deb`, `.rpm`), hammasi imzosiz: `./scripts/build-release.sh <mac|win|linux>` va GitHub Actions'dagi `release.yml` tayyor (2026-10-12). Birinchi CI yig'ishi egasi "done" degandan keyin.
   - Akkaunt kelgach: Developer ID imzosi, hardened runtime va notarize. Ular `ENABLE_SIGNING=true` bilan yoqiladigan yo'lga qo'shiladi, imzosiz yo'l zaxira bo'lib qoladi.
 - [x] Barcha Pro feature'lar hamma uchun bepul. Akkaunt, login va to'lov yo'q. Map Local, Map Remote, mock, rewrite, delay, block, Settings (proxy, connection, API, themes), saqlanadigan rules, HAR import/export va MCP/CLI cheklovsiz ishlaydi.
 - [ ] Proxyman'dagi feature'lar:
@@ -141,4 +160,5 @@ O'zgartirgan kodingiz saqlanib qoladi. Conflict chiqsa, uni oddiy `git merge`dag
 - **Xavfsizlik:** dev rejimda server token'siz ishlaydi, proxy esa butun Wi-Fi tarmog'iga ochiq. Ishonchsiz tarmoqda ishlatmang.
 - Wirepane'ning o'z CA'si bor: **Wirepane CA** (`~/Library/Preferences/httptoolkit/wirepane-ca.pem`). Rasmiy HTTP Toolkit'ning `ca.pem` fayliga tegilmaydi. Oldin "HTTP Toolkit CA" o'rnatilgan telefonlarga yangi sertifikatni bir marta o'rnatish kerak.
 - Apple Silicon'da hammasi native `arm64`da ishlaydi, Rosetta shart emas.
+- Dev rejimdagi app (`./start.sh`) va o'rnatilgan app bitta sozlamalar papkasini ishlatadi (`~/Library/Application Support/Wirepane`). Shuning uchun ular bir vaqtda ochilmaydi: ikkinchisi darrov yopiladi.
 - Server Node `v24.19.0`ni talab qiladi. Boshqa 24.x versiyalarda ham ishlaydi, faqat `EBADENGINE` ogohlantirishi chiqadi.

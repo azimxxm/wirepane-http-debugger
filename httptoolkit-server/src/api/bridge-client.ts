@@ -5,7 +5,7 @@ import { promisify } from 'util';
 
 import { getDeferred } from '@httptoolkit/util';
 
-import { getSocketPath, REQUEST_TIMEOUT_MS } from './ui-operation-bridge';
+import { CTL_SOCKET_NAME, getSocketPath, REQUEST_TIMEOUT_MS } from './ui-operation-bridge'; // wirepane: CTL_SOCKET_NAME
 
 // Discovery requests are answered from memory, so a dead socket path has to fail
 // fast to leave time for the paths behind it:
@@ -56,12 +56,12 @@ export async function apiRequest(
         socketPaths.push(path.join(
             '/run/user',
             `${process.getuid()}`,
-            'httptoolkit-ctl.sock'
+            CTL_SOCKET_NAME
         ));
     } else if (process.platform === 'darwin') {
         const darwinTempDir = await getDarwinTempDir();
         const darwinSocketPath = darwinTempDir
-            ? path.join(darwinTempDir, 'httptoolkit-ctl.sock')
+            ? path.join(darwinTempDir, CTL_SOCKET_NAME)
             : undefined;
 
         if (darwinSocketPath && !socketPaths.includes(darwinSocketPath)) {

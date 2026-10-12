@@ -1,10 +1,12 @@
 // wirepane: serves the UI that ships inside the app (Resources/httptoolkit-ui, built by
-// scripts/build-pkg.sh) from wirepane://app, instead of loading the hosted app.httptoolkit.tech.
+// scripts/build-release.sh) from wirepane://app, instead of loading the hosted app.httptoolkit.tech.
 // The origin never changes, so localStorage and IndexedDB (settings, Send tabs, files) survive
 // restarts. A localhost server on a random port would give the UI a new origin every launch.
 
-import { promises as fs } from 'fs';
+import { promises as fs, createReadStream } from 'fs';
 import * as path from 'path';
+import { pipeline, Readable } from 'stream';
+import { createBrotliDecompress } from 'zlib';
 import { protocol } from 'electron';
 
 const SCHEME = 'wirepane';
@@ -47,6 +49,27 @@ export function registerBundledUiScheme() {
 const readFileOrUndefined = (filePath: string) =>
     fs.readFile(filePath).catch(() => undefined); // Missing file, or a folder
 
+const isFile = (filePath: string) =>
+    fs.stat(filePath).then((stats) => stats.isFile(), () => false);
+
+const contentTypeOf = (filePath: string) =>
+    MIME_TYPES[path.extname(filePath).toLowerCase()] ?? 'application/octet-stream';
+
+// The build stores the UI's ~2500 OpenAPI specs (api/**/*.json, ~375 MB) brotli-compressed as
+// <name>.json.br (scripts/assemble-ui.cjs), which makes the app ~350 MB smaller. They're served
+// decompressed under their own name and type, streamed, so a big spec never sits in memory twice.
+const COMPRESSED_SUFFIX = '.br';
+
+function decompressedResponse(compressedPath: string, contentType: string) {
+    const decompress = createBrotliDecompress();
+    // pipeline destroys both streams on a read or decompression error, which fails the response
+    // instead of leaving it hanging
+    pipeline(createReadStream(compressedPath), decompress, () => {});
+    return new Response(Readable.toWeb(decompress) as ReadableStream, {
+        headers: { 'content-type': contentType }
+    });
+}
+
 const notFound = () => new Response('Not found', { status: 404 });
 
 // Has to run once the app is ready, before any window loads the UI
@@ -65,6 +88,9 @@ export function serveBundledUi(uiRoot: string) {
         if (filePath !== uiRoot && !filePath.startsWith(uiRoot + path.sep)) return notFound();
 
         let content = await readFileOrUndefined(filePath);
+        if (!content && await isFile(filePath + COMPRESSED_SUFFIX)) {
+            return decompressedResponse(filePath + COMPRESSED_SUFFIX, contentTypeOf(filePath));
+        }
         if (!content && path.extname(filePath) === '') {
             // Client-side routes like /view or /send/<tab> have no file of their own: the app's
             // index.html handles them (it uses <base href="/">, so its assets still resolve)
@@ -74,9 +100,7 @@ export function serveBundledUi(uiRoot: string) {
         if (!content) return notFound();
 
         return new Response(new Uint8Array(content), { // A copy, as Response's types don't take a Buffer
-            headers: {
-                'content-type': MIME_TYPES[path.extname(filePath).toLowerCase()] ?? 'application/octet-stream'
-            }
+            headers: { 'content-type': contentTypeOf(filePath) }
         });
     });
 }

@@ -5,6 +5,6 @@ export HTK_DESKTOP_RESOURCES="$SCRIPT_DIR"
 if [ "$(uname)" = "Darwin" ]; then
     export HTK_DESKTOP_EXE="$APP_DIR/MacOS/Wirepane"
 else
-    export HTK_DESKTOP_EXE="$APP_DIR/httptoolkit"
+    export HTK_DESKTOP_EXE="$APP_DIR/wirepane" # wirepane: our Linux executable name
 fi
 exec "$SCRIPT_DIR/httptoolkit-server/bin/httptoolkit-server" ctl "$@"

@@ -29,6 +29,7 @@ import { shouldClearStaleUICache, clearUICache, recordUIRun } from './cache-clea
 import { getDeviceDetails } from './device.ts';
 import { createMenuBarIcon } from './menu-bar-icon.ts';
 import { BUNDLED_UI_URL, registerBundledUiScheme, serveBundledUi } from './bundled-ui.ts';
+import { PRODUCT_VERSION } from './product-version.ts'; // wirepane
 
 import packageJson from '../package.json' with { type: 'json' };
 
@@ -54,6 +55,13 @@ const BUNDLED_SERVER_VERSION = packageJson.config['httptoolkit-server-version'];
 if (!semver.parse(BUNDLED_SERVER_VERSION)) {
     throw new Error("Package.json must specify an exact server version");
 }
+
+// wirepane: the About panel shows our own version, and the HTTP Toolkit version it's built on
+app.setAboutPanelOptions({
+    applicationName: 'Wirepane',
+    applicationVersion: `${PRODUCT_VERSION} (based on HTTP Toolkit ${DESKTOP_VERSION})`,
+    version: '' // Otherwise macOS adds the internal build number (CFBundleVersion) in brackets
+});
 
 const APP_PATH = app.getAppPath();
 const RESOURCES_PATH = APP_PATH.endsWith('app.asar')
@@ -226,7 +234,7 @@ if (!amMainInstance) {
     console.log('Not the main instance - quitting');
     app.quit();
 } else {
-    writeLog(`--- Launching Wirepane desktop v${DESKTOP_VERSION} at ${new Date().toISOString()} ---`);
+    writeLog(`--- Launching Wirepane ${PRODUCT_VERSION} (desktop v${DESKTOP_VERSION}) at ${new Date().toISOString()} ---`);
 
     yargs
         .version(DESKTOP_VERSION)

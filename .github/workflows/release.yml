@@ -1,0 +1,170 @@
+# Builds Wirepane's installers for macOS, Windows and Linux, each on its own OS with
+# ./scripts/build-release.sh, and puts them in a draft GitHub release v<version> with their
+# checksums and the notes from .github/release-notes.md. Publishing the draft is done by hand.
+# Nothing is signed (CLAUDE.md, "Distribution"), so no secrets are needed besides GITHUB_TOKEN.
+#
+# Run it from the Actions tab (Run workflow), or push a tag like v1.0.0. The version is the
+# VERSION file's unless the run is given another; a tag has to match the VERSION file.
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Version to release, like 1.0.0 (empty = the VERSION file)
+        required: false
+        default: ""
+        type: string
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  version:
+    name: Pick the version
+    runs-on: ubuntu-22.04
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+
+      - name: Pick the version
+        id: version
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
+        run: |
+          file_version=$(tr -d '[:space:]' < VERSION)
+          if [ "$GITHUB_REF_TYPE" = tag ]; then
+            version=${GITHUB_REF_NAME#v}
+            if [ "$version" != "$file_version" ]; then
+              echo "::error::The tag $GITHUB_REF_NAME doesn't match the VERSION file ($file_version)"
+              exit 1
+            fi
+          else
+            version=${INPUT_VERSION:-$file_version}
+          fi
+          if ! [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
+            echo "::error::'$version' isn't a version like 1.0.0"
+            exit 1
+          fi
+          echo "Releasing Wirepane $version"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+  build:
+    name: Build (${{ matrix.platform }})
+    needs: version
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: mac # Apple Silicon: .pkg and .zip
+            os: macos-14
+          - platform: win # x64: NSIS installer .exe and .zip
+            os: windows-2022
+          - platform: linux # x64: .AppImage, .deb and .rpm
+            os: ubuntu-22.04
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 90
+    defaults:
+      run:
+        shell: bash
+    env:
+      WIREPANE_VERSION: ${{ needs.version.outputs.version }}
+      # Unsigned builds: electron-builder mustn't look for a certificate
+      CSC_IDENTITY_AUTO_DISCOVERY: "false"
+    steps:
+      # Windows' git would check the scripts out with CRLF line endings, which bash can't run
+      - name: Keep LF line endings
+        if: runner.os == 'Windows'
+        run: git config --global core.autocrlf false
+
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
+        with:
+          node-version: 24.19.0
+          cache: npm
+          cache-dependency-path: |
+            bruno/package-lock.json
+            httptoolkit-server/package-lock.json
+            httptoolkit-ui/package-lock.json
+            httptoolkit-desktop/package-lock.json
+
+      - name: Install rpmbuild (for the .rpm)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y rpm
+
+      - name: Install dependencies
+        run: ./setup.sh
+
+      - name: Build the installers
+        run: ./scripts/build-release.sh ${{ matrix.platform }}
+
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        with:
+          name: wirepane-${{ matrix.platform }}
+          path: |
+            httptoolkit-desktop/dist/Wirepane-${{ needs.version.outputs.version }}-*
+            !httptoolkit-desktop/dist/*.blockmap
+          if-no-files-found: error
+          compression-level: 0 # The installers are compressed already
+          retention-days: 14
+
+  release:
+    name: Draft the GitHub release
+    needs: [version, build]
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write
+    env:
+      VERSION: ${{ needs.version.outputs.version }}
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      GH_REPO: ${{ github.repository }}
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+
+      - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
+        with:
+          pattern: wirepane-*
+          path: release
+          merge-multiple: true
+
+      - name: Add checksums
+        working-directory: release
+        run: |
+          installers=(Wirepane-*)
+          if [ "${#installers[@]}" -ne 7 ]; then
+            echo "::error::Expected 7 installers, got ${#installers[@]}: ${installers[*]}"
+            exit 1
+          fi
+          sha256sum "${installers[@]}" > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+
+      - name: Create the draft release
+        run: |
+          tag="v$VERSION"
+          sed "s/{{VERSION}}/$VERSION/g" .github/release-notes.md > "$RUNNER_TEMP/release-notes.md"
+          if gh release view "$tag" > /dev/null 2>&1; then
+            if [ "$(gh release view "$tag" --json isDraft --jq .isDraft)" != true ]; then
+              echo "::error::The release $tag is published already. Raise VERSION for a new one."
+              exit 1
+            fi
+            echo "Replacing the files of the draft release $tag"
+            gh release upload "$tag" release/* --clobber
+          else
+            # A run from the Actions tab has no tag yet: publishing the draft creates it on this commit
+            target=()
+            [ "$GITHUB_REF_TYPE" = tag ] || target=(--target "$GITHUB_SHA")
+            gh release create "$tag" release/* --draft --title "Wirepane $VERSION" \
+              --notes-file "$RUNNER_TEMP/release-notes.md" "${target[@]}"
+          fi
+          echo "Draft release: $(gh release view "$tag" --json url --jq .url)"

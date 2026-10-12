@@ -34,8 +34,8 @@
       "buildResources": "build-resources"
     },
     "extraMetadata": {
-      "name": "httptoolkit",
-      "productName": "httptoolkit",
+      "name": "wirepane",
+      "productName": "Wirepane",
       "author": "Wirepane"
     },
     "files": [

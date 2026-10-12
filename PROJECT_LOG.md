@@ -2,6 +2,16 @@
 
 ## 2026-10-12
 
+### Release 1.0.0 prepared: macOS, Windows, Linux (not pushed, no CI run yet)
+
+- **Version:** root `VERSION` = `1.0.0` for file names, the tag, the macOS About panel and Settings > Status. The internal app/server version stays `1.27.2`.
+- **Builds:** `./scripts/build-release.sh <mac|win|linux>` (mac: `./scripts/build-pkg.sh`). The server release is per target (`build/server/<target>`), with its `node_modules` installed by Node 24.19.0's own npm (`scripts/stage-server-deps.cjs`), so `tls-impersonate` is in. UI specs are brotli-compressed (`scripts/assemble-ui.cjs`, 387 → 28 MB). App 911 → 525 MB, pkg 197 MiB.
+- **Workflow:** `.github/workflows/release.yml` (dispatch or `v*` tag): macos-14, windows-2022, ubuntu-22.04, then a draft release with 7 files + `SHA256SUMS.txt`. Linted with actionlint (wasm) and action-validator.
+- **Names:** Electron userData/logs/lock are `Wirepane` (shared with dev, accepted), socket `wirepane-ctl.sock`, Linux executable `wirepane`, menu "About/Hide/Quit Wirepane".
+- **Bug fixed:** collections didn't open in the packaged app ("n.grammar is not a function"): rspack bundled ohm-js's ESM build. `rspack.config.js` now resolves `../bruno` like Node; `build-server.sh` reads a collection and imports a Postman one in every release check.
+- **Checks:** codesign (adhoc) OK, pkg unsigned, hidden launch (UI, proxy, View, specs, userData, socket, ctl, Status card, SIGTERM) and a collections smoke all passed. Server 96, UI 1469 tests pass, desktop build OK.
+- **Next:** the owner tests the pkg and says "done" → push → Actions → Release → Run workflow → check the draft → Publish.
+
 ### Own installable app (no Apple Developer account)
 
 - **`./scripts/build-pkg.sh`** builds `httptoolkit-desktop/dist/Wirepane-1.27.2-arm64.pkg` (~210 MB, plus a `.zip`) from this repo: Bruno, our server release (`scripts/build-server.sh` + `scripts/assemble-server.cjs` → `build/server/`), the UI (`DISABLE_UPDATES=true`), the desktop (`npm run build` → `build-setup/wirepane-builder.config.cjs`).

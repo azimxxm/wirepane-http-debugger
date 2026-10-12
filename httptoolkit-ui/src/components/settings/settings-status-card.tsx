@@ -115,6 +115,10 @@ const CertificateStatus = observer((p: { proxyStore: ProxyStore }) => {
     </Value>;
 });
 
+// Wirepane's own version (the repo's VERSION file), set when the UI is built. The app and server
+// versions below are the HTTP Toolkit ones they're built on, which the UI checks for features.
+const WIREPANE_VERSION = process.env.WIREPANE_VERSION || undefined;
+
 const VersionStatus = observer(() => {
     const parts = [
         desktopVersion.state === 'fulfilled' && desktopVersion.value
@@ -125,7 +129,8 @@ const VersionStatus = observer(() => {
     ].filter((part): part is string => !!part);
 
     return <Value>
-        Wirepane { parts.join(' · ') }
+        <strong>Wirepane { WIREPANE_VERSION ?? 'dev build' }</strong>
+        <Detail>Based on HTTP Toolkit: { parts.join(' · ') }</Detail>
         { desktopVersion.state !== 'fulfilled' && <Detail>Running in a browser, not the desktop app</Detail> }
     </Value>;
 });

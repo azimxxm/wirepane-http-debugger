@@ -183,6 +183,7 @@ export default <Webpack.Configuration>{
             'SENTRY_DSN': null,
             'POSTHOG_KEY': null,
             'UI_VERSION': null,
+            'WIREPANE_VERSION': null, // wirepane: our version (the VERSION file), from scripts/build-release.sh and start.sh
             'ACCOUNTS_API': null,
         })
     ],

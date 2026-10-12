@@ -110,17 +110,17 @@ export const getMenu = (
         menuTemplate.mac = {
             label: app.getName(),
             submenu: [
-                { role: 'about' },
+                { role: 'about', label: 'About Wirepane' }, // wirepane: not the package name
                 { type: 'separator' },
                 buildSettingsItem(sendAppAction), // wirepane
                 { type: 'separator' },
                 { role: 'services' },
                 { type: 'separator' },
-                { role: 'hide' },
+                { role: 'hide', label: 'Hide Wirepane' }, // wirepane
                 { role: 'hideOthers' },
                 { role: 'unhide' },
                 { type: 'separator' },
-                { role: 'quit' }
+                { role: 'quit', label: 'Quit Wirepane' } // wirepane
             ]
         };
 

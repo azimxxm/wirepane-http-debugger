@@ -23,7 +23,7 @@
 | 4   | Dizaynni qayta tekshirish (`design-critic`)                                                                       | Qabul mezonlari                                          | S         |
 | 5   | **iPhone testi** egasi bilan                                                                                      | Haqiqiy qurilmada tekshiruv                              | S         |
 | 6   | **Maxfiylik:** upstream'ga telemetriya yuborilmasligi (asosiy qismi tayyor)                                       | "Hech narsa sizib chiqmaydi" va'dasi                     | S, **P0** |
-| 7   | ~~O'z `.app`imizni yig'ish~~ **yig'ildi** (2026-10-12), o'rnatishni egasi tekshiradi                               | Oxirgi natija                                            | L         |
+| 7   | ~~O'z `.app`imizni yig'ish~~ **yig'ildi**: macOS, Windows, Linux (2026-10-12). CI va o'rnatishni egasi tekshiradi | Oxirgi natija                                            | L         |
 | 8   | Collections davomi: testlar, runner, Keychain                                                                     | Postman bilan teng bo'lish                               | L         |
 | 9   | Postman va Proxyman'dan qolgan feature'lar                                                                        | "Bitta dastur" maqsadi                                   | XL        |
 
@@ -172,9 +172,19 @@ Hisobot: [`docs/design/critique-2026-10-12.md`](design/critique-2026-10-12.md). 
   - `amiusing.httptoolkit.tech`: sertifikat va tekshiruv sahifasi. Unga ham proxy'ning o'zi javob beradi, shuning uchun internetga so'rov ketmaydi. Endi asosiy manzil `wirepane.cert`.
   - `httptoolkit.com/pricing`: faqat MCP/CLI matnlarida qolgan, hech qachon ko'rinmaydi.
 
-## 7. O'z `.app`imiz: yig'ildi (2026-10-12)
+## 7. O'z installer'larimiz: macOS, Windows va Linux (2026-10-12)
 
-`./scripts/build-pkg.sh` → `httptoolkit-desktop/dist/Wirepane-<versiya>-arm64.pkg` (~210 MB), xuddi shu app `.zip`da ham bor. O'rnatilgan app ~860 MB joy oladi.
+Versiya — repo ildizidagi `VERSION` fayli: **1.0.0**. App va server'ning ichki versiyasi `1.27.2` bo'lib qoladi, chunki UI feature'larni shu versiyaga qarab yoqadi. Shuning uchun Finder, Windows'dagi ilovalar ro'yxati va `apt` hali `1.27.2` ko'rsatadi. `1.0.0` esa fayl nomlarida, release tag'ida, macOS'dagi About oynasida ("1.0.0 (based on HTTP Toolkit 1.27.2)") va Settings → Status'da ko'rinadi.
+
+| Tizim | Buyruq (o'sha tizimning o'zida) | Fayllar (`httptoolkit-desktop/dist/`) |
+| --- | --- | --- |
+| macOS, Apple Silicon | `./scripts/build-release.sh mac` (yoki `./scripts/build-pkg.sh`) | `Wirepane-1.0.0-mac-arm64.pkg`, `Wirepane-1.0.0-mac-arm64.zip` |
+| Windows x64 | `./scripts/build-release.sh win` (Git Bash'da) | `Wirepane-1.0.0-win-x64-setup.exe`, `Wirepane-1.0.0-win-x64.zip` |
+| Linux x64 | `./scripts/build-release.sh linux` (`rpmbuild` kerak) | `Wirepane-1.0.0-linux-x86_64.AppImage`, `Wirepane-1.0.0-linux-amd64.deb`, `Wirepane-1.0.0-linux-x86_64.rpm` |
+
+GitHub'da `.github/workflows/release.yml` uchala tizimda yig'adi va draft release `v1.0.0` yaratadi: 7 ta fayl, `SHA256SUMS.txt` va `.github/release-notes.md`dagi matn. Hammasi imzosiz, `GITHUB_TOKEN`dan boshqa secret kerak emas.
+
+macOS natijasi (2026-10-12): `.pkg` 197 MiB (oldin 210), `.zip` 199 MiB, o'rnatilgan app 525 MB (oldin 911 MB).
 
 README'dagi 5 band:
 
@@ -182,39 +192,52 @@ README'dagi 5 band:
 2. [x] Auto-update o'chirildi:
    - `update-requested` e'tiborsiz qoldiriladi;
    - `@oclif/plugin-update` va `oclif.update.s3` olib tashlandi. Plugin'ning init hook'i har 14 kunda fonda `update --autoupdate`ni ishga tushirardi. Bu Mac'da 2026-10-10 dagi urinish `~/Library/Caches/httptoolkit-server/autoupdate.log`da bor;
-   - oclif `dirname` endi `wirepane-server`. Release'da o'z launcher'imiz bor (`bin/httptoolkit-server`, uni `scripts/assemble-server.cjs` yozadi). U `~/.local/share/*/client`dagi server'ga hech qachon o'tmaydi. Desktop va server'dagi `cleanupOldServers` faqat `wirepane-server` papkasiga qaraydi, rasmiy app'nikiga tegmaydi.
+   - oclif `dirname` endi `wirepane-server`. Release'da o'z launcher'imiz bor (`bin/httptoolkit-server`, Windows'da `bin\httptoolkit-server.cmd`, ikkalasini `scripts/assemble-server.cjs` yozadi). U `~/.local/share/*/client`dagi server'ga hech qachon o'tmaydi. Desktop va server'dagi `cleanupOldServers` faqat `wirepane-server` papkasiga qaraydi, rasmiy app'nikiga tegmaydi.
 3. [x] UI build'i `Resources/httptoolkit-ui`da turadi va `wirepane://app`dan ochiladi (`httptoolkit-desktop/src/bundled-ui.ts`). Origin o'zgarmaydi, shuning uchun localStorage va IndexedDB saqlanib qoladi. UI `DISABLE_UPDATES=true` bilan yig'iladi: service worker yo'q.
 4. [x] Server `../httptoolkit-server`dan yig'iladi (`scripts/build-server.sh`). `npm run build` endi `server:setup`ni chaqirmaydi, u faqat upstream'ning `npm start` va `npm test` oqimlarida qoldi.
-5. [x] `extraMetadata.author` endi "Wirepane" (macOS'dagi copyright shundan olinadi). `linux.maintainer` hali `contact@httptoolkit.com`: Linux build kerak bo'lganda o'zimizning email qo'yiladi.
+5. [x] `extraMetadata.author` endi "Wirepane" (macOS'dagi copyright shundan olinadi). Linux `maintainer`: `Wirepane <azimxxm@users.noreply.github.com>` (2026-10-12).
 
-Tekshirilgan (2026-10-12): `codesign --verify --deep --strict` o'tdi (`Signature=adhoc`). App ko'rinmas rejimda (`WIREPANE_HIDDEN_WINDOW=1`) ochildi: UI `wirepane://app`dan yuklandi, proxy ishladi, proxy orqali yuborilgan so'rov View'da ko'rindi. App to'xtatilganda server ham o'zi to'xtadi. `.pkg` `~/Applications`ga parolsiz o'rnatildi (keyin o'chirildi).
+Tekshirilgan (2026-10-12, 1.0.0, shu Mac'da):
+
+- `codesign --verify --deep --strict` o'tdi (`Signature=adhoc`). `pkgutil --check-signature`: "no signature".
+- `.pkg` ichida: bizning server (launcher, Node 24.19.0, bundle, `tls-impersonate`, `node-datachannel`), UI va 2549 ta siqilgan spec (`.json.br`). Siqilmagan `.json` spec yo'q.
+- Yashirin ishga tushirish (vaqtinchalik `HOME`):
+  - UI `wirepane://app`dan ochildi, "Startup failed" yo'q, status bar'da proxy porti bor;
+  - proxy orqali yuborilgan so'rov View'da "IPFS: Version" bo'lib ko'rindi: UI siqilgan `ipfs` spec'ini o'z yo'li bilan ochdi. `/api/github.com/api.github.com.json` (5.7 MB) 40 ms'da ochildi;
+  - userData `~/Library/Application Support/Wirepane`, log'lar `~/Library/Logs/Wirepane`, socket `wirepane-ctl.sock`. `httptoolkit-ctl status` socket orqali `running: true` qaytardi;
+  - Settings → Status: "Wirepane 1.0.0", ostida "Based on HTTP Toolkit: app 1.27.2 · server 1.27.2 · UI …";
+  - SIGTERM'dan keyin 1 s ichida app'ning 5 ta jarayoni (server bilan) to'xtadi.
+- Collections (egasining 3 ta collection'i nusxasi bilan): ro'yxat, uchalasini ochish (ogohlantirishsiz), request saqlash, Postman, OpenAPI va HAR import, Postman va Bruno zip export, zip'ni qayta import, fayl yuklash va yuklab olish. Hammasi o'tdi.
+- Windows va Linux server release'lari Mac'da yig'ib tekshirildi (`./scripts/build-server.sh win32-x64` va `linux-x64`): hamma native binary'lar o'z OS va CPU'si uchun. electron-builder config'i uchala tizim uchun schema'dan o'tdi, fayl nomlari kutilgandek.
 
 **Qoldi:**
 
+- **Birinchi CI yig'ishi.** Egasi "done" deganda push qilinadi, keyin Actions → Release → **Run workflow**. Windows va Linux installer'lari hali hech qachon yig'ilmagan: Mac'da faqat ularning server'i va config'i tekshirildi. Risklar: Windows'da Git Bash'dagi skriptlar (`.cmd` launcher'ni bash'dan ishga tushirish, zip ochish), Linux AppImage Ubuntu 24.04'da `--no-sandbox` talab qilishi mumkin.
 - Egasi bilan: `.pkg`ni internetdan yuklab, toza foydalanuvchida o'rnatish va Gatekeeper oqimi (o'ng tugma → Open).
-- `tls-impersonate`, hajm, userData va SIGTERM: pastdagi publish ro'yxatida.
+- Windows va Linux'da birinchi qo'lda sinov: o'rnatish, SmartScreen, app ochilishi, View, Send va collections.
+- Windows'dagi ilovalar ro'yxatida va `.deb`/`.rpm`da versiya `1.27.2` (ichki versiya) ko'rinadi. Nom esa shunchaki "Wirepane".
 - `nss/darwin`dagi `certutil` (Firefox'ning sertifikat bazasi uchun) x86_64, ya'ni Rosetta kerak. Upstream release'da ham shunday.
-- Server bundle'ida build qilingan Mac'dagi yo'l qoladi (`file:///Users/<user>/...`, Sentry'ning ishlatilmaydigan ESM loader'ida). Upstream'da ham shunday.
+- Server bundle'ida build qilingan mashinadagi yo'l qoladi (`file:///Users/<user>/...`, Sentry'ning ishlatilmaydigan ESM loader'ida). Upstream'da ham shunday.
 - Akkaunt kelgach: `ENABLE_SIGNING=true` yo'li (Developer ID, hardened runtime, notarize) sozlanadi.
 
 ### Publish ro'yxati: faqat egasi "done, publish" deganda
 
 **Qoida (2026-10-12):** `.pkg`/`.app` faqat egasi "done, publish" deganda yig'iladi. Release'ga oid tuzatishlar shu ro'yxatga yoziladi va publish paytida bir yo'la qilinadi. Shu sanada boshlangan follow-up agent to'xtatildi, kodga tegilmagan. Quyidagilar o'shanda kod o'qib topilgan:
 
-1. **Electron userData rasmiy app bilan umumiy.** `extraMetadata.name`/`productName` = `httptoolkit` (`httptoolkit-desktop/package.json`). Shu sababli rasmiy HTTP Toolkit ochiq bo'lsa, Wirepane darrov yopiladi (single-instance lock). userData, log'lar (`LAST_RUN_LOG_PATH`), cache-cleanup va electron-store hammasi `app.getPath(...)`dan olinadi, bitta o'zgarish hammasini ko'chiradi.
-   - ctl socket alohida: server `httptoolkit-ctl.sock`ni qattiq yozgan (`httptoolkit-server/src/api/ui-operation-bridge.ts:50,66`, `bridge-client.ts:59,64`). Server listen'dan oldin mavjud socket'ni o'chiradi, ya'ni rasmiy app'nikini tortib oladi. Ikkala faylda bitta constant qilinsin, masalan `wirepane-ctl.sock`.
-   - APFS katta-kichik harfni farqlamaydi: dev allaqachon `~/Library/Application Support/Wirepane`ni ishlatadi, packaged `wirepane` o'sha papka bo'lib qoladi va dev bilan to'qnashadi. Boshqa nom tanlansin, masalan `Wirepane-app`.
-   - `app.name` o'zgarsa, menyuda "About/Hide/Quit <name>" chiqadi: `menu.ts`da shu role'larga aniq label berilsin.
-2. **Hajm.** App 874 MB, pkg 220 MB. UI'ning `dist/api` papkasi 375 MB (2549 ta `.json` spec). UI ularni `fetch('/api/${specId}.json')` bilan yuklaydi (`httptoolkit-ui/src/model/api/api-store.ts:19`). Build'da brotli bilan siqilsin, `bundled-ui.ts` oqim bilan ochsin (`createBrotliDecompress`), MIME'i `.json` qolsin. App ~330 MB kichrayadi, pkg deyarli o'zgarmaydi.
-3. **`tls-impersonate`.** Optional dependency, `engines: node >=24.19.0`. Mac'dagi Node 24.14, shuning uchun o'rnatilmaydi. Tizim Node'iga tegilmaydi: npm build'ning o'zi yuklaydigan Node 24.19.0 tarball'idan olinsin, `npm ci --omit=dev --ignore-scripts` staging'da ishga tushirilsin, `assemble-server.cjs` uni qo'shimcha manba sifatida olsin. Tekshiruv: upstream'ning `isSupported()` (`test/distributables-test/unix.sh:39`).
+1. [x] **Electron userData rasmiy app bilan umumiy edi** (bajarildi 2026-10-12). `extraMetadata` endi name `wirepane`, productName `Wirepane` (`httptoolkit-desktop/package.json`): userData, log'lar, electron-store va single-instance lock `Wirepane` papkalariga ko'chdi, rasmiy app bilan umumiy narsa qolmadi.
+   - Dev ham `~/Library/Application Support/Wirepane`ni ishlatadi (APFS katta-kichik harfni farqlamaydi). Egasining qarori: shunday qoladi, faqat o'rnatilgan app va `./start.sh` bir vaqtda ochilmaydi. CLAUDE.md'da yozildi.
+   - ctl socket: bitta constant, `wirepane-ctl.sock` / `\\.\pipe\wirepane-ctl` (`CTL_SOCKET_NAME`, `CTL_PIPE_PATH` — `ui-operation-bridge.ts`, `bridge-client.ts` ham shuni ishlatadi).
+   - Menu: "About Wirepane", "Hide Wirepane", "Quit Wirepane" (`menu.ts`).
+   - Linux'da executable `wirepane` (`/opt/Wirepane/wirepane`, `/usr/bin/wirepane`), package nomi `wirepane`. Upstream'ning rpm skripti rasmiy app'ning `/usr/bin/httptoolkit` link'ini o'chirardi, endi o'zimizniki: `build-setup/wirepane-rpm-after-remove.sh`.
+2. [x] **Hajm** (bajarildi 2026-10-12). `scripts/assemble-ui.cjs` spec'larni brotli bilan siqadi (387 MB → 28 MB), `bundled-ui.ts` ularni `createBrotliDecompress` bilan oqim qilib ochadi, MIME `.json`ligicha. App 911 → 525 MB, pkg 210 → 197 MiB. Spec'lar endi alohida imzolanmaydi (`mac.signIgnore`), app'ning o'z imzosi ularni baribir qamraydi.
+3. [x] **`tls-impersonate`** (bajarildi 2026-10-12). Release'ning `node_modules`i build yuklagan Node 24.19.0 va uning o'z npm'i bilan o'rnatiladi: `scripts/stage-server-deps.cjs` server lockfile'idan faqat kerakli qismini oladi, keyin `npm ci` (`build/server-deps/<target>`). Tizim Node'iga tegilmaydi. `build-server.sh` uni release'ning node'i bilan `isSupported()` orqali tekshiradi.
 4. ~~**Yashirin rejimdagi app SIGTERM bilan yopilmaydi**~~ — **xato emas** (2026-10-12). Tayyor app SIGTERM'da 2 s ichida yopiladi va server bilan birga hamma jarayonlari to'xtaydi. Oldingi kuzatish mening test xatoim edi: Bash tool zsh'da ishlaydi va `kill -TERM $PIDS` ro'yxatni bo'lmagan, shuning uchun signal yuborilmagan.
-5. **Build va tekshiruv:** `./scripts/build-pkg.sh`, keyin:
-   - `codesign --verify --deep --strict`;
-   - `pkgutil --check-signature`;
-   - yashirin ishga tushirish (UI, proxy, View, localStorage, SIGTERM).
-6. **Egasi bilan:** `.pkg`ni yuklab, Gatekeeper oqimini sinash (o'ng tugma → Open).
+5. [x] **Build va tekshiruv** (2026-10-12): `./scripts/build-pkg.sh`, `codesign --verify --deep --strict`, `pkgutil --check-signature`, yashirin ishga tushirish. Natijalar yuqorida.
+6. [ ] **Egasi bilan:** `.pkg`ni yuklab, Gatekeeper oqimini sinash (o'ng tugma → Open).
+7. [x] **Collections release'da ochilmasdi** (egasi o'rnatilgan `.pkg`da topdi, tuzatildi 2026-10-12). Birinchi ochishda "n.grammar is not a function", keyingilarida "Cannot access 'e_' before initialization" chiqardi. Sabab: rspack ohm-js'ning ESM build'ini olgan, unda faqat `default` export bor. Dev'da Node `main` (CommonJS)ni yuklaydi, shuning uchun u yerda ishlardi. Tuzatish: `httptoolkit-server/rspack.config.js` `../bruno` ichidagi hamma narsani Node kabi resolve qiladi (`mainFields: ['main', 'module']`). `build-server.sh` endi har bir release'da `.bru` collection o'qish va Postman import'ini tekshiradi: tuzatishsiz bu tekshiruv yiqiladi.
+8. [ ] **Windows va Linux:** birinchi CI yig'ishi va qo'lda sinov (yuqoridagi "Qoldi").
 
-**Tarqatish (egasining qarori, 2026-10-12):** imzosiz **`.pkg`** installer, ichida ad-hoc imzolangan arm64 `Wirepane.app`. Apple Developer akkaunti yo'q, egasi ariza beradi. Shuning uchun:
+**Tarqatish (egasining qarori, 2026-10-12):** imzosiz **`.pkg`** installer, ichida ad-hoc imzolangan arm64 `Wirepane.app`. Windows va Linux installer'lari ham imzosiz (2026-10-12). Apple Developer akkaunti yo'q, egasi ariza beradi. Shuning uchun:
 
 - barcha qoidalar akkauntsiz ishlaydi (CLAUDE.md, "Distribution" bo'limi);
 - notarize va Developer ID imzosi akkaunt kelgach qo'shiladi.
