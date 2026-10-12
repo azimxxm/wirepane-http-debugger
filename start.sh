@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Runs Wirepane from local source as one app:
 #   httptoolkit-server  -> API on :45457, Mockttp admin on :45456 (restarts on code changes)
-#   httptoolkit-ui      -> webpack dev server on :8080 (hot reload)
+#   httptoolkit-ui      -> webpack dev server on :45458 (hot reload)
 #   httptoolkit-desktop -> Electron window that loads the local UI
 # Quitting the app (Cmd+Q) or pressing Ctrl+C stops everything.
 # Extra arguments go to Electron, e.g. ./start.sh --remote-debugging-port=9222
@@ -13,7 +13,7 @@ ROOT="$(cd "$(dirname "$0")" && pwd)"
 LOG_DIR="$ROOT/logs"
 SERVER_PORT=45457  # desktop dev mode (HTK_DEV) always talks to these two ports
 MOCKTTP_PORT=45456
-UI_PORT=8080
+UI_PORT=45458 # set in httptoolkit-ui/automation/webpack.dev.ts, clear of the usual dev server ports
 UI_URL="http://localhost:$UI_PORT"
 SERVER_TIMEOUT_SECONDS=60
 UI_TIMEOUT_SECONDS=300 # the first UI build can take a few minutes

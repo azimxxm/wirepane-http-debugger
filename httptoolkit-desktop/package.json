@@ -16,7 +16,7 @@
     "build:electron": "electron-builder build --config ./build-setup/wirepane-builder.config.cjs",
     "build:dir-only": "npm run server:setup && electron-builder --dir",
     "start": "npm run server:setup && npm run start:app",
-    "start:dev": "tsx ./build-setup/skip-server.ts && cross-env HTK_DEV=true APP_URL='http://localhost:8080' npm run start:app",
+    "start:dev": "tsx ./build-setup/skip-server.ts && cross-env HTK_DEV=true APP_URL='http://localhost:45458' npm run start:app",
     "start:app": "tsc-watch --onSuccess \"electron .\"",
     "test": "npm run server:setup && npm run build:src && playwright test"
   },

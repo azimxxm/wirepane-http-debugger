@@ -172,7 +172,7 @@ Owns:
   const { chromium } = require('/Users/codingtech/Documents/GitHub/httptoolkit/httptoolkit-desktop/node_modules/playwright');
   const browser = await chromium.launch({ channel: 'chrome', headless: true });
   const page = await browser.newPage({ viewport: { width: 1400, height: 900 } });
-  await page.goto('http://localhost:8080/send'); // wait ~8 s for the app to load
+  await page.goto('http://localhost:45458/send'); // wait ~8 s for the app to load
   ```
 
   Focusing the empty URL field prefills `https://`, so type the rest of the URL after it, or paste a full URL; Playwright's `fill()` doesn't replace it.

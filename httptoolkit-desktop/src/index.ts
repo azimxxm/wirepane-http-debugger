@@ -36,7 +36,7 @@ import packageJson from '../package.json' with { type: 'json' };
 const isWindows = os.platform() === 'win32';
 
 // wirepane: by default the app loads the UI bundled inside it (bundled-ui.ts). Dev runs set
-// APP_URL=http://localhost:8080 (start.sh).
+// APP_URL=http://localhost:45458 (start.sh).
 const APP_URL = process.env.APP_URL || BUNDLED_UI_URL;
 // wirepane: protocol + host, because URL.origin is 'null' for custom schemes like wirepane://
 const originOf = (url: URL) => `${url.protocol}//${url.host}`;

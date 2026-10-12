@@ -19,7 +19,7 @@ import {
 } from '../../src/client/ws-client';
 import { streamToArray } from '../../src/util/stream';
 
-const ORIGIN = 'http://localhost:8080';
+const ORIGIN = 'http://localhost:45458';
 const AUTH_TOKEN = 'ws-client-test-token';
 
 // An echo server, which also remembers the handshake requests it saw

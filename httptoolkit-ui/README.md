@@ -25,9 +25,9 @@ To get started:
 * For pure UI development
     * Run `npm start` to start the UI along with a backing [httptoolkit server](https://github.com/httptoolkit/httptoolkit-server).
         * On an arm64 Mac, this may not work. You can run the server in development mode locally though (jump to the next section).
-    * Open [`localhost:8080`](http://localhost:8080) to view the UI.
+    * Open [`localhost:45458`](http://localhost:45458) to view the UI.
 * To develop the UI & server together
     * Start [a server](https://github.com/httptoolkit/httptoolkit-server) locally
     * Run `npm run start:web` to start the UI without running a separate HTTP Toolkit server
-    * Open [`localhost:8080`](http://localhost:8080) to view the UI
+    * Open [`localhost:45458`](http://localhost:45458) to view the UI
 * `npm test` - run the tests

@@ -10,7 +10,7 @@ import { HttpToolkitServerApi } from '../../src/api/api-server';
 import { HttpClient } from '../../src/client/http-client';
 import { readCollectionFixture, unzipToText } from './collections-fixtures';
 
-const ORIGIN = 'http://localhost:8080';
+const ORIGIN = 'http://localhost:45458';
 const AUTH_TOKEN = 'collections-test-token';
 
 describe("Collections REST API", function () {

@@ -13,6 +13,8 @@ export default merge(common, {
 
     devServer: {
         host: 'localhost',
+        // wirepane: next to the server's 45456/45457, clear of the 8080 that so many dev servers use
+        port: 45458,
         historyApiFallback: true,
         client: {
             overlay: {

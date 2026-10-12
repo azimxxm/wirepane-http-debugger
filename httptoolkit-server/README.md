@@ -35,7 +35,7 @@ To get started:
 * Either make requests to the servers by hand, use the production UI by opening `https://app.httptoolkit.tech` in a Chromium-based browser, or start and use a local UI by:
     * Setting up the web UI locally (see [httptoolkit/httptoolkit-ui#contributing](https://github.com/httptoolkit/httptoolkit-ui#contributing)).
     * Running `npm run start:web` there to start the UI without its own server.
-    * Opening `http://local.httptoolkit.tech:8080` in a Chromium-based browser
+    * Opening `http://local.httptoolkit.tech:45458` in a Chromium-based browser
 
 A few things to be aware of:
 
