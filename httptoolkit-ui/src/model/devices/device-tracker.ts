@@ -1,26 +1,22 @@
 import type { CollectedEvent, HttpExchangeView } from '../../types';
-import type { IconProps } from '../../icons';
 import { getHeaderValue } from '../http/headers';
 
+import { AppTallies } from './app-groups';
+import { AppIdentity, identifyApp } from './app-identity';
 import {
     DeviceType,
     THIS_MACHINE_KEY,
     detectDeviceType,
     getAndroidModel,
-    getAppName,
     getDeviceKey,
     getEventAddress,
     getEventHost,
     getEventTime,
+    getEventVpn,
     getTypeRank
 } from './device-model';
 
-export interface AppCount {
-    name: string;
-    count: number;
-    // The Source column's icon for the app's first request
-    icon: IconProps;
-}
+export type { AppCount } from './app-groups';
 
 // Everything seen from one device: this machine, or one client IP
 export interface DeviceStats {
@@ -33,16 +29,21 @@ export interface DeviceStats {
     androidModel: string | undefined;
     // The addresses its traffic came from: one IP, or this machine's loopback addresses
     addresses: Map<string, number>;
-    apps: Map<string, AppCount>;
+    apps: AppTallies;
     hosts: Map<string, number>;
+    // wirepane: how many of its events came through the VPN tunnel, and from which peers
+    vpnEvents: number;
+    vpnPeers: Map<string, number>;
 }
 
 // What one event added, so removing it takes away exactly that
 interface Contribution {
     stats: DeviceStats;
     address: string;
-    app: string | undefined;
+    app: AppIdentity | undefined;
+    appKey: string | undefined; // What the app was counted under (see getAppKeys)
     host: string | undefined;
+    vpn: { peer: string | undefined } | undefined;
 }
 
 function increment(counts: Map<string, number>, key: string) {
@@ -74,6 +75,11 @@ export class DeviceTracker {
         return this.contributions.get(event)?.stats.key;
     }
 
+    // The key an event's app was counted under, if it was counted
+    getAppKey(event: CollectedEvent): string | undefined {
+        return this.contributions.get(event)?.appKey;
+    }
+
     add(event: CollectedEvent) {
         if (this.contributions.has(event)) return;
 
@@ -92,8 +98,10 @@ export class DeviceTracker {
                 type: undefined,
                 androidModel: undefined,
                 addresses: new Map(),
-                apps: new Map(),
-                hosts: new Map()
+                apps: new AppTallies(),
+                hosts: new Map(),
+                vpnEvents: 0,
+                vpnPeers: new Map()
             };
             this.stats.set(key, stats);
         }
@@ -103,12 +111,11 @@ export class DeviceTracker {
         stats.lastSeen = Math.max(stats.lastSeen, time);
         increment(stats.addresses, address);
 
-        let app: string | undefined;
+        let app: AppIdentity | undefined;
+        let appKey: string | undefined;
         if (event.isHttp()) {
-            app = getAppName(event.request);
-            const appCount = stats.apps.get(app);
-            if (appCount) appCount.count += 1;
-            else stats.apps.set(app, { name: app, count: 1, icon: event.request.source.icon });
+            app = identifyApp(event.request);
+            appKey = stats.apps.add(app, event.request.source.icon);
 
             if (key !== THIS_MACHINE_KEY) this.updateType(stats, event);
         }
@@ -116,7 +123,14 @@ export class DeviceTracker {
         const host = getEventHost(event);
         if (host) increment(stats.hosts, host);
 
-        this.contributions.set(event, { stats, address, app, host });
+        const vpnInfo = getEventVpn(event);
+        const vpn = vpnInfo && { peer: vpnInfo.peer };
+        if (vpn) {
+            stats.vpnEvents += 1;
+            if (vpn.peer) increment(stats.vpnPeers, vpn.peer);
+        }
+
+        this.contributions.set(event, { stats, address, app, appKey, host, vpn });
     }
 
     remove(event: CollectedEvent) {
@@ -124,16 +138,16 @@ export class DeviceTracker {
         if (!contribution) return;
         this.contributions.delete(event);
 
-        const { stats, address, app, host } = contribution;
+        const { stats, address, app, host, vpn } = contribution;
         stats.eventCount -= 1;
         decrement(stats.addresses, address);
 
-        if (app) {
-            const appCount = stats.apps.get(app);
-            if (appCount && appCount.count > 1) appCount.count -= 1;
-            else stats.apps.delete(app);
-        }
+        if (app) stats.apps.remove(app);
         if (host) decrement(stats.hosts, host);
+        if (vpn) {
+            stats.vpnEvents -= 1;
+            if (vpn.peer) decrement(stats.vpnPeers, vpn.peer);
+        }
 
         if (stats.eventCount <= 0 && this.stats.get(stats.key) === stats) {
             this.stats.delete(stats.key);

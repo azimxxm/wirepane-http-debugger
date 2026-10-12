@@ -3,9 +3,11 @@ import { observable, runInAction } from 'mobx';
 import { expect } from '../../../test-setup';
 
 import { HttpExchange } from '../../../../src/types';
+import { parseSource } from '../../../../src/model/http/sources';
 import { NetworkInterfaces } from '../../../../src/services/server-api-types';
 import {
     ConnectedPhoneTracker,
+    describeConnectedApps,
     getAppleDeviceName,
     getLanAddresses,
     isIOSUserAgent,
@@ -29,10 +31,16 @@ const iface = (address: string, overrides: { family?: 'IPv4' | 'IPv6', internal?
     cidr: null
 }) as any;
 
-const request = (userAgent: string | undefined, remoteIpAddress: string | undefined, url = 'http://example.com/') => ({
+const request = (
+    userAgent: string | undefined,
+    remoteIpAddress: string | undefined,
+    url = 'http://example.com/',
+    tags: string[] = []
+) => ({
     headers: userAgent ? { 'user-agent': userAgent } : {},
     remoteIpAddress,
-    url
+    url,
+    tags
 });
 
 describe('Phone setup', () => {
@@ -170,12 +178,12 @@ describe('Phone setup', () => {
         const exchange = (
             userAgent: string,
             remoteIpAddress: string,
-            options: { url?: string, startTime?: number, summary?: string } = {}
+            options: { url?: string, startTime?: number, tags?: string[] } = {}
         ) => ({
             request: {
-                ...request(userAgent, remoteIpAddress, options.url),
+                ...request(userAgent, remoteIpAddress, options.url, options.tags),
                 timingEvents: { startTime: options.startTime ?? Date.now() },
-                source: { summary: options.summary ?? 'Mobile Safari 18 (iOS 18)' }
+                source: parseSource(userAgent)
             }
         }) as unknown as HttpExchange;
 
@@ -200,7 +208,9 @@ describe('Phone setup', () => {
             expect(tracker.phone).to.deep.equal({
                 deviceName: 'iPhone',
                 address: '192.168.0.23',
-                client: 'Mobile Safari 18 (iOS 18)',
+                apps: ['Safari'],
+                otherClients: [],
+                viaVpn: false,
                 sawHttps: false
             });
         });
@@ -220,12 +230,79 @@ describe('Phone setup', () => {
         it('remembers that HTTPS worked for that device', () => {
             tracker.start();
             runInAction(() => exchanges.push(
-                exchange(IOS_APP, '192.168.0.23', { url: 'https://api.example.com/', summary: 'Instagram/1.0' }),
+                exchange(IOS_APP, '192.168.0.23', { url: 'https://api.example.com/' }),
                 exchange(IPHONE_SAFARI, '192.168.0.23', { url: 'http://example.com/' })
             ));
 
             expect(tracker.phone?.sawHttps).to.equal(true);
-            expect(tracker.phone?.client).to.equal('Mobile Safari 18 (iOS 18)');
+            expect(tracker.phone?.apps).to.deep.equal(['Instagram', 'Safari']);
+        });
+
+        it("lists the phone's apps, not the SDK that sent the latest request", () => {
+            tracker.start();
+            runInAction(() => exchanges.push(
+                exchange(IPHONE_SAFARI, '192.168.0.23'),
+                exchange(IOS_APP, '192.168.0.23'),
+                exchange(IOS_APP, '192.168.0.23'),
+                // Neither of these looks like a phone's user agent to matchPhoneRequest, but they're its traffic
+                exchange('uz.kashapp.road24/3.6.0 GMS-SDK/9.4.0.0 iPhone/26.6.1 hw/iPhone14_3 (gzip)', '192.168.0.23'),
+                exchange('FBiOSSDK.18.1.0', '192.168.0.23'),
+                exchange('server-bag [iPhone OS,26.6.1,23G83,iPhone14,3]', '192.168.0.23'),
+                // The latest request, from an SDK
+                exchange('io.appmetrica.analytics/5.8.2.0 (Apple iPhone14,3; iOS 26.6.1)', '192.168.0.23'),
+                // Another machine, and this one
+                exchange('Spotify/1.0 CFNetwork/1498.700.2 Darwin/23.6.0', '192.168.0.99'),
+                exchange('curl/8.7.1', '127.0.0.1')
+            ));
+
+            // The latest phone request was the other device's, so the first phone's next request brings it back
+            expect(tracker.phone?.address).to.equal('192.168.0.99');
+            runInAction(() => exchanges.push(exchange(IPHONE_SAFARI, '192.168.0.23')));
+            expect(tracker.phone).to.deep.include({
+                address: '192.168.0.23',
+                apps: ['Instagram', 'Safari', 'uz.kashapp.road24'],
+                otherClients: ['AppMetrica SDK', 'Facebook SDK', 'iOS system']
+            });
+        });
+
+        it("keeps calling a phone an iPhone after an app request that doesn't say which it is", () => {
+            tracker.start();
+            runInAction(() => exchanges.push(exchange(IPHONE_SAFARI, '192.168.0.23')));
+            runInAction(() => exchanges.push(exchange(IOS_APP, '192.168.0.23')));
+
+            expect(tracker.phone?.deviceName).to.equal('iPhone');
+        });
+
+        it('calls a phone by the generic name until a request says what it is', () => {
+            tracker.start();
+            runInAction(() => exchanges.push(exchange(IOS_APP, '192.168.0.23')));
+            expect(tracker.phone?.deviceName).to.equal('iPhone or iPad');
+
+            runInAction(() => exchanges.push(exchange(IPAD_APP, '192.168.0.23')));
+            expect(tracker.phone?.deviceName).to.equal('iPad');
+        });
+
+        it('knows a phone whose traffic comes through the VPN tunnel', () => {
+            const vpnTags = ['wirepane-vpn', 'wirepane-vpn-peer:p1', 'wirepane-vpn-endpoint:192.168.0.199'];
+            tracker.start();
+            runInAction(() => exchanges.push(exchange(IPHONE_SAFARI, '127.0.0.1', { tags: vpnTags })));
+
+            expect(tracker.phone).to.deep.include({
+                deviceName: 'iPhone',
+                address: '192.168.0.199',
+                viaVpn: true,
+                apps: ['Safari']
+            });
+        });
+
+        it('describes the apps in plain words', () => {
+            expect(describeConnectedApps({ apps: [], otherClients: [] })).to.equal('No apps yet');
+            expect(describeConnectedApps({ apps: [], otherClients: ['iOS system'] })).to.equal('Only iOS system so far');
+            expect(describeConnectedApps({ apps: ['Safari'], otherClients: [] })).to.equal('Safari');
+            expect(describeConnectedApps({ apps: ['Safari', 'KursMate', 'road24'], otherClients: [] }))
+                .to.equal('Safari, KursMate, road24');
+            expect(describeConnectedApps({ apps: ['Jett', 'KursMate', 'road24', 'ATTO', 'Safari'], otherClients: ['iOS system'] }))
+                .to.equal('5 apps: Jett, KursMate, road24 and 2 more');
         });
 
         it('shows the latest device', () => {

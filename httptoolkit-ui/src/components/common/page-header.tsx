@@ -131,6 +131,8 @@ const ParentShortcut = (props: { shortcut: string, onSelect: () => void }) => {
  */
 export const PageHeader = observer((props: {
     title: string,
+    // wirepane: the title's tooltip, when the title is cut short (the open request's URL without its query)
+    titleHint?: string,
     purpose: string,
     parent?: PageHeaderParent,
     // The window widths below which action buttons show only their icons, and drop the
@@ -167,7 +169,7 @@ export const PageHeader = observer((props: {
                     </ParentLink>
                     <Separator aria-hidden={true}>›</Separator>
                 </> }
-                <PageTitle title={title}>{ title }</PageTitle>
+                <PageTitle title={props.titleHint ?? title}>{ title }</PageTitle>
             </TitleRow>
             <PagePurpose title={purpose}>{ purpose }</PagePurpose>
         </TitleBlock>, titleSlot) }

@@ -8,6 +8,9 @@ import {
     matchPhoneRequest
 } from '../interception/phone-setup';
 
+import { getRequestAppName } from './app-identity';
+import { VpnAttribution, getVpnAttribution } from './vpn-tags';
+
 /**
  * Which device sent each request. Devices are told apart by the client's IP address:
  * loopback traffic (and requests sent from the Send page) is this machine, and every
@@ -86,13 +89,29 @@ export function normalizeAddress(address: string | undefined): string | undefine
 export const isSentFromSendPage = (event: ViewableEvent) =>
     event.isHttp() && event.request.tags.includes(MANUALLY_SENT_TAG);
 
+// wirepane: HTTP exchanges, TLS failures and tunnels carry the proxy's tags, WebRTC events don't
+function getEventTags(event: ViewableEvent): readonly string[] | undefined {
+    return event.isHttp() ? event.request.tags : (event as { tags?: readonly string[] }).tags;
+}
+
+// Set when the event came through the VPN tunnel (see vpn-tags.ts)
+export const getEventVpn = (event: ViewableEvent): VpnAttribution | undefined =>
+    getVpnAttribution(getEventTags(event));
+
 /**
  * The address a captured event came from. Requests made from the Send page are sent
- * by this machine, so they get its key instead of an address.
+ * by this machine, so they get its key instead of an address. Through the VPN tunnel the
+ * connection comes from this machine's loopback address, so the phone's address is in the tags.
  */
 export function getEventAddress(event: ViewableEvent): string | undefined {
     if (event.isHttp()) {
         if (isSentFromSendPage(event)) return THIS_MACHINE_KEY;
+    }
+
+    const vpnEndpoint = getEventVpn(event)?.endpoint;
+    if (vpnEndpoint) return normalizeAddress(vpnEndpoint);
+
+    if (event.isHttp()) {
         return normalizeAddress(event.request.remoteIpAddress);
     }
     if (event.isTlsFailure() || event.isTunnel()) {
@@ -188,50 +207,13 @@ export function getAndroidModel(userAgent: string | undefined): string | undefin
 
 // --- Apps ---
 
-// "Instagram/1.0 CFNetwork/1498.700.2 Darwin/23.6.0": iOS & macOS apps using Apple's networking
-const CFNETWORK_APP = /^([^\s/]+)\/\S*\s+CFNetwork\//;
-
-// Friendlier names for some of the clients ua-parser-js recognises
-const APP_NAME_ALIASES: { [name: string]: string } = {
-    'Mobile Safari': 'Safari',
-    'Mobile Firefox': 'Firefox',
-    'Mobile Chrome': 'Chrome',
-    'Chrome WebView': 'Android WebView',
-    'WebKit': 'Web view', // An app's built-in browser, on iOS
-    'okhttp': 'OkHttp'
-};
-
-function decodeAppName(name: string): string {
-    try {
-        return decodeURIComponent(name); // CFNetwork sends "My%20App"
-    } catch (e) {
-        return name;
-    }
-}
-
 /**
- * The app that sent a request, from the same client detection as the Source column:
- * a browser ("Safari"), an app ("Instagram") or a tool ("curl").
+ * The app that sent a request: a browser ("Safari"), an app ("Instagram", or its bundle ID),
+ * a tool ("curl"), or what an SDK or the OS is ("Facebook SDK", "iOS system"). This is from
+ * the request alone: the devices store also groups the SDKs' requests under their apps.
  */
-export function getAppName(request: Pick<HtkRequest, 'source'>): string {
-    const { source } = request;
-    // No user agent: 'Unknown client', or 'Wirepane (Send)' for the Send page
-    if (!source.ua) return source.summary;
-
-    const cfnetworkApp = CFNETWORK_APP.exec(source.ua);
-    if (cfnetworkApp) return decodeAppName(cfnetworkApp[1]);
-
-    // Without a recognised browser, the summary is the user agent's first part (see
-    // sources.ts), e.g. "curl/8.7.1". With one, it's like "Mobile Safari 18 (iOS 18)".
-    const firstPart = source.ua.split(' ')[0];
-    const name = source.summary.startsWith(firstPart)
-        ? firstPart.split('/')[0]
-        : source.summary
-            .replace(/\s*\(.*\)$/, '') // The OS
-            .replace(/\s+[\d.]+$/, ''); // The version
-
-    const appName = decodeAppName(name) || source.summary;
-    return APP_NAME_ALIASES[appName] ?? appName;
+export function getAppName(request: Pick<HtkRequest, 'source'> & Partial<Pick<HtkRequest, 'headers'>>): string {
+    return getRequestAppName(request);
 }
 
 export function getEventAppName(event: ViewableEvent): string | undefined {

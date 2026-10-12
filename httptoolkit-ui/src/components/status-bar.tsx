@@ -10,15 +10,14 @@ import { formatShortcut, toAriaShortcut } from '../util/shortcuts';
 import { EventsStore } from '../model/events/events-store';
 import { ProxyStore } from '../model/proxy-store';
 import { RulesStore } from '../model/rules/rules-store';
-import { TrafficSource } from '../model/http/sources';
-import { countActiveUserRules, getConnectedClients } from '../model/traffic-summary';
+import { countActiveUserRules } from '../model/traffic-summary';
 import { DevicesStore } from '../model/devices/devices-store';
+import { describeDevices } from '../model/devices/devices-overview';
 // ⌘⇧R itself is bound with the other app actions, by AppActionsHost:
 import { TOGGLE_RECORDING_SHORTCUT } from '../model/ui/app-actions';
 import { copyProxyAddress, getProxyAddress, proxyAddressCopy } from '../model/ui/proxy-address';
 
 import { UnstyledButton } from './common/inputs';
-import { ClientIcon } from './common/client-icon';
 import { DeviceIcon } from './devices/device-icon';
 
 export const STATUS_BAR_HEIGHT = 28;
@@ -93,11 +92,6 @@ const statusItemStyles = css`
 
 const StatusButton = styled(UnstyledButton)`${statusItemStyles}`;
 const StatusLink = styled(Link)`${statusItemStyles}`;
-// Short, so it keeps its place and the clients item gives way instead
-const DevicesLink = styled(StatusLink)`
-    flex-shrink: 0;
-`;
-
 const Spacer = styled.div`
     flex: 1 1 auto;
 `;
@@ -134,11 +128,15 @@ const LiveRegion = styled.span`
     clip-path: inset(50%);
 `;
 
-const ClientsItem = (props: { clients: TrafficSource[] }) => {
-    const { clients } = props;
-    const connectShortcut = formatShortcut('Cmd+1');
+// wirepane: the devices that sent traffic and their apps, in plain words ("iPhone · 9 apps",
+// "2 devices"). The raw user agents (SDKs, system services) are grouped under their apps by
+// the devices store, so they never show here.
+const DevicesItem = observer((props: { devicesStore: DevicesStore }) => {
+    const { devices, showPanel } = props.devicesStore;
+    const overview = describeDevices(devices);
 
-    if (clients.length === 0) {
+    if (!overview) {
+        const connectShortcut = formatShortcut('Cmd+1');
         return <StatusLink
             to='/intercept'
             title={`Connect a browser, terminal, phone or container (${connectShortcut})`}
@@ -149,34 +147,10 @@ const ClientsItem = (props: { clients: TrafficSource[] }) => {
         </StatusLink>;
     }
 
-    const [firstClient, ...otherClients] = clients;
-
-    return <StatusLink
-        to='/intercept'
-        title={`Connected clients:\n${clients.map((c) => c.summary).join('\n')}`}
-    >
-        <ClientIcon source={firstClient} />
-        <span>
-            { clients.length } client{ clients.length === 1 ? '' : 's' } · { firstClient.summary }
-            { otherClients.length > 0 && ` +${otherClients.length}` }
-        </span>
+    return <StatusLink to='/view' onClick={showPanel} title={overview.title}>
+        <DeviceIcon type={devices.length === 1 ? devices[0].type : 'all'} size={14} />
+        <span>{ overview.label }</span>
     </StatusLink>;
-};
-
-// Only with traffic from more than one device: how many, and a way to the Devices panel
-const DevicesItem = observer((props: { devicesStore: DevicesStore }) => {
-    const { devices, showPanel } = props.devicesStore;
-    if (devices.length < 2) return null;
-
-    const deviceList = devices.map((device) =>
-        `${device.name}${device.address ? ` (${device.address})` : ''}: ` +
-        `${device.eventCount.toLocaleString()} request${device.eventCount === 1 ? '' : 's'}`
-    ).join('\n');
-
-    return <DevicesLink to='/view' onClick={showPanel} title={`Devices with traffic:\n${deviceList}`}>
-        <DeviceIcon type='all' size={14} />
-        <span>{ devices.length } devices</span>
-    </DevicesLink>;
 });
 
 /**
@@ -198,7 +172,6 @@ export const StatusBar = inject('eventsStore', 'proxyStore', 'rulesStore', 'devi
 
     const { isPaused, togglePause, events } = eventsStore;
     const proxyAddress = `localhost:${proxyStore.httpProxyPort}`;
-    const clients = getConnectedClients(eventsStore.activeSources);
     const activeRuleCount = countActiveUserRules(rulesStore.rules);
     const recordingShortcut = formatShortcut(TOGGLE_RECORDING_SHORTCUT);
 
@@ -242,7 +215,6 @@ export const StatusBar = inject('eventsStore', 'proxyStore', 'rulesStore', 'devi
         </StatusButton>
         <LiveRegion aria-live='polite'>{ copied ? 'Proxy address copied' : '' }</LiveRegion>
 
-        <ClientsItem clients={clients} />
         <DevicesItem devicesStore={props.devicesStore!} />
 
         <Spacer />

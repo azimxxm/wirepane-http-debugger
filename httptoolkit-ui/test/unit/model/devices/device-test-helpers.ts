@@ -9,6 +9,15 @@ export const UA = {
     ipadApp: 'Mozilla/5.0 (iPad; CPU OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148',
     iosApp: 'Bookshelf/2.4 CFNetwork/1498.700.2 Darwin/24.0.0',
     iosAppWithModel: 'Bookshelf/2.4 (iPhone15,2; iOS 17.5)',
+    // What an iPhone's SDKs and system services send (as seen on a real phone)
+    facebookSdk: 'FBiOSSDK.18.1.0',
+    appMetrica: 'io.appmetrica.analytics/5.8.2.0 (Apple iPhone14,3; iOS 26.6.1)',
+    videoPlayer: 'AppleCoreMedia/1.0.0.23G83 (iPhone; U; CPU OS 26_6_1 like Mac OS X; en_us)',
+    serverBag: 'server-bag [iPhone OS,26.6.1,23G83,iPhone14,3]',
+    webView: 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148',
+    road24Sdk: 'uz.kashapp.road24/3.6.0 GMS-SDK/9.4.0.0 iPhone/26.6.1 hw/iPhone14_3 (gzip)',
+    road24App: 'road24/3601380 CFNetwork/3860.700.1 Darwin/25.6.0',
+    jettApp: 'Jett%20Invest%20App/175 CFNetwork/3860.700.1 Darwin/25.6.0',
     macSafari: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Safari/605.1.15',
     windowsChrome: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Safari/537.36',
     linuxFirefox: 'Mozilla/5.0 (X11; Linux x86_64; rv:131.0) Gecko/20100101 Firefox/131.0',
@@ -31,13 +40,19 @@ export function deviceExchange(options: {
     host?: string,
     path?: string,
     sentFromSendPage?: boolean,
-    startTime?: number
+    startTime?: number,
+    // Other request headers: an app's bundle ID, Sentry's baggage...
+    headers?: { [name: string]: string },
+    tags?: string[]
 } = {}): HttpExchange {
     const exchange = getExchangeData({
         hostname: options.host ?? 'example.com',
         path: options.path ?? '/',
-        requestHeaders: options.ua ? { 'user-agent': options.ua } : {},
-        requestTags: options.sentFromSendPage ? [SEND_PAGE_TAG] : []
+        requestHeaders: {
+            ...(options.ua ? { 'user-agent': options.ua } : {}),
+            ...options.headers
+        },
+        requestTags: [...(options.sentFromSendPage ? [SEND_PAGE_TAG] : []), ...(options.tags ?? [])]
     });
 
     Object.assign(exchange.request, {
@@ -52,8 +67,8 @@ export function deviceExchange(options: {
     return Object.assign(exchange, { downstream: exchange });
 }
 
-export const failedTls = (ip: string, host = 'example.com') =>
-    getFailedTls({ remoteIpAddress: ip, upstreamHostname: host });
+export const failedTls = (ip: string, host = 'example.com', tags: string[] = []) =>
+    Object.assign(getFailedTls({ remoteIpAddress: ip, upstreamHostname: host }), { tags });
 
 let nextTunnelId = 0;
 

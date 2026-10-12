@@ -145,6 +145,26 @@ const RowLabel = styled.span<{ isMuted?: boolean }>`
     `}
 `;
 
+// wirepane: next to a device's name, so the narrow panel doesn't cut it off with the address
+const RowNameLine = styled.span`
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+`;
+
+const VpnBadge = styled.span`
+    flex-shrink: 0;
+    padding: 0 4px;
+    border-radius: 3px;
+    border: 1px solid ${p => p.theme.containerBorder};
+
+    font-size: ${p => p.theme.tinyTextSize};
+    font-weight: 600;
+    line-height: 14px;
+    color: ${p => p.theme.mainLowlightColor};
+`;
+
 const RowAddress = styled.span`
     overflow: hidden;
     text-overflow: ellipsis;
@@ -284,6 +304,9 @@ const AppIcon = (props: { app: AppCount }) => {
     />;
 };
 
+const describeVpn = (device: DeviceSummary) =>
+    `Connected through the VPN${device.vpnPeers.length ? ` (${device.vpnPeers.join(', ')})` : ''}`;
+
 function describeRow(row: SelectableRow, isActive: boolean): string {
     switch (row.kind) {
         case 'all':
@@ -293,6 +316,7 @@ function describeRow(row: SelectableRow, isActive: boolean): string {
             return [
                 device.name,
                 device.address,
+                device.viaVpn ? 'through the VPN' : undefined,
                 requestCount(device.eventCount),
                 isActive ? 'active in the last minute' : undefined
             ].filter(Boolean).join(', ');
@@ -518,11 +542,14 @@ export const DeviceTree = observer((props: {
                                 label={`New name for ${row.device.name}`}
                                 onFinish={(newName, byKeyboard) => finishRename(row.device.key, newName, byKeyboard)}
                             />
-                            : <RowLabel isMuted={row.device.eventCount === 0}>{ row.device.name }</RowLabel>
+                            : <RowNameLine>
+                                <RowLabel isMuted={row.device.eventCount === 0}>{ row.device.name }</RowLabel>
+                                { row.device.viaVpn && <VpnBadge title={describeVpn(row.device)}>VPN</VpnBadge> }
+                            </RowNameLine>
                         }
                         <RowAddress className='row-secondary'>{ row.device.address ?? 'localhost' }</RowAddress>
                     </> }
-                    { row.kind === 'app' && <RowLabel title={row.app.name}>{ row.app.name }</RowLabel> }
+                    { row.kind === 'app' && <RowLabel title={row.app.detail ? `${row.app.name}\n${row.app.detail}` : row.app.name}>{ row.app.name }</RowLabel> }
                     { row.kind === 'host' && <RowLabel title={row.host.host}>{ row.host.host }</RowLabel> }
                 </RowText>
 

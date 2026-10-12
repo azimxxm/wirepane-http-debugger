@@ -5,6 +5,7 @@ import {
     THIS_MACHINE_KEY,
     detectDeviceType,
     getClientEvent,
+    getEventAppName,
     getEventDeviceKey
 } from './device-model';
 
@@ -22,6 +23,9 @@ export interface EventDevice {
  */
 export interface DeviceDirectory {
     getEventDevice(event: ViewableEvent): EventDevice | undefined;
+    // The app the Devices panel lists an event under, for app=. The store knows which app
+    // an SDK's request came from when another request said so.
+    getEventAppName(event: ViewableEvent): string | undefined;
 }
 
 // The type of the machine Wirepane runs on. Read here rather than from util/ui, which
@@ -44,7 +48,8 @@ const standaloneDirectory: DeviceDirectory = {
 
         const type = clientEvent.isHttp() ? detectDeviceType(clientEvent.request) : undefined;
         return { key, type: type ?? 'other' };
-    }
+    },
+    getEventAppName
 };
 
 let activeDirectory: DeviceDirectory | undefined;

@@ -1,6 +1,7 @@
 import { expect } from '../../../test-setup';
 
 import { DeviceSummary } from '../../../../src/model/devices/devices-store';
+import type { AppCount } from '../../../../src/model/devices/app-groups';
 import { SourceIcons } from '../../../../src/icons';
 import {
     ALL_DEVICES_ROW_ID,
@@ -27,10 +28,19 @@ const device = (key: string, overrides: Partial<DeviceSummary> = {}): DeviceSumm
     lastSeen: 0,
     apps: [],
     hosts: [],
+    viaVpn: false,
+    vpnPeers: [],
     ...overrides
 });
 
-const app = (name: string, count = 1) => ({ name, count, icon: SourceIcons.Unknown });
+const app = (name: string, count = 1): AppCount => ({
+    name,
+    kind: 'app',
+    count,
+    icon: SourceIcons.Unknown,
+    keys: [`name:${name.toLowerCase()}`],
+    detail: undefined
+});
 const host = (name: string, count = 1) => ({ host: name, count });
 
 describe('Device tree rows', () => {

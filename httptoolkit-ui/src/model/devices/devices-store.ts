@@ -19,12 +19,14 @@ import { lazyObservablePromise } from '../../util/observable';
 import { persist, hydrate } from '../../util/mobx-persist/persist';
 
 import { AppCount, DeviceStats, DeviceTracker } from './device-tracker';
+import { getSystemLabel } from './app-identity';
 import {
     DeviceType,
     THIS_MACHINE_KEY,
     detectDeviceType,
     getClientEvent,
     getDeviceTypeLabel,
+    getEventAppName as getRequestEventAppName,
     getEventDeviceKey,
     getThisMachineName
 } from './device-model';
@@ -75,6 +77,9 @@ export interface DeviceSummary {
     lastSeen: number;
     apps: AppCount[]; // Most requests first
     hosts: DeviceHost[]; // Most requests first
+    // wirepane: its traffic comes through the VPN tunnel (some or all of it), from these peers
+    viaVpn: boolean;
+    vpnPeers: string[];
 }
 
 // What a request row's device marker shows. Unlike DeviceSummary it doesn't change with
@@ -83,6 +88,7 @@ export interface DeviceMarker {
     name: string;
     title: string;
     type: DeviceType;
+    viaVpn: boolean;
 }
 
 interface DevicesStoreOptions {
@@ -323,11 +329,14 @@ export class DevicesStore implements DeviceDirectory {
             eventCount: stats.eventCount,
             firstSeen: stats.firstSeen,
             lastSeen: stats.lastSeen,
-            apps: byCount([...stats.apps.values()].map((app) => ({ ...app })), (app) => app.name),
+            // wirepane: the requests of an SDK count under the app they came from
+            apps: stats.apps.grouped(getSystemLabel(type)),
             hosts: byCount(
                 [...stats.hosts.entries()].map(([host, count]) => ({ host, count })),
                 (host) => host.host
-            )
+            ),
+            viaVpn: stats.vpnEvents > 0,
+            vpnPeers: _.sortBy([...stats.vpnPeers.keys()])
         };
     }
 
@@ -363,7 +372,9 @@ export class DevicesStore implements DeviceDirectory {
             firstSeen: 0,
             lastSeen: 0,
             apps: [],
-            hosts: []
+            hosts: [],
+            viaVpn: false,
+            vpnPeers: []
         };
     }
 
@@ -408,6 +419,31 @@ export class DevicesStore implements DeviceDirectory {
         return { key, type: type ?? 'other' };
     }
 
+    // The names the Devices panel lists each device's apps under, by the key their requests were counted under
+    @computed
+    private get appNamesByDevice(): ReadonlyMap<string, ReadonlyMap<string, string>> {
+        return new Map(this.devices.map((device) => [
+            device.key,
+            new Map(_.flatMap(device.apps, (app) => app.keys.map((key): [string, string] => [key, app.name])))
+        ]));
+    }
+
+    /**
+     * The app an event is listed under in the Devices panel (and so what app= matches). An
+     * SDK's request is listed under the app it was tied to, which the request alone doesn't say.
+     */
+    readonly getEventAppName = (event: ViewableEvent): string | undefined => {
+        const clientEvent = getClientEvent(event);
+        const collected = clientEvent as CollectedEvent;
+        const deviceKey = this.tracker.getDeviceKey(collected);
+        const appKey = this.tracker.getAppKey(collected);
+
+        const name = deviceKey && appKey
+            ? this.appNamesByDevice.get(deviceKey)?.get(appKey)
+            : undefined;
+        return name ?? getRequestEventAppName(clientEvent);
+    };
+
     // --- The request list's device markers ---
 
     // Mixed traffic from several devices gets a device marker on each request row
@@ -420,8 +456,10 @@ export class DevicesStore implements DeviceDirectory {
     private get deviceMarkers(): { [key: string]: DeviceMarker } {
         return _.fromPairs(this.devices.map((device) => [device.key, {
             name: device.shortName,
-            title: device.address ? `${device.name} (${device.address})` : device.name,
-            type: device.type
+            title: (device.address ? `${device.name} (${device.address})` : device.name) +
+                (device.viaVpn ? ' · through the VPN' : ''),
+            type: device.type,
+            viaVpn: device.viaVpn
         }]));
     }
 
@@ -484,7 +522,8 @@ export class DevicesStore implements DeviceDirectory {
         return new DeviceSelectionFilter(
             selection,
             () => this.describeSelection(selection),
-            this.getEventDeviceKey
+            this.getEventDeviceKey,
+            this.getEventAppName
         );
     }
 

@@ -19,7 +19,6 @@ import {
     THIS_MACHINE_KEY,
     getClientEvent,
     getEventAddress,
-    getEventAppName,
     getThisMachineName,
     normalizeAddress
 } from './device-model';
@@ -154,6 +153,9 @@ const getAddressSuggestions = (events: ViewableEvent[]) =>
         .uniq()
         .filter((address): address is string => !!address)
         .valueOf();
+
+// The apps as the Devices panel names them, so an SDK's requests count under their app
+const getEventAppName = (event: ViewableEvent) => getDeviceDirectory().getEventAppName(event);
 
 const getAppSuggestions = (events: ViewableEvent[]) =>
     _(events)

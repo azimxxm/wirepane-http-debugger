@@ -11,6 +11,7 @@ import {
     CERTIFICATE_PAGE_URL,
     ConnectedPhone,
     ConnectedPhoneTracker,
+    describeConnectedApps,
     LanAddress,
     PhonePlatform,
     getLanAddresses
@@ -441,7 +442,8 @@ export const PhoneStatus = (props: {
                         { phone.address
                             ? <Mono>{ phone.address }</Mono>
                             : 'Through ADB'
-                        } · { phone.client }
+                        } · { describeConnectedApps(phone) }
+                        { phone.viaVpn && ' · through the VPN' }
                     </p>
                     <HttpsLine>
                         { phone.sawHttps

@@ -83,16 +83,17 @@ const ToolbarMark = styled.img.attrs(() => ({
     -webkit-user-drag: none;
 `;
 
-// The page's title & purpose. It gives way first when the window gets narrow.
+// The page's title & purpose. It takes the room that's left of the toolbar's controls, and its
+// size doesn't depend on its text: a long title (View's breadcrumb with a URL) is cut with an
+// ellipsis instead of pushing the controls around. It gives way first when the window gets narrow.
 const TitleSlot = styled.div`
-    flex: 0 100 auto;
+    flex: 1 100 0;
     min-width: 120px;
     display: flex;
 `;
 
 const FlexibleSpace = styled.div`
-    flex: 1 1 0;
-    min-width: 16px;
+    flex: 0 0 16px;
 `;
 
 // In the field's own text colour, so it reads on the field in every theme

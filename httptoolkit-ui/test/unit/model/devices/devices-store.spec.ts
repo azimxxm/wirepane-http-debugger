@@ -329,7 +329,8 @@ describe('Devices store', () => {
             expect(store.getDeviceMarker(android)).to.deep.equal({
                 name: 'Pixel 8',
                 title: 'Pixel 8 (192.168.0.42)',
-                type: 'android'
+                type: 'android',
+                viaVpn: false
             });
             expect(store.getDeviceMarker(local)!.name).to.equal('This Mac');
 

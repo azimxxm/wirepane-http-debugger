@@ -1,7 +1,7 @@
 import type { ViewableEvent } from '../../types';
 import { Filter } from '../filters/search-filters';
 
-import { getClientEvent, getEventAppName, getEventHost } from './device-model';
+import { getEventHost } from './device-model';
 
 // What's selected in the Devices panel: a device, or one of its apps or domains
 export interface DeviceSelection {
@@ -28,7 +28,9 @@ export class DeviceSelectionFilter extends Filter {
         // Read when shown, so the filter doesn't change whenever a device's name does
         private readonly describe: () => string,
         // The device key for an event (as the devices store knows it)
-        private readonly getDeviceKey: (event: ViewableEvent) => string | undefined
+        private readonly getDeviceKey: (event: ViewableEvent) => string | undefined,
+        // The app an event is listed under in the panel
+        private readonly getAppName: (event: ViewableEvent) => string | undefined
     ) {
         super(`device-selection:${selection.deviceKey}`);
     }
@@ -37,7 +39,7 @@ export class DeviceSelectionFilter extends Filter {
         if (this.getDeviceKey(event) !== this.selection.deviceKey) return false;
 
         const { app, host } = this.selection;
-        if (app !== undefined && getEventAppName(getClientEvent(event)) !== app) return false;
+        if (app !== undefined && this.getAppName(event) !== app) return false;
         if (host !== undefined && getEventHost(event) !== host) return false;
 
         return true;
