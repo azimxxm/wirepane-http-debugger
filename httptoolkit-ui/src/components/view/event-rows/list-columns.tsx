@@ -32,7 +32,7 @@ import {
  * row marker. Header and row cells share their widths, so everything lines up.
  */
 
-const COLUMN_WIDTHS: { readonly [column in ListColumn]: number } = {
+export const COLUMN_WIDTHS: { readonly [column in ListColumn]: number } = {
     type: 64,
     time: 64,
     duration: 64,
@@ -52,7 +52,7 @@ export const PATH_MIN_WIDTH = 72;
 // Every cell's right margin (TrafficEventListRow & TableHeaderRow)
 const CELL_MARGIN = 10;
 // The marker, method, status & source columns (event-row-components)
-const ALWAYS_SHOWN_WIDTHS = [10, 71, 45, 49];
+const ALWAYS_SHOWN_WIDTHS = [10, 71, 62, 62]; // wirepane: status & source widened for the sort arrow
 
 /**
  * How narrow the list's rows can get with these columns before it scrolls sideways.
@@ -68,7 +68,7 @@ export function getListMinWidth(isColumnVisible: (column: ListColumn) => boolean
     return widths.reduce((sum, width) => sum + width + CELL_MARGIN, 0) + LIST_OPTIONS_SLOT_WIDTH;
 }
 
-const FixedColumn = styled.div<{
+export const FixedColumn = styled.div<{
     role: 'gridcell' | 'columnheader',
     column: ListColumn
 }>`

@@ -32,11 +32,16 @@ import { EventRow, EventRowProps } from './event-rows/event-row';
 import { DeviceColumnHeader } from '../devices/device-marker'; // wirepane: device markers
 import { // wirepane: list columns
     HOST_MIN_WIDTH,
-    OptionalColumnHeaders,
-    PATH_MIN_WIDTH,
-    TypeColumnHeader
+    PATH_MIN_WIDTH
 } from './event-rows/list-columns';
 import { ListHeaderRow } from './list-options'; // wirepane: columns menu
+import { // wirepane: sorting & filtering from the column headers
+    ColumnFilterMenuLayer,
+    ColumnHeader,
+    SortableOptionalColumnHeaders,
+    SortableTypeColumnHeader
+} from './list-column-headers';
+import { ListSort } from '../../model/ui/list-columns-store';
 
 const SCROLL_BOTTOM_MARGIN = 5; // If you're in the last 5 pixels of the scroll area, we say you're at the bottom
 
@@ -63,6 +68,8 @@ interface ViewEventListProps {
     isPaused: boolean;
     // wirepane: what to say when the filters hide everything, e.g. for a device with no requests
     noMatchesMessage?: string;
+    // wirepane: the column the (already sorted) filteredEvents are sorted by, if any
+    sort?: ListSort;
 
     contextMenuBuilder: ViewEventContextMenuBuilder;
     uiStore: UiStore;
@@ -96,6 +103,22 @@ const ListContainer = styled.div<{ role: 'grid' }>`
 
     [role=row] > ${PathAndQuery} {
         min-width: ${PATH_MIN_WIDTH}px;
+    }
+
+    /* wirepane: the sortable column headers */
+    [role=columnheader][aria-sort] {
+        position: relative;
+        cursor: pointer;
+        border-radius: 4px;
+
+        &:hover {
+            background-color: ${p => p.theme.rowHover};
+        }
+
+        &:focus-visible {
+            outline: 2px solid ${p => p.theme.focusRing};
+            outline-offset: -2px;
+        }
     }
 
     /* wirepane: the selection fill shows focus, so the list only gets a ring when no row is
@@ -196,15 +219,16 @@ export class ViewEventList extends React.Component<ViewEventListProps> {
         return <ListContainer role="grid">
             <ListHeaderRow>{ /* wirepane: with the columns menu */ }
                 <MarkerHeader role="columnheader" aria-label="Markers" />
-                <Method role="columnheader">Method</Method>
-                <Status role="columnheader">Status</Status>
-                <TypeColumnHeader />
-                <Source role="columnheader">Source</Source>
+                <ColumnHeader Cell={Method} sortColumn='method' filterColumn='method' label='Method' />
+                <ColumnHeader Cell={Status} sortColumn='status' filterColumn='status' label='Status' />
+                <SortableTypeColumnHeader />
+                <ColumnHeader Cell={Source} sortColumn='source' filterColumn='source' label='Source' />
                 <DeviceColumnHeader />
-                <Host role="columnheader">Host</Host>
-                <PathAndQuery role="columnheader">Path and query</PathAndQuery>
-                <OptionalColumnHeaders />
+                <ColumnHeader Cell={Host} sortColumn='host' filterColumn='host' label='Host' />
+                <ColumnHeader Cell={PathAndQuery} sortColumn='path' label='Path and query' />
+                <SortableOptionalColumnHeaders />
             </ListHeaderRow>
+            <ColumnFilterMenuLayer events={events} />
 
             {
                 events.length === 0
@@ -293,16 +317,47 @@ export class ViewEventList extends React.Component<ViewEventListProps> {
 
     private lastEventCount = 0;
 
-    componentDidUpdate() {
+    componentDidUpdate(prevProps: ViewEventListProps) {
         const eventCount = this.props.events.length;
         const eventsAdded = eventCount > this.lastEventCount;
         this.lastEventCount = eventCount;
 
+        // wirepane: the rows moved, so show the selected one, or the start of the new order.
+        // The sorted events arrive a moment after the sort changes (the page debounces them).
+        if (prevProps.sort !== this.props.sort) this.isWaitingForSortedRows = true;
+        if (this.isWaitingForSortedRows && prevProps.filteredEvents !== this.props.filteredEvents) {
+            this.isWaitingForSortedRows = false;
+            this.showRowsAfterSortChange();
+            return;
+        }
+
         // If new events arrived while we were at the bottom, stay at the bottom.
         // Only check when events were actually added — not on selection changes,
         // which would fight with moveSelection's scroll.
-        if (eventsAdded && this.wasListAtBottom && !this.isListAtBottom()) {
+        // wirepane: not in a sorted list, where the bottom isn't where the new rows go.
+        if (eventsAdded && !this.props.sort && this.wasListAtBottom && !this.isListAtBottom()) {
             this.listRef.current?.scrollToItem(eventCount - 1);
+        }
+    }
+
+    private isWaitingForSortedRows = false;
+
+    // wirepane: after clicking a header the rows are in a new order. Keep the selected row in
+    // view, else show the first rows, or back in time order the newest as before.
+    private showRowsAfterSortChange() {
+        const { activeEventId, filteredEvents, sort } = this.props;
+        const activeEvent = activeEventId
+            ? filteredEvents.find((event) => event.id === activeEventId)
+            : undefined;
+
+        if (activeEvent) {
+            this.scrollToCenterEvent(activeEvent, false);
+        } else if (sort) {
+            this.wasListAtBottom = false;
+            this.listRef.current?.scrollTo(0);
+        } else {
+            this.wasListAtBottom = true;
+            this.listRef.current?.scrollToItem(filteredEvents.length - 1);
         }
     }
 
@@ -328,7 +383,7 @@ export class ViewEventList extends React.Component<ViewEventListProps> {
         this.listRef.current?.scrollToItem(targetIndex);
     }
 
-    public scrollToCenterEvent(event: CollectedEvent) {
+    public scrollToCenterEvent(event: CollectedEvent, focusList = true) {
         const list = this.listRef.current;
         const listBody = this.listBodyRef.current;
         if (!list || !listBody) return;
@@ -349,11 +404,21 @@ export class ViewEventList extends React.Component<ViewEventListProps> {
         list.scrollTo(_.clamp(targetOffset, 0, maxOffset));
 
         // Focus the list so keyboard navigation works from here
-        listWindow.focus();
+        if (focusList) listWindow.focus();
     }
 
     public scrollToEnd() {
-        this.listRef.current?.scrollToItem(this.props.filteredEvents.length, 'start');
+        const { events, filteredEvents, sort } = this.props;
+
+        if (sort) {
+            // wirepane: the newest request isn't at the end of a sorted list: go to its row
+            const shownEvents = new Set<CollectedEvent>(filteredEvents);
+            const newestEvent = _.findLast(events, (event) => shownEvents.has(event));
+            if (newestEvent) this.scrollToCenterEvent(newestEvent, false);
+            return;
+        }
+
+        this.listRef.current?.scrollToItem(filteredEvents.length, 'start');
     }
 
     onListMouseDown = (mouseEvent: React.MouseEvent) => {

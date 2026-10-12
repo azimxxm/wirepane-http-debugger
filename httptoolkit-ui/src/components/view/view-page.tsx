@@ -28,6 +28,7 @@ import { AccountStore } from '../../model/account/account-store';
 import { SendStore } from '../../model/send/send-store';
 import { CollectionsStore } from '../../model/collections/collections-store';
 import { DevicesStore } from '../../model/devices/devices-store'; // wirepane: the Devices panel
+import { ListColumnsStore } from '../../model/ui/list-columns-store'; // wirepane: the list's sort
 import { HttpExchange } from '../../model/http/http-exchange';
 import { Filter, FilterSet } from '../../model/filters/search-filters';
 import { buildRuleFromExchange } from '../../model/rules/rule-creation';
@@ -37,8 +38,9 @@ import { PageHeader, PageBody } from '../common/page-header';
 import { SelfSizedEditor } from '../editor/base-editor';
 
 import { ViewEventList } from './view-event-list';
+import { sortEvents } from './list-sort'; // wirepane: sorting by a column header
 import { ViewToolbar } from './view-toolbar';
-import { describeOpenEvent, describeSelection } from './open-event-title'; // wirepane
+import { describeOpenEvent, describeOpenEventUrl, describeSelection } from './open-event-title'; // wirepane
 import { confirmClearTraffic, confirmDeletePinned } from './view-delete-dialogs'; // wirepane: our own dialogs instead of confirm()
 import { NoTrafficState, SelectRequestState } from './view-empty-states';
 import { ViewEventContextMenuBuilder } from './view-context-menu-builder';
@@ -63,6 +65,7 @@ interface ViewPageProps {
     sendStore: SendStore;
     collectionsStore: CollectionsStore;
     devicesStore: DevicesStore; // wirepane
+    listColumnsStore: ListColumnsStore; // wirepane: the list's sort
     navigate: (path: string) => void;
     eventId?: string;
 }
@@ -180,6 +183,7 @@ const paneExpansionRequirements: { [key in ExpandableViewCardKey]: (event: Colle
 @inject('sendStore')
 @inject('collectionsStore')
 @inject('devicesStore') // wirepane
+@inject('listColumnsStore') // wirepane: the list's sort
 @observer
 class ViewPage extends React.Component<ViewPageProps> {
 
@@ -229,7 +233,7 @@ class ViewPage extends React.Component<ViewPageProps> {
             ? [...this.currentSearchFilters, selectionFilter]
             : this.currentSearchFilters;
 
-        const filteredEvents = (currentFilters.length === 0)
+        const matchingEvents = (currentFilters.length === 0)
             ? events
             : events.filter((event) => {
                 if (event.isHttp() && event.wasTransformed) {
@@ -238,6 +242,9 @@ class ViewPage extends React.Component<ViewPageProps> {
                     return currentFilters.every((f) => f.matches(event))
                 }
             });
+
+        // wirepane: sorted by the clicked column header, so the keyboard moves through the rows in the order shown
+        const filteredEvents = sortEvents(matchingEvents, this.props.listColumnsStore.sort);
 
         return {
             filteredEvents,
@@ -290,6 +297,12 @@ class ViewPage extends React.Component<ViewPageProps> {
     get openEventTitle(): string | undefined {
         if (this.isMultiSelection) return describeSelection(this.props.uiStore.selectedEventIds.size);
         return this.selectedEvent && describeOpenEvent(this.selectedEvent);
+    }
+
+    // wirepane: the whole URL, for the breadcrumb's tooltip (the title itself has no query string)
+    @computed
+    get openEventUrl(): string | undefined {
+        return this.selectedEvent && describeOpenEventUrl(this.selectedEvent);
     }
 
     private readonly viewCrumb = {
@@ -542,6 +555,7 @@ class ViewPage extends React.Component<ViewPageProps> {
 
             <PageHeader
                 title={this.openEventTitle ?? 'View'}
+                titleHint={this.openEventUrl}
                 parent={this.openEventTitle ? this.viewCrumb : undefined}
                 purpose='Every request that passes through Wirepane. Select one to inspect it.'
                 compactBelow={1180}
@@ -583,6 +597,7 @@ class ViewPage extends React.Component<ViewPageProps> {
                         activeEventId={this.props.uiStore.activeEventId}
                         isPaused={isPaused}
                         noMatchesMessage={this.noMatchesMessage}
+                        sort={this.props.listColumnsStore.sort}
 
                         moveSelection={this.moveSelection}
                         onSelected={this.onSelected}

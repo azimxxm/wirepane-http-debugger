@@ -26,6 +26,24 @@ export const LIST_COLUMN_DESCRIPTIONS: { readonly [column in ListColumn]: string
     size: 'The size of the response body, as sent'
 };
 
+// wirepane: the columns the list can be sorted by. Time is the default order of the list.
+export const SORT_COLUMNS = ['method', 'status', 'type', 'source', 'host', 'path', 'time', 'duration', 'size'] as const;
+export type SortColumn = typeof SORT_COLUMNS[number];
+export type SortDirection = 'asc' | 'desc';
+export interface ListSort {
+    column: SortColumn;
+    direction: SortDirection;
+}
+
+/**
+ * What clicking a header does: sort by it ascending, then descending, then back to the
+ * default time order. Clicking another header starts that one ascending.
+ */
+export function getNextSort(current: ListSort | undefined, column: SortColumn): ListSort | undefined {
+    if (current?.column !== column) return { column, direction: 'asc' };
+    return current.direction === 'asc' ? { column, direction: 'desc' } : undefined;
+}
+
 const DEFAULT_VISIBILITY: { readonly [column in ListColumn]: boolean } = {
     type: true,
     time: false,
@@ -93,6 +111,36 @@ export class ListColumnsStore {
         this.choices = {};
     }
 
+    // wirepane: how the list is sorted, if at all. Not saved: a new session starts in time order.
+    @observable.ref
+    sort: ListSort | undefined;
+
+    @action.bound
+    cycleSort(column: SortColumn) {
+        this.sort = getNextSort(this.sort, column);
+    }
+
+    @action.bound
+    clearSort() {
+        this.sort = undefined;
+    }
+
+    // wirepane: the filter menu of a column header, at the pointer after a right-click.
+    // Not saved.
+    @observable.ref
+    filterMenu: ListFilterMenuAnchor | undefined;
+
+    @action.bound
+    openFilterMenu(menu: ListFilterMenuAnchor) {
+        this.optionsMenu = undefined;
+        this.filterMenu = menu;
+    }
+
+    @action.bound
+    closeFilterMenu() {
+        this.filterMenu = undefined;
+    }
+
     // Where the columns menu is open: under its button, or at the pointer after a
     // right-click on the header. Not saved.
     @observable.ref
@@ -100,6 +148,7 @@ export class ListColumnsStore {
 
     @action.bound
     openOptionsMenu(pointer?: { x: number, y: number }) {
+        this.filterMenu = undefined; // wirepane: one menu at a time
         this.optionsMenu = pointer
             ? { anchor: 'pointer', x: pointer.x, y: pointer.y }
             : { anchor: 'button' };
@@ -114,3 +163,11 @@ export class ListColumnsStore {
 export type ListOptionsMenuAnchor =
     | { anchor: 'button' }
     | { anchor: 'pointer', x: number, y: number };
+
+// wirepane: the columns with a filter menu (the same ones as model/filters/column-filters.ts),
+// and where it opens: under the header's button, or at the pointer after a right-click
+export type ListFilterMenuAnchor = {
+    column: 'method' | 'status' | 'type' | 'source' | 'host',
+    x: number,
+    y: number
+};

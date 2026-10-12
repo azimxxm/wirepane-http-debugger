@@ -171,13 +171,13 @@ export const MethodName = styled.span<{ httpMethod: string }>`
 `;
 
 export const Status = styled(Column)`
-    flex-basis: 45px;
+    flex-basis: 62px; /* wirepane: room for the sort arrow in the header (was 45px) */
     flex-shrink: 0;
     flex-grow: 0;
 `;
 
 export const Source = styled(Column)`
-    flex-basis: 49px;
+    flex-basis: 62px; /* wirepane: room for the sort arrow in the header (was 49px) */
     flex-shrink: 0;
     flex-grow: 0;
 
