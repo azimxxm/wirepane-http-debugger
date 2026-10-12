@@ -37,6 +37,7 @@ import {
     SettingsSubheadingRow
 } from './settings-components';
 import { StringSettingsList } from './string-settings-list';
+import { DEFAULT_PROXY_PORT_RANGE } from '../../model/proxy-port-memory'; // wirepane
 
 // wirepane: the card's one primary action, at the top right, clear of the left-aligned title
 const RestartApp = styled(SettingsButton).attrs(() => ({
@@ -148,10 +149,10 @@ export class ProxySettingsCard extends React.Component<
 > {
 
     @observable
-    minPortValue = (this.props.proxyStore!.portConfig?.startPort || 8000).toString();
+    minPortValue = (this.props.proxyStore!.portConfig?.startPort || DEFAULT_PROXY_PORT_RANGE.startPort).toString(); // wirepane
 
     @observable
-    maxPortValue = (this.props.proxyStore!.portConfig?.endPort || 65535).toString();
+    maxPortValue = (this.props.proxyStore!.portConfig?.endPort || DEFAULT_PROXY_PORT_RANGE.endPort).toString(); // wirepane
 
     @action.bound
     onMinPortChange({ target: { value } }: React.ChangeEvent<HTMLInputElement>) {
@@ -170,7 +171,8 @@ export class ProxySettingsCard extends React.Component<
         const { httpProxyPort, portConfig } = this.props.proxyStore!;
 
         if (!portConfig) {
-            return httpProxyPort >= 8000;
+            // wirepane: Wirepane's default range, not 8000 and up
+            return httpProxyPort >= DEFAULT_PROXY_PORT_RANGE.startPort && httpProxyPort <= DEFAULT_PROXY_PORT_RANGE.endPort;
         } else {
             return httpProxyPort >= portConfig.startPort && httpProxyPort <= portConfig.endPort;
         }
@@ -341,7 +343,9 @@ export class ProxySettingsCard extends React.Component<
                 When opening Wirepane, it reuses the port it had last time if that's free
                 and in this range, so phones and other devices keep working. Otherwise it
                 starts the proxy on the first port in this range that is available. If all
-                ports in the range are in use, the first free port above 8000 will be used instead.
+                ports in the range are in use, any free port is used instead. By default Wirepane
+                uses {DEFAULT_PROXY_PORT_RANGE.startPort}–{DEFAULT_PROXY_PORT_RANGE.endPort}, clear of the
+                ports that dev servers and frameworks use, like 3000, 5173, 8000 and 8080.
             </SettingsExplanation>
 
             {

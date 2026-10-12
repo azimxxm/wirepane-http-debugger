@@ -15,11 +15,11 @@ describe('Proxy port memory', () => {
 
     describe('picking the port to ask for', () => {
         it("prefers this window's previous port", () => {
-            expect(getPreferredProxyPort([8003, 8000], undefined)).to.equal(8003);
+            expect(getPreferredProxyPort([9476, 9473], undefined)).to.equal(9476);
         });
 
         it("falls back to the app's last port for a new window", () => {
-            expect(getPreferredProxyPort([undefined, 8001], undefined)).to.equal(8001);
+            expect(getPreferredProxyPort([undefined, 9474], undefined)).to.equal(9474);
         });
 
         it('asks for nothing when no port is remembered', () => {
@@ -28,8 +28,14 @@ describe('Proxy port memory', () => {
 
         it('skips ports outside the default range when no range is set', () => {
             // E.g. left over from an old custom range that has since been reset
-            expect(getPreferredProxyPort([7000, 8002], undefined)).to.equal(8002);
+            expect(getPreferredProxyPort([7000, 9475], undefined)).to.equal(9475);
             expect(getPreferredProxyPort([7000], undefined)).to.equal(undefined);
+        });
+
+        it("drops ports from before Wirepane's own default range", () => {
+            // Older versions started at 8000, the port many dev servers default to
+            expect(getPreferredProxyPort([8000, 8040], undefined)).to.equal(undefined);
+            expect(getPreferredProxyPort([8000, 9473], undefined)).to.equal(9473);
         });
 
         it('only uses remembered ports inside the configured range', () => {
@@ -39,7 +45,7 @@ describe('Proxy port memory', () => {
         });
 
         it('ignores values that are not ports', () => {
-            expect(getPreferredProxyPort([NaN, 0, 70000, 8000.5, 8004], undefined)).to.equal(8004);
+            expect(getPreferredProxyPort([NaN, 0, 70000, 9473.5, 9477], undefined)).to.equal(9477);
         });
     });
 

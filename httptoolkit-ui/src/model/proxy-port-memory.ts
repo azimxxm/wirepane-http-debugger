@@ -11,8 +11,10 @@ import { isValidPort } from './network';
  * for the remembered port explicitly skips that search.
  */
 
-// The range Mockttp picks from when no range is set in Settings
-export const DEFAULT_PROXY_PORT_RANGE: PortRange = { startPort: 8000, endPort: 65535 };
+// The range the proxy picks from when no range is set in Settings. 9473 spells WIRE on a phone
+// keypad, and the range stays clear of the ports dev servers and frameworks default to (3000,
+// 4200, 5000, 5173, 8000, 8080, 8888, 9000, 9090...), so Wirepane doesn't take theirs.
+export const DEFAULT_PROXY_PORT_RANGE: PortRange = { startPort: 9473, endPort: 9999 };
 
 // sessionStorage: this window's proxy session. It survives reloads, and each window has its own.
 const WINDOW_SESSION_KEY = 'wirepane:proxy-session';

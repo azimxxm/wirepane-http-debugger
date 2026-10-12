@@ -37,14 +37,16 @@ import { persist, hydrate } from '../util/mobx-persist/persist';
 import { isValidPort } from './network';
 import { serverVersion } from '../services/service-versions';
 import { getMockttpPort } from '../services/desktop-api';
-import { // wirepane: a stable proxy port
+import {
+    // wirepane: a stable proxy port
     forgetProxySessionId,
     getPreferredProxyPort,
     getSessionIdFromUrl,
     readLastProxyPort,
     readWindowProxySession,
     rememberProxySession,
-    stopLeftoverProxySession
+    stopLeftoverProxySession,
+    DEFAULT_PROXY_PORT_RANGE
 } from './proxy-port-memory';
 
 type HtkAdminClient =
@@ -241,13 +243,14 @@ export class ProxyStore {
                         ? ['unknown-protocol']
                         : undefined
                 },
-                port: preferredPort ?? this.portConfig, // wirepane: was this.portConfig
+                // wirepane: was this.portConfig, which left the default (8000 up) to Mockttp
+                port: preferredPort ?? this.portConfig ?? DEFAULT_PROXY_PORT_RANGE,
                 // We manage our own decoding client side - rules should not try to send
                 // use pre-decoded data (e.g. for breakpoints).
                 messageBodyDecoding: 'none'
             },
             webrtc: {}
-        }, undefined, undefined, this.portConfig); // wirepane: the fallback if preferredPort is taken
+        }, undefined, undefined, this.portConfig ?? DEFAULT_PROXY_PORT_RANGE); // wirepane: the fallback if preferredPort is taken
 
         this.mockttpRequestBuilder = new MockttpPluggableAdmin.MockttpAdminRequestBuilder(
             this.adminClient.schema,
@@ -330,9 +333,11 @@ export class ProxyStore {
     setPortConfig(value: PortRange | undefined) {
         if (!isValidPortConfiguration(value)) {
             throw new TypeError(`Invalid port config: ${JSON.stringify(value)}`);
-        } else if (!value || (value.startPort === 8000 && value.endPort === 65535)) {
-            // If unset, or set to the default equivalent value, then
-            // we delegate to the server itself.
+        } else if (!value || (
+            value.startPort === DEFAULT_PROXY_PORT_RANGE.startPort &&
+            value.endPort === DEFAULT_PROXY_PORT_RANGE.endPort
+        )) {
+            // wirepane: unset, or the same as Wirepane's default range (proxy-port-memory.ts)
             this._portConfig = undefined;
         } else {
             this._portConfig = value;
