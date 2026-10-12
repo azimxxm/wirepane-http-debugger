@@ -1,7 +1,7 @@
 import type { ViewableEvent } from '../../types';
 import { Filter } from '../filters/search-filters';
 
-import { getEventAppName, getEventHost } from './device-model';
+import { getClientEvent, getEventAppName, getEventHost } from './device-model';
 
 // What's selected in the Devices panel: a device, or one of its apps or domains
 export interface DeviceSelection {
@@ -34,12 +34,10 @@ export class DeviceSelectionFilter extends Filter {
     }
 
     matches(event: ViewableEvent): boolean {
-        // The device & app are the client's, even for requests a rule rewrote
-        const clientEvent = event.isHttp() ? event.downstream : event;
-        if (this.getDeviceKey(clientEvent) !== this.selection.deviceKey) return false;
+        if (this.getDeviceKey(event) !== this.selection.deviceKey) return false;
 
         const { app, host } = this.selection;
-        if (app !== undefined && getEventAppName(clientEvent) !== app) return false;
+        if (app !== undefined && getEventAppName(getClientEvent(event)) !== app) return false;
         if (host !== undefined && getEventHost(event) !== host) return false;
 
         return true;

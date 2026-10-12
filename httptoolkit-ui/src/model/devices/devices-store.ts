@@ -1,6 +1,7 @@
 import * as _ from 'lodash';
 import {
     action,
+    comparer,
     computed,
     IObservableArray,
     isObservableArray,
@@ -16,35 +17,28 @@ import { now } from 'mobx-utils';
 import type { CollectedEvent, ViewableEvent } from '../../types';
 import { lazyObservablePromise } from '../../util/observable';
 import { persist, hydrate } from '../../util/mobx-persist/persist';
-import { getNetworkInterfaces } from '../../services/server-api';
 
-import { AddressStats, AppCount, DeviceTracker } from './device-tracker';
+import { AppCount, DeviceStats, DeviceTracker } from './device-tracker';
 import {
     DeviceType,
     THIS_MACHINE_KEY,
     detectDeviceType,
-    getDeviceKey,
+    getClientEvent,
     getDeviceTypeLabel,
-    getEventAddress,
-    getThisMachineName,
-    isThisMachineAddress,
-    normalizeAddress
+    getEventDeviceKey,
+    getThisMachineName
 } from './device-model';
 import { DeviceDirectory, EventDevice, THIS_MACHINE_TYPE, setDeviceDirectory } from './device-directory';
 import { NameStorage, cleanDeviceName, loadDeviceNames, saveDeviceNames } from './device-names';
 import { DeviceSelection, DeviceSelectionFilter, isSameSelection } from './device-selection-filter';
 
-export const DEFAULT_DEVICES_PANEL_WIDTH = 248;
-export const MIN_DEVICES_PANEL_WIDTH = 200;
+export const DEFAULT_DEVICES_PANEL_WIDTH = 216;
+export const MIN_DEVICES_PANEL_WIDTH = 180;
 export const MAX_DEVICES_PANEL_WIDTH = 440;
 
 // A device is shown as active if it sent something in the last minute
 export const ACTIVE_WINDOW_MS = 60_000;
 const ACTIVE_CHECK_INTERVAL_MS = 5_000;
-
-// A new client address might be this machine's, if its network changed since startup.
-// Checking means asking the server, so it's done at most this often:
-const ADDRESS_RECHECK_INTERVAL_MS = 30_000;
 
 export interface DeviceHost {
     host: string;
@@ -56,11 +50,13 @@ export interface DeviceSummary {
     isThisMachine: boolean;
     type: DeviceType;
     name: string; // The user's name for it, or the default one
-    defaultName: string;
+    defaultName: string; // "This Mac", or the type or model: "iPhone", "Pixel 8"
     hasCustomName: boolean;
-    // For the request list: the name, or the type, plus the end of the IP if needed
+    // The name, plus the end of the IP when another device has the same name
     shortName: string;
-    // The addresses its traffic came from (this machine can have several)
+    // Shown under the name: the device's IP (none for this machine)
+    address: string | undefined;
+    // Every address its traffic came from (this machine's loopback addresses)
     addresses: string[];
     eventCount: number;
     firstSeen: number;
@@ -69,18 +65,17 @@ export interface DeviceSummary {
     hosts: DeviceHost[]; // Most requests first
 }
 
-interface DevicesStoreOptions {
-    // This machine's own addresses (default: asked from the server)
-    loadOwnAddresses?: () => Promise<string[]>;
-    nameStorage?: NameStorage;
-    thisMachineType?: DeviceType;
+// What a request row's device marker shows. Unlike DeviceSummary it doesn't change with
+// every request, so the rows only re-render when a name or type changes.
+export interface DeviceMarker {
+    name: string;
+    title: string;
+    type: DeviceType;
 }
 
-async function loadServerAddresses(): Promise<string[]> {
-    const interfaces = await getNetworkInterfaces();
-    return _.flatMap(Object.values(interfaces), (addresses) =>
-        (addresses ?? []).map((info) => info.address)
-    );
+interface DevicesStoreOptions {
+    nameStorage?: NameStorage;
+    thisMachineType?: DeviceType;
 }
 
 // The end of an address, to tell apart devices with the same name: ".23" or ":5a2f"
@@ -90,31 +85,12 @@ function addressSuffix(address: string) {
     return `:${_.last(address.split(':'))}`;
 }
 
-function mergeApps(statsList: AddressStats[]): AppCount[] {
-    const apps = new Map<string, AppCount>();
-    statsList.forEach((stats) => stats.apps.forEach((app) => {
-        const existing = apps.get(app.name);
-        if (existing) existing.count += app.count;
-        else apps.set(app.name, { ...app });
-    }));
-    return _.orderBy([...apps.values()], ['count', 'name'], ['desc', 'asc']);
-}
-
-function mergeHosts(statsList: AddressStats[]): DeviceHost[] {
-    const hosts = new Map<string, number>();
-    statsList.forEach((stats) => stats.hosts.forEach((count, host) => {
-        hosts.set(host, (hosts.get(host) ?? 0) + count);
-    }));
-    return _.orderBy(
-        [...hosts.entries()].map(([host, count]) => ({ host, count })),
-        ['count', 'host'],
-        ['desc', 'asc']
-    );
-}
+const byCount = <T extends { count: number }>(items: T[], getName: (item: T) => string) =>
+    _.orderBy(items, [(item) => item.count, getName], ['desc', 'asc']);
 
 /**
  * The devices that sent the captured traffic, told apart by their IP address: this
- * machine (loopback & its own addresses) and each phone or computer on the network.
+ * machine (loopback & the Send page) and each phone or computer on the network.
  * It also keeps the Devices panel's state: what's selected, names, width & visibility.
  */
 export class DevicesStore implements DeviceDirectory {
@@ -125,7 +101,6 @@ export class DevicesStore implements DeviceDirectory {
 
     constructor(
         private readonly eventsSource: { readonly events: ReadonlyArray<CollectedEvent> },
-        private readonly networkSource: { readonly externalNetworkAddresses: ReadonlyArray<string> },
         private readonly options: DevicesStoreOptions = {}
     ) {
         this.thisMachineType = options.thisMachineType ?? THIS_MACHINE_TYPE;
@@ -133,10 +108,14 @@ export class DevicesStore implements DeviceDirectory {
     }
 
     readonly initialized = lazyObservablePromise(async () => {
-        await hydrate({ key: 'devices-store', store: this });
+        try {
+            await hydrate({ key: 'devices-store', store: this });
+        } catch (e) {
+            // Only the panel's width & visibility are saved, so the defaults are fine
+            console.warn("Couldn't restore the Devices panel layout", e);
+        }
 
         this.startTracking();
-        this.watchOwnAddresses();
         this.watchSelection();
         setDeviceDirectory(this);
 
@@ -192,17 +171,19 @@ export class DevicesStore implements DeviceDirectory {
 
     private startTracking() {
         const { events } = this.eventsSource;
-        if (!isObservableArray(events)) throw new Error('Devices need an observable events list');
+        if (!isObservableArray(events)) {
+            console.warn("Devices can't follow traffic without an observable events list");
+            return;
+        }
 
         runInAction(() => {
             events.forEach((event) => this.tracker.add(event));
             this.revision += 1;
         });
 
+        // The events list only changes by splicing (push, remove & clear all splice)
         this.disposers.push(observe(events as IObservableArray<CollectedEvent>, (change) => {
             runInAction(() => {
-                const addressCount = this.tracker.addresses.size;
-
                 if (change.type === 'splice') {
                     change.removed.forEach((event) => this.tracker.remove(event));
                     change.added.forEach((event) => this.tracker.add(event));
@@ -211,57 +192,8 @@ export class DevicesStore implements DeviceDirectory {
                     this.tracker.add(change.newValue);
                 }
                 this.revision += 1;
-
-                if (this.tracker.addresses.size > addressCount) this.checkNewAddresses();
             });
         }));
-    }
-
-    // --- This machine's addresses ---
-
-    // Only ever grows: an address that was this machine's earlier still means its traffic
-    @observable.ref
-    private ownAddresses: ReadonlySet<string> = new Set();
-
-    @action
-    private addOwnAddresses(addresses: ReadonlyArray<string>) {
-        const normalized = addresses
-            .map((address) => normalizeAddress(address))
-            .filter((address): address is string => !!address);
-        if (normalized.every((address) => this.ownAddresses.has(address))) return;
-
-        this.ownAddresses = new Set([...this.ownAddresses, ...normalized]);
-    }
-
-    private watchOwnAddresses() {
-        this.disposers.push(reaction(
-            () => this.networkSource.externalNetworkAddresses.slice(),
-            (addresses) => this.addOwnAddresses(addresses),
-            { fireImmediately: true }
-        ));
-        this.refreshOwnAddresses();
-    }
-
-    private async refreshOwnAddresses() {
-        try {
-            const addresses = await (this.options.loadOwnAddresses ?? loadServerAddresses)();
-            this.addOwnAddresses(addresses);
-        } catch (e) {
-            console.warn("Couldn't read this machine's network addresses", e);
-        }
-    }
-
-    private readonly recheckOwnAddresses = _.throttle(
-        () => this.refreshOwnAddresses(),
-        ADDRESS_RECHECK_INTERVAL_MS,
-        { trailing: false }
-    );
-
-    private checkNewAddresses() {
-        const hasUnknownAddress = [...this.tracker.addresses.keys()].some((address) =>
-            !isThisMachineAddress(address, this.ownAddresses)
-        );
-        if (hasUnknownAddress) this.recheckOwnAddresses();
     }
 
     // --- Names ---
@@ -272,10 +204,15 @@ export class DevicesStore implements DeviceDirectory {
     @action.bound
     rename(deviceKey: string, name: string) {
         const cleanName = cleanDeviceName(name);
-        const names = new Map(this.customNames);
-        if (cleanName) names.set(deviceKey, cleanName);
-        else names.delete(deviceKey);
+        const device = this.getDevice(deviceKey);
+        // Renaming to the default name (or to nothing) forgets the custom one
+        if (!cleanName || cleanName === (device?.defaultName ?? this.defaultNameFor(deviceKey))) {
+            this.forgetName(deviceKey);
+            return;
+        }
 
+        const names = new Map(this.customNames);
+        names.set(deviceKey, cleanName);
         this.customNames = names;
         saveDeviceNames(names, this.options.nameStorage);
     }
@@ -290,6 +227,10 @@ export class DevicesStore implements DeviceDirectory {
         saveDeviceNames(names, this.options.nameStorage);
     }
 
+    private defaultNameFor(deviceKey: string) {
+        return deviceKey === THIS_MACHINE_KEY ? getThisMachineName(this.thisMachineType) : undefined;
+    }
+
     // --- The devices ---
 
     /**
@@ -300,63 +241,53 @@ export class DevicesStore implements DeviceDirectory {
     get devices(): ReadonlyArray<DeviceSummary> {
         this.revision; // Re-derived whenever the tracked traffic changes
 
-        const groups = _.groupBy(
-            [...this.tracker.addresses.values()],
-            (stats) => getDeviceKey(stats.address, this.ownAddresses)
-        );
-
         const devices = _.sortBy(
-            Object.entries(groups).map(([key, statsList]) => this.summarise(key, statsList)),
+            [...this.tracker.devices.values()].map((stats) => this.summarise(stats)),
             [(device) => device.isThisMachine ? 0 : 1, (device) => device.firstSeen]
         );
 
-        // Devices with the same name in the list get the end of their IP added
-        const sharedShortNames = _(devices)
-            .countBy((device) => device.shortName)
+        // Devices with the same name get the end of their IP added
+        const sharedNames = _(devices)
+            .filter((device) => !device.isThisMachine)
+            .countBy((device) => device.name)
             .pickBy((count) => count > 1)
             .valueOf();
 
         return devices.map((device) =>
-            sharedShortNames[device.shortName] && !device.isThisMachine && !device.hasCustomName
-                ? { ...device, shortName: `${device.shortName} · ${addressSuffix(device.key)}` }
+            sharedNames[device.name] && device.address
+                ? { ...device, shortName: `${device.name} · ${addressSuffix(device.address)}` }
                 : device
         );
     }
 
-    private summarise(key: string, statsList: AddressStats[]): DeviceSummary {
+    private summarise(stats: DeviceStats): DeviceSummary {
+        const { key } = stats;
         const isThisMachine = key === THIS_MACHINE_KEY;
+        const type: DeviceType = isThisMachine ? this.thisMachineType : (stats.type ?? 'other');
+        const defaultName = isThisMachine
+            ? getThisMachineName(type)
+            : (type === 'android' && stats.androidModel) || getDeviceTypeLabel(type);
         const customName = this.customNames.get(key);
-
-        let type: DeviceType;
-        let typeLabel: string;
-        let defaultName: string;
-        if (isThisMachine) {
-            type = this.thisMachineType;
-            typeLabel = defaultName = getThisMachineName(type);
-        } else {
-            const [stats] = statsList; // Other devices have a single address
-            type = stats.type ?? 'other';
-            typeLabel = (type === 'android' && stats.androidModel) || getDeviceTypeLabel(type);
-            defaultName = `${typeLabel} · ${key}`;
-        }
+        const name = customName ?? defaultName;
 
         return {
             key,
             isThisMachine,
             type,
-            name: customName ?? defaultName,
+            name,
             defaultName,
             hasCustomName: !!customName,
-            shortName: customName ?? typeLabel,
-            addresses: _.sortBy(statsList
-                .map((stats) => stats.address)
-                .filter((address) => address !== THIS_MACHINE_KEY)
-            ),
-            eventCount: _.sumBy(statsList, (stats) => stats.eventCount),
-            firstSeen: _.min(statsList.map((stats) => stats.firstSeen))!,
-            lastSeen: _.max(statsList.map((stats) => stats.lastSeen))!,
-            apps: mergeApps(statsList),
-            hosts: mergeHosts(statsList)
+            shortName: name,
+            address: isThisMachine ? undefined : key,
+            addresses: _.sortBy([...stats.addresses.keys()].filter((address) => address !== THIS_MACHINE_KEY)),
+            eventCount: stats.eventCount,
+            firstSeen: stats.firstSeen,
+            lastSeen: stats.lastSeen,
+            apps: byCount([...stats.apps.values()].map((app) => ({ ...app })), (app) => app.name),
+            hosts: byCount(
+                [...stats.hosts.entries()].map(([host, count]) => ({ host, count })),
+                (host) => host.host
+            )
         };
     }
 
@@ -369,44 +300,94 @@ export class DevicesStore implements DeviceDirectory {
         return this.devicesByKey.get(deviceKey);
     }
 
+    /**
+     * This machine, which the panel always lists (with no requests, it's a placeholder).
+     */
+    @computed
+    get thisMachine(): DeviceSummary {
+        const device = this.devicesByKey.get(THIS_MACHINE_KEY);
+        if (device) return device;
+
+        const name = this.customNames.get(THIS_MACHINE_KEY) ?? getThisMachineName(this.thisMachineType);
+        return {
+            key: THIS_MACHINE_KEY,
+            isThisMachine: true,
+            type: this.thisMachineType,
+            name,
+            defaultName: getThisMachineName(this.thisMachineType),
+            hasCustomName: this.customNames.has(THIS_MACHINE_KEY),
+            shortName: name,
+            address: undefined,
+            addresses: [],
+            eventCount: 0,
+            firstSeen: 0,
+            lastSeen: 0,
+            apps: [],
+            hosts: []
+        };
+    }
+
+    // Phones & other computers: every device except this machine
+    @computed
+    get otherDevices(): ReadonlyArray<DeviceSummary> {
+        return this.devices.filter((device) => !device.isThisMachine);
+    }
+
     // Every captured event, for the "All devices" row
     get totalEventCount() {
         return this.eventsSource.events.length;
     }
 
-    @computed
-    get otherDeviceCount() {
-        return this.devices.filter((device) => !device.isThisMachine).length;
+    isActive(device: DeviceSummary, currentTime: number = now(ACTIVE_CHECK_INTERVAL_MS)) {
+        return device.eventCount > 0 && currentTime - device.lastSeen < ACTIVE_WINDOW_MS;
     }
 
-    isActive(device: DeviceSummary, currentTime: number = now(ACTIVE_CHECK_INTERVAL_MS)) {
-        return currentTime - device.lastSeen < ACTIVE_WINDOW_MS;
-    }
+    // --- Which device sent an event ---
 
     // The device key for an event: an arrow function, as filters call it unbound
     readonly getEventDeviceKey = (event: ViewableEvent): string | undefined => {
-        const clientEvent = event.isHttp() ? event.downstream : event;
-        const address = this.tracker.getAddress(clientEvent as CollectedEvent) ??
-            getEventAddress(clientEvent);
-        if (!address) return undefined;
-        return getDeviceKey(address, this.ownAddresses);
+        const clientEvent = getClientEvent(event);
+        return this.tracker.getDeviceKey(clientEvent as CollectedEvent) ?? getEventDeviceKey(clientEvent);
     };
 
+    // Each device's type, which only changes now and then (unlike its counts)
+    @computed({ equals: comparer.structural })
+    private get deviceTypes(): { [key: string]: DeviceType } {
+        return _.fromPairs(this.devices.map((device) => [device.key, device.type]));
+    }
+
+    // For the text filters (device=iphone), through the device directory
     getEventDevice(event: ViewableEvent): EventDevice | undefined {
         const key = this.getEventDeviceKey(event);
         if (!key) return undefined;
         if (key === THIS_MACHINE_KEY) return { key, type: this.thisMachineType };
 
-        this.revision; // A device's type can change as more of its requests arrive
-        const type = this.tracker.addresses.get(key)?.type ??
-            (event.isHttp() ? detectDeviceType(event.request) : undefined);
+        const clientEvent = getClientEvent(event);
+        const type = this.deviceTypes[key] ??
+            (clientEvent.isHttp() ? detectDeviceType(clientEvent.request) : undefined);
         return { key, type: type ?? 'other' };
     }
 
-    // The device an event came from, for the markers in the request list
-    getDeviceForEvent(event: ViewableEvent): DeviceSummary | undefined {
+    // --- The request list's device markers ---
+
+    // Mixed traffic from several devices gets a device marker on each request row
+    @computed
+    get showDeviceMarkers() {
+        return !this.selection && this.devices.length > 1;
+    }
+
+    @computed({ equals: comparer.structural })
+    private get deviceMarkers(): { [key: string]: DeviceMarker } {
+        return _.fromPairs(this.devices.map((device) => [device.key, {
+            name: device.shortName,
+            title: device.address ? `${device.name} (${device.address})` : device.name,
+            type: device.type
+        }]));
+    }
+
+    getDeviceMarker(event: ViewableEvent): DeviceMarker | undefined {
         const key = this.getEventDeviceKey(event);
-        return key ? this.devicesByKey.get(key) : undefined;
+        return key ? this.deviceMarkers[key] : undefined;
     }
 
     // --- Selection ---
@@ -432,7 +413,10 @@ export class DevicesStore implements DeviceDirectory {
         if (!selection) return undefined;
 
         const device = this.devicesByKey.get(selection.deviceKey);
-        if (!device) return undefined;
+        if (!device) {
+            // This machine is always listed, so it stays selected without traffic
+            return selection.deviceKey === THIS_MACHINE_KEY ? { deviceKey: THIS_MACHINE_KEY } : undefined;
+        }
 
         if (
             (selection.app !== undefined && !device.apps.some((app) => app.name === selection.app)) ||
@@ -464,16 +448,14 @@ export class DevicesStore implements DeviceDirectory {
         );
     }
 
+    // "iPhone", or "iPhone › Safari" for an app on it
     describeSelection(selection: DeviceSelection) {
-        const device = this.devicesByKey.get(selection.deviceKey);
-        return [device?.name ?? selection.deviceKey, selection.app, selection.host]
+        const device = selection.deviceKey === THIS_MACHINE_KEY
+            ? this.thisMachine
+            : this.devicesByKey.get(selection.deviceKey);
+
+        return [device?.shortName ?? selection.deviceKey, selection.app, selection.host]
             .filter((part) => part !== undefined)
             .join(' › ');
-    }
-
-    // Mixed traffic from several devices gets a device marker on each request row
-    @computed
-    get showDeviceMarkers() {
-        return !this.selection && this.devices.length > 1;
     }
 }

@@ -81,6 +81,10 @@ describe("Search filter model integration test:", () => {
                 { index: 0, showAs: "protocol" },
                 { index: 0, showAs: "httpVersion" },
                 { index: 0, showAs: "websocket" },
+                // wirepane: the Devices panel's filters
+                { index: 0, showAs: "device" },
+                { index: 0, showAs: "client-ip" },
+                { index: 0, showAs: "app" },
                 { index: 0, showAs: "not" },
                 { index: 0, showAs: "or" }
             ]);
@@ -112,6 +116,10 @@ describe("Search filter model integration test:", () => {
                 "traffic using a specific protocol like HTTPS, or WebSockets",
                 "exchanges using a given version of HTTP",
                 "websocket streams",
+                // wirepane: the Devices panel's filters
+                "requests from a given type of device",
+                "requests sent from a given IP address",
+                "requests sent by a given app",
                 "exchanges that do not match a given condition",
                 "exchanges that match any one of multiple conditions"
             ]);
@@ -1331,7 +1339,11 @@ describe("Search filter model integration test:", () => {
                 { index: 3, showAs: "port" },
                 { index: 3, showAs: "protocol" },
                 { index: 3, showAs: "httpVersion" },
-                { index: 3, showAs: "websocket" }
+                { index: 3, showAs: "websocket" },
+                // wirepane: the Devices panel's filters
+                { index: 3, showAs: "device" },
+                { index: 3, showAs: "client-ip" },
+                { index: 3, showAs: "app" }
             ]);
         });
 
@@ -1386,7 +1398,11 @@ describe("Search filter model integration test:", () => {
                 { index: 14, showAs: "port" },
                 { index: 14, showAs: "protocol" },
                 { index: 14, showAs: "httpVersion" },
-                { index: 14, showAs: "websocket)" }
+                { index: 14, showAs: "websocket)" },
+                // wirepane: the Devices panel's filters
+                { index: 14, showAs: "device" },
+                { index: 14, showAs: "client-ip" },
+                { index: 14, showAs: "app" }
             ]);
         });
 
@@ -1518,6 +1534,10 @@ describe("Search filter model integration test:", () => {
                 { index: 4, showAs: "protocol" },
                 { index: 4, showAs: "httpVersion" },
                 { index: 4, showAs: "websocket)" },
+                // wirepane: the Devices panel's filters
+                { index: 4, showAs: "device" },
+                { index: 4, showAs: "client-ip" },
+                { index: 4, showAs: "app" }
             ]);
         });
 

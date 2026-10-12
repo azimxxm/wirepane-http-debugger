@@ -1,7 +1,6 @@
 import type { CollectedEvent, HttpExchangeView } from '../../types';
 import type { IconProps } from '../../icons';
 import { getHeaderValue } from '../http/headers';
-import { isLoopbackAddress } from '../interception/phone-setup';
 
 import {
     DeviceType,
@@ -9,6 +8,7 @@ import {
     detectDeviceType,
     getAndroidModel,
     getAppName,
+    getDeviceKey,
     getEventAddress,
     getEventHost,
     getEventTime,
@@ -22,24 +22,25 @@ export interface AppCount {
     icon: IconProps;
 }
 
-/**
- * Everything seen from one client address. This machine usually has several of these
- * (127.0.0.1, ::1, its LAN address), which the store merges into one device.
- */
-export interface AddressStats {
-    address: string; // A normalised IP, or THIS_MACHINE_KEY for requests from Send
+// Everything seen from one device: this machine, or one client IP
+export interface DeviceStats {
+    key: string; // THIS_MACHINE_KEY, or the device's IP
     eventCount: number;
     firstSeen: number;
     lastSeen: number;
+    // From the user agents. Only for other devices: this machine's comes from its platform.
     type: DeviceType | undefined;
     androidModel: string | undefined;
+    // The addresses its traffic came from: one IP, or this machine's loopback addresses
+    addresses: Map<string, number>;
     apps: Map<string, AppCount>;
     hosts: Map<string, number>;
 }
 
 // What one event added, so removing it takes away exactly that
 interface Contribution {
-    stats: AddressStats;
+    stats: DeviceStats;
+    address: string;
     app: string | undefined;
     host: string | undefined;
 }
@@ -55,22 +56,22 @@ function decrement(counts: Map<string, number>, key: string) {
 }
 
 /**
- * Counts captured events by the address they came from, with their apps and hosts.
+ * Counts captured events by the device they came from, with their apps and hosts.
  * It's updated one event at a time as events are added and removed, so it stays
  * cheap with lots of traffic.
  */
 export class DeviceTracker {
 
-    private readonly stats = new Map<string, AddressStats>();
+    private readonly stats = new Map<string, DeviceStats>();
     private contributions = new WeakMap<CollectedEvent, Contribution>();
 
-    get addresses(): ReadonlyMap<string, AddressStats> {
+    get devices(): ReadonlyMap<string, DeviceStats> {
         return this.stats;
     }
 
-    // The address an event was counted under, if it was counted
-    getAddress(event: CollectedEvent): string | undefined {
-        return this.contributions.get(event)?.stats.address;
+    // The device an event was counted under, if it was counted
+    getDeviceKey(event: CollectedEvent): string | undefined {
+        return this.contributions.get(event)?.stats.key;
     }
 
     add(event: CollectedEvent) {
@@ -78,26 +79,29 @@ export class DeviceTracker {
 
         const address = getEventAddress(event);
         if (!address) return;
+        const key = getDeviceKey(address);
 
-        let stats = this.stats.get(address);
+        let stats = this.stats.get(key);
         const time = getEventTime(event);
         if (!stats) {
             stats = {
-                address,
+                key,
                 eventCount: 0,
                 firstSeen: time,
                 lastSeen: time,
                 type: undefined,
                 androidModel: undefined,
+                addresses: new Map(),
                 apps: new Map(),
                 hosts: new Map()
             };
-            this.stats.set(address, stats);
+            this.stats.set(key, stats);
         }
 
         stats.eventCount += 1;
         stats.firstSeen = Math.min(stats.firstSeen, time);
         stats.lastSeen = Math.max(stats.lastSeen, time);
+        increment(stats.addresses, address);
 
         let app: string | undefined;
         if (event.isHttp()) {
@@ -106,16 +110,13 @@ export class DeviceTracker {
             if (appCount) appCount.count += 1;
             else stats.apps.set(app, { name: app, count: 1, icon: event.request.source.icon });
 
-            // This machine's type comes from its platform instead
-            if (address !== THIS_MACHINE_KEY && !isLoopbackAddress(address)) {
-                this.updateType(stats, event);
-            }
+            if (key !== THIS_MACHINE_KEY) this.updateType(stats, event);
         }
 
         const host = getEventHost(event);
         if (host) increment(stats.hosts, host);
 
-        this.contributions.set(event, { stats, app, host });
+        this.contributions.set(event, { stats, address, app, host });
     }
 
     remove(event: CollectedEvent) {
@@ -123,8 +124,9 @@ export class DeviceTracker {
         if (!contribution) return;
         this.contributions.delete(event);
 
-        const { stats, app, host } = contribution;
+        const { stats, address, app, host } = contribution;
         stats.eventCount -= 1;
+        decrement(stats.addresses, address);
 
         if (app) {
             const appCount = stats.apps.get(app);
@@ -133,8 +135,8 @@ export class DeviceTracker {
         }
         if (host) decrement(stats.hosts, host);
 
-        if (stats.eventCount <= 0 && this.stats.get(stats.address) === stats) {
-            this.stats.delete(stats.address);
+        if (stats.eventCount <= 0 && this.stats.get(stats.key) === stats) {
+            this.stats.delete(stats.key);
         }
     }
 
@@ -144,7 +146,7 @@ export class DeviceTracker {
     }
 
     // The latest request decides, unless it's less sure than what's known already
-    private updateType(stats: AddressStats, event: HttpExchangeView) {
+    private updateType(stats: DeviceStats, event: HttpExchangeView) {
         const type = detectDeviceType(event.request);
         if (!type) return;
 

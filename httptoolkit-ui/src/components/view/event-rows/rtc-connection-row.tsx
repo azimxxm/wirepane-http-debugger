@@ -4,6 +4,7 @@ import { observer } from 'mobx-react';
 import { ArrowIcon, Icon } from '../../../icons';
 import { RTCConnection } from '../../../types';
 import { describeEventCategory } from '../../../model/events/categorization';
+import { DeviceCell } from '../../devices/device-marker'; // wirepane: device markers
 
 import {
     TrafficEventListRow,
@@ -52,6 +53,7 @@ export const RTCConnectionRow = observer((p: {
                 fixedWidth={true}
             />
         </Source>
+        <DeviceCell event={event} />
         <RTCConnectionDetails role='gridcell'>
             {
                 event.clientURL

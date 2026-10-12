@@ -27,6 +27,7 @@ import { RulesStore } from '../../model/rules/rules-store';
 import { AccountStore } from '../../model/account/account-store';
 import { SendStore } from '../../model/send/send-store';
 import { CollectionsStore } from '../../model/collections/collections-store';
+import { DevicesStore } from '../../model/devices/devices-store'; // wirepane: the Devices panel
 import { HttpExchange } from '../../model/http/http-exchange';
 import { Filter, FilterSet } from '../../model/filters/search-filters';
 import { buildRuleFromExchange } from '../../model/rules/rule-creation';
@@ -48,6 +49,7 @@ import { RTCMediaDetailsPane } from './rtc/rtc-media-details-pane';
 import { RTCConnectionDetailsPane } from './rtc/rtc-connection-details-pane';
 import { RawTunnelDetailsPane } from './raw-tunnel-details-pane';
 import { MultiSelectionSummaryPane } from './multi-selection-summary-pane';
+import { DevicesWorkspace } from '../devices/devices-panel'; // wirepane
 
 interface ViewPageProps {
     className?: string;
@@ -58,6 +60,7 @@ interface ViewPageProps {
     rulesStore: RulesStore;
     sendStore: SendStore;
     collectionsStore: CollectionsStore;
+    devicesStore: DevicesStore; // wirepane
     navigate: (path: string) => void;
     eventId?: string;
 }
@@ -174,6 +177,7 @@ const paneExpansionRequirements: { [key in ExpandableViewCardKey]: (event: Colle
 @inject('rulesStore')
 @inject('sendStore')
 @inject('collectionsStore')
+@inject('devicesStore') // wirepane
 @observer
 class ViewPage extends React.Component<ViewPageProps> {
 
@@ -217,14 +221,19 @@ class ViewPage extends React.Component<ViewPageProps> {
         filteredEventCount: [filtered: number, fromTotal: number]
     } {
         const { events } = this.props.eventsStore;
+        // wirepane: the Devices panel's selection is ANDed with the filter box
+        const { selectionFilter } = this.props.devicesStore;
+        const currentFilters: readonly Filter[] = selectionFilter
+            ? [...this.currentSearchFilters, selectionFilter]
+            : this.currentSearchFilters;
 
-        const filteredEvents = (this.currentSearchFilters.length === 0)
+        const filteredEvents = (currentFilters.length === 0)
             ? events
             : events.filter((event) => {
                 if (event.isHttp() && event.wasTransformed) {
-                    return this.currentSearchFilters.every((f) => f.matches(event.downstream) || f.matches(event.upstream!))
+                    return currentFilters.every((f) => f.matches(event.downstream) || f.matches(event.upstream!))
                 } else {
-                    return this.currentSearchFilters.every((f) => f.matches(event))
+                    return currentFilters.every((f) => f.matches(event))
                 }
             });
 
@@ -232,6 +241,19 @@ class ViewPage extends React.Component<ViewPageProps> {
             filteredEvents,
             filteredEventCount: [filteredEvents.length, events.length]
         };
+    }
+
+    // wirepane: with a device selected in the Devices panel, an empty list says which one
+    @computed
+    get noMatchesMessage(): string | undefined {
+        const { devicesStore } = this.props;
+        if (!devicesStore.selection) return undefined;
+
+        const [textFilter, ...otherFilters] = this.currentSearchFilters;
+        const source = devicesStore.describeSelection(devicesStore.selection);
+        return textFilter.filter || otherFilters.length > 0
+            ? `No requests from ${source} match this search filter`
+            : `No requests from ${source} yet`;
     }
 
     @observable
@@ -519,7 +541,7 @@ class ViewPage extends React.Component<ViewPageProps> {
                 />
             </PageHeader>
 
-            <PageBody><SplitPane
+            <PageBody><DevicesWorkspace><SplitPane
                 ref={this.splitPaneRef}
                 split={this.splitDirection}
                 primary='second'
@@ -543,6 +565,7 @@ class ViewPage extends React.Component<ViewPageProps> {
                         selectedEventIds={this.props.uiStore.selectedEventIds}
                         activeEventId={this.props.uiStore.activeEventId}
                         isPaused={isPaused}
+                        noMatchesMessage={this.noMatchesMessage}
 
                         moveSelection={this.moveSelection}
                         onSelected={this.onSelected}
@@ -562,7 +585,7 @@ class ViewPage extends React.Component<ViewPageProps> {
                 >
                     { rightPane }
                 </PaneOuterContainer>
-            </SplitPane></PageBody>
+            </SplitPane></DevicesWorkspace></PageBody>
 
             {Object.values(this.editors).map((node, i) =>
                 <portals.InPortal key={i} node={node}>
@@ -924,6 +947,7 @@ const StyledViewPage = styled(
         | 'rulesStore'
         | 'sendStore'
         | 'collectionsStore'
+        | 'devicesStore'
         | 'navigate'
     >
 )`

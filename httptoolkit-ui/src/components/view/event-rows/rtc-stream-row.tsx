@@ -5,6 +5,7 @@ import { ArrowIcon, Icon } from '../../../icons';
 import { RTCStream } from '../../../types';
 import { describeEventCategory } from '../../../model/events/categorization';
 import { getReadableSize } from '../../../util/buffer';
+import { DeviceCell } from '../../devices/device-marker'; // wirepane: device markers
 
 import {
     TrafficEventListRow,
@@ -73,6 +74,7 @@ export const RTCStreamRow = observer((p: {
                 fixedWidth={true}
             />
         </Source>
+        <DeviceCell event={event} />
         <RTCEventLabel role='gridcell'>
             <ArrowIcon direction='right' /> { event.rtcConnection.remoteURL }
         </RTCEventLabel>

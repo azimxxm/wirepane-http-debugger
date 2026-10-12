@@ -13,6 +13,7 @@ import { nameStepClass } from '../../../model/rules/rule-descriptions';
 
 import { StatusCode } from '../../common/status-code';
 import { ViewEventContextMenuBuilder } from '../view-context-menu-builder';
+import { DeviceCell } from '../../devices/device-marker'; // wirepane: device markers
 
 type StatusValue = React.ComponentProps<typeof StatusCode>['status'];
 
@@ -128,6 +129,7 @@ export const ExchangeRow = inject('uiStore')(observer((p: {
                 />
             }
         </Source>
+        <DeviceCell event={exchange} />
         <Host role='gridcell' title={ request.parsedUrl.host }>
             { request.parsedUrl.host }
         </Host>

@@ -4,8 +4,8 @@ import {
     DeviceType,
     THIS_MACHINE_KEY,
     detectDeviceType,
-    getDeviceKey,
-    getEventAddress
+    getClientEvent,
+    getEventDeviceKey
 } from './device-model';
 
 export interface EventDevice {
@@ -15,9 +15,10 @@ export interface EventDevice {
 }
 
 /**
- * Says which device sent an event. The devices store is the real one: it knows this
- * machine's addresses and what each device's earlier requests said about it. The
- * text filters (device=, client-ip=) are created from strings, so they look it up here.
+ * Says which device sent an event. The devices store is the real one: it knows what
+ * each device's earlier requests said about it (an iPhone app's request only says
+ * "iOS", but the same phone's Safari says "iPhone"). The text filters (device=) are
+ * created from strings, so they look it up here.
  */
 export interface DeviceDirectory {
     getEventDevice(event: ViewableEvent): EventDevice | undefined;
@@ -32,19 +33,16 @@ export const THIS_MACHINE_TYPE: DeviceType = platform.startsWith('Mac')
         ? 'windows'
         : 'linux';
 
-const NO_OWN_ADDRESSES: ReadonlySet<string> = new Set();
-
-// Used until the devices store is ready (and in tests): only loopback counts as this
-// machine, and each request's type comes from its own user agent.
+// Used until the devices store is ready (and in tests): each request's type comes from
+// its own user agent.
 const standaloneDirectory: DeviceDirectory = {
     getEventDevice(event) {
-        const address = getEventAddress(event);
-        if (!address) return undefined;
-
-        const key = getDeviceKey(address, NO_OWN_ADDRESSES);
+        const clientEvent = getClientEvent(event);
+        const key = getEventDeviceKey(clientEvent);
+        if (!key) return undefined;
         if (key === THIS_MACHINE_KEY) return { key, type: THIS_MACHINE_TYPE };
 
-        const type = event.isHttp() ? detectDeviceType(event.request) : undefined;
+        const type = clientEvent.isHttp() ? detectDeviceType(clientEvent.request) : undefined;
         return { key, type: type ?? 'other' };
     }
 };

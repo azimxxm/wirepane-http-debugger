@@ -14,53 +14,45 @@
 
 ## Ustuvorlik tartibi
 
-| #   | Ish                                                                 | Nega                                                     | Hajm      |
-| --- | ------------------------------------------------------------------- | -------------------------------------------------------- | --------- |
-| 0   | **Devices paneli (View):** qaysi request qaysi qurilmadan kelgani, Proxyman'dagi kabi. **Boshlangan, tugallanmagan** | Egasi 2–3 telefon ulasa View chalkash bo'ladi | M         |
-| 1   | ~~**Send v2:** fayl, rasm va media yuborish, Form, GraphQL, WebSocket~~ **tayyor** (2026-10-10) | API testing'ning asosiy qismi, egasi so'radi             | L         |
-| 2   | ~~**Connect a phone** ekrani va barqaror port~~ **tayyor** (2026-10-10) | iPhone va Android'ni ulash hozir chalkash, port siljiydi | M         |
-| 3   | **Dizayn 3-bosqich:** menu bar, ⌘K, ⌘,                              | Desktop konventsiyalari                                  | M         |
-| 4   | Dizaynni qayta tekshirish (`design-critic`)                         | Qabul mezonlari                                          | S         |
-| 5   | **iPhone testi** egasi bilan                                        | Haqiqiy qurilmada tekshiruv                              | S         |
-| 6   | **Maxfiylik:** upstream'ga telemetriya yuborilmasligi (asosiy qismi tayyor) | "Hech narsa sizib chiqmaydi" va'dasi                     | S, **P0** |
-| 7   | O'z `.app`imizni yig'ish va tarqatish                               | Oxirgi natija                                            | L         |
-| 8   | Collections davomi: testlar, runner, Keychain                       | Postman bilan teng bo'lish                               | L         |
-| 9   | Postman va Proxyman'dan qolgan feature'lar                          | "Bitta dastur" maqsadi                                   | XL        |
+| #   | Ish                                                                                                               | Nega                                                     | Hajm      |
+| --- | ----------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------- | --------- |
+| 0   | ~~**Devices paneli (View):** qaysi request qaysi qurilmadan kelgani, Proxyman'dagi kabi~~ **tayyor** (2026-10-12) | Egasi 2–3 telefon ulasa View chalkash bo'ladi            | M         |
+| 1   | ~~**Send v2:** fayl, rasm va media yuborish, Form, GraphQL, WebSocket~~ **tayyor** (2026-10-10)                   | API testing'ning asosiy qismi, egasi so'radi             | L         |
+| 2   | ~~**Connect a phone** ekrani va barqaror port~~ **tayyor** (2026-10-10)                                           | iPhone va Android'ni ulash hozir chalkash, port siljiydi | M         |
+| 3   | **Dizayn 3-bosqich:** menu bar, ⌘K, ⌘,                                                                            | Desktop konventsiyalari                                  | M         |
+| 4   | Dizaynni qayta tekshirish (`design-critic`)                                                                       | Qabul mezonlari                                          | S         |
+| 5   | **iPhone testi** egasi bilan                                                                                      | Haqiqiy qurilmada tekshiruv                              | S         |
+| 6   | **Maxfiylik:** upstream'ga telemetriya yuborilmasligi (asosiy qismi tayyor)                                       | "Hech narsa sizib chiqmaydi" va'dasi                     | S, **P0** |
+| 7   | O'z `.app`imizni yig'ish va tarqatish                                                                             | Oxirgi natija                                            | L         |
+| 8   | Collections davomi: testlar, runner, Keychain                                                                     | Postman bilan teng bo'lish                               | L         |
+| 9   | Postman va Proxyman'dan qolgan feature'lar                                                                        | "Bitta dastur" maqsadi                                   | XL        |
 
 ---
 
-## 0. Hozir davom etayotgan ish: Devices paneli (View)
+## 0. Devices paneli (View): tayyor (2026-10-12)
 
-**Nega:** egasi iPhone'ni Wi-Fi orqali uladi va trafik ko'rindi. Lekin 2–3 qurilma bo'lsa, View'da qaysi request qaysi telefondan kelgani bilinmaydi. Proxyman'da har bir qurilma **Devices** bo'limida alohida turadi. Qurilma ochilganda faqat uning request'lari ko'rinadi.
+**Nega:** egasi iPhone'ni Wi-Fi orqali uladi va trafik ko'rindi. Lekin 2–3 qurilma bo'lsa, View'da qaysi request qaysi telefondan kelgani bilinmas edi. Endi Proxyman'dagi kabi har bir qurilma **Devices** panelida alohida turadi.
 
-**Tayyor (commit `52073ab`, hali ulanmagan, testlari yo'q):** `httptoolkit-ui/src/model/devices/`. Unda:
+**Nima qilindi:**
 
-- `devices-store.ts`, `device-model.ts`, `device-tracker.ts`;
-- `device-names.ts` (qurilmani qayta nomlash, localStorage);
-- `device-filters.ts`, `device-selection-filter.ts`, `device-directory.ts`.
+- **Panel** (`httptoolkit-ui/src/components/devices/`): View'ning chap tomonida, yig'iladi va kengligi o'zgaradi; ikkalasi ham saqlanadi. Collections paneli bilan umumiy qismlari `components/common/side-panel.tsx`da.
+  - Qatorlar: All devices, This Mac, keyin har bir qurilma: tur ikonkasi, nom, IP, request soni va faollik nuqtasi (oxirgi 60 s).
+  - Qurilma ochilsa, uning ilovalari va eng ko'p ishlatgan domenlari chiqadi. Bosilsa, ro'yxat shunga filtrlanadi.
+  - Klaviatura: strelkalar, Enter (ochish/yopish), F2 (joyida qayta nomlash). O'ng tugma: Rename, Show only this device, Forget name, Copy IP address.
+  - Telefon yo'q bo'lsa: "Connect iPhone" va "Connect Android" tugmalari.
+- **Ro'yxat:** bir nechta qurilma bo'lsa va All devices tanlangan bo'lsa, "Device" ustuni chiqadi (ikonka va qisqa nom).
+- **Filtr:** panel tanlovi filtr qutisi bilan AND bo'ladi. Matnli filtrlar: `device=iphone` (`ipad`, `ios`, `android`, `mac`, `windows`, `linux`, `this`, `other`), `client-ip=192.168.0.23`, `app=Safari`. Ular taklif beradi, `not()`/`or()` ichida va MCP/CLI'da ham ishlaydi. HAR export ko'rinib turgan request'larni oladi.
+- **Status bar:** 2 va undan ko'p qurilma bo'lsa "N devices".
+- **Testlar:** `test/unit/model/devices/` va `test/unit/components/devices/`.
 
-Agent Mac o'chirilishi sababli to'xtatildi. Fayllarni avval o'qib, tekshirib olish kerak.
+**Qurilma qanday aniqlanadi:** client IP bo'yicha (`request.remoteIpAddress`; `::ffff:192.168.0.23` va `192.168.0.23` bitta qurilma). Loopback (127.x, ::1) va Send sahifasidan yuborilgan request'lar **This Mac** bo'ladi. Mac'ning o'z LAN IP'si ataylab alohida qurilma: haqiqiy telefonning IP'si doim boshqa, LAN IP'dan kelgan trafik esa odatda simulator yoki test tool. Turi User-Agent'dan olinadi (`model/interception/phone-setup.ts`dagi aniqlash), Android modeli ham ("Pixel 8"). Nomlar localStorage'da IP bo'yicha saqlanadi.
 
-**Qoldi:**
+**Keyinroq:**
 
-1. **View'dagi Devices paneli.** Chap tomonda, yig'iladigan va kengligi o'zgaradigan (Send'dagi Collections paneli kabi).
-   - Qatorlar: "All devices", "This Mac", keyin har bir qurilma: tur ikonkasi, nom, request soni va faollik nuqtasi (oxirgi 60 s).
-   - Qurilmani ochganda uning ilovalari va domenlari ko'rinadi.
-   - Bosilganda ro'yxat shu qurilma, ilova yoki domenga filtrlanadi.
-   - Klaviatura: strelkalar, Enter, F2 bilan qayta nomlash. O'ng tugma menyusi: Rename, Show only this device, Forget name.
-   - Bo'sh holatda tugma bo'lsin: "Intercept → iPhone or Android".
-2. **Request ro'yxati.** Bir nechta qurilma bo'lsa va "All devices" tanlangan bo'lsa, har bir qatorda kichik qurilma belgisi bo'lsin (ikonka va qisqa nom, yoki rangli nuqta).
-3. **Filtr.** Tanlov filtr qutisi bilan birga ishlasin (AND). Matnli filtr ham bo'lsin: `device=iphone`, `client-ip=192.168.0.23`. HAR export ko'rinib turgan request'larga mos kelsin.
-4. **Status bar.** "2 devices" kabi yozuv.
-5. **Unit testlar:** IP bo'yicha guruhlash, loopback, User-Agent turlari, nomlar va filtr.
-6. **Tekshiruv uchta qurilma bilan:**
-   - This Mac: `127.0.0.1`;
-   - iPhone: Mac'ning LAN IP'sidan `curl --interface` va iPhone User-Agent;
-   - Android User-Agent.
-
-   Light va dark mode skrinshotlari olinsin.
-
-**Qurilma qanday aniqlanadi:** client IP bo'yicha (`request.remoteIpAddress`). Turi User-Agent'dan olinadi; buning uchun `model/interception/phone-setup.ts`dagi iOS/Android aniqlash qayta ishlatiladi. DHCP IP'ni almashtirsa qurilma yangidek ko'rinadi. Keyinroq MAC manzil bilan bog'lash mumkin (`arp -a`).
+- DHCP IP'ni almashtirsa, qurilma yangidek ko'rinadi. MAC manzil bilan bog'lash mumkin (`arp -a`).
+- USB (ADB) orqali ulangan Android va iOS Simulator trafigi loopback'dan keladi, shuning uchun This Mac ichida chiqadi (This Mac'ni ochib, ilova bo'yicha ajratsa bo'ladi).
+- HAR fayllarda client IP saqlanmaydi, shuning uchun import qilingan request'lar hech qaysi qurilmaga tushmaydi.
+- Haqiqiy iPhone bilan tekshirish (5-band).
 
 ## 1. Send v2: tayyor (2026-10-10)
 

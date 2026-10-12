@@ -8,6 +8,7 @@ import { getStatusDocs, METHOD_NAMES } from '../http/http-docs';
 import { getReadableSize } from '../../util/buffer';
 import { EventCategories } from '../events/categorization';
 import { WebSocketStream } from '../websockets/websocket-stream';
+import { buildDeviceFilterClasses } from '../devices/device-filters'; // wirepane: the Devices panel's filters
 
 import {
     matchSyntax,
@@ -1413,7 +1414,8 @@ const BaseSearchFilterClasses: FilterClass[] = [
     PortFilter,
     ProtocolFilter,
     HttpVersionFilter,
-    WebSocketFilter
+    WebSocketFilter,
+    ...buildDeviceFilterClasses(Filter) // wirepane: device=, client-ip= & app=
 ];
 
 // Meta-filters, which can wrap the base filters above:

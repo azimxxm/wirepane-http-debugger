@@ -59,12 +59,13 @@
 - **Wirepane CA:** the server now creates its own "Wirepane CA" (`wirepane-ca.pem`); the official app's `ca.pem` is untouched. Phones get it at `http://wirepane.cert/certificate` (answered by the proxy). The owner's iPhone still has the old "HTTP Toolkit CA": remove it, install Wirepane CA, turn on full trust, check `https://wirepane.cert`. The app's proxy port was 8040.
 - **Dock:** `start.sh` brands the dev Electron.app as Wirepane (`scripts/brand-dev-electron.sh`). Verified: macOS shows "Wirepane" with our icon.
 - **Menu bar icon:** added (`httptoolkit-desktop/src/menu-bar-icon.ts`), not yet seen running: it appears on the next `./start.sh`. Check it shows and its menu works.
-- **Devices panel in View (in progress, stopped for the shutdown):** the owner wants a Proxyman-style Devices section. With 2–3 phones, View should show which request came from which device; opening a device shows only its requests, then its apps and domains.
-  - Done: the model only, in `httptoolkit-ui/src/model/devices/` (store, tracker, names, filters, selection filter). It's committed but not wired in, and has no tests yet.
-  - Left: the collapsible Devices panel in View, a device marker in the list, the `device=` / `client-ip=` text filter, "N devices" in the status bar, unit tests, and checking with 3 devices.
-  - The full brief is the "Devices panel" task: identify devices by client IP, take the type from the User-Agent (reuse `model/interception/phone-setup.ts`), let users rename them (localStorage), and AND the selection with the filter box.
+- **Devices panel in View (done 2026-10-12):** a Proxyman-style Devices section on the left of View (`httptoolkit-ui/src/components/devices/`, model in `src/model/devices/`).
+  - Devices are told apart by client IP. Loopback & Send-page requests are "This Mac"; this Mac's own LAN IP is its own device on purpose (simulators, `curl --interface` tests). Type & Android model come from the User-Agent; names are kept in localStorage by IP.
+  - Rows: All devices, This Mac, each device (icon, name, IP, count, a dot when active in the last minute). A device opens to its apps & busiest domains. Clicking or arrow keys filter the list, ANDed with the filter box. F2 renames in place; right-click has Rename, Show only this device, Forget name, Copy IP address. It collapses and resizes like the Collections panel (shared parts in `components/common/side-panel.tsx`).
+  - The list gets a Device column when several devices have traffic. New text filters `device=`, `client-ip=`, `app=` (also for MCP/CLI `events list`). "N devices" in the status bar. HAR export follows the selection.
+  - Checked in headless Chrome, light & dark, with 3 devices: this Mac, an "iPhone" from the LAN IP, and an injected Pixel 8.
 
-**Next, in order:** finish the Devices panel → check the menu bar icon → redo the iPhone test with Wirepane CA → design phase 3 (menu bar menus, ⌘K, ⌘,).
+**Next, in order:** check the menu bar icon → redo the iPhone test with Wirepane CA → design phase 3 (menu bar menus, ⌘K, ⌘,).
 
 > The full list of remaining work, with details and acceptance criteria, is in `docs/remaining-work.md`.
 

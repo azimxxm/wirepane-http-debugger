@@ -35,6 +35,7 @@ import { InterceptorStore } from './model/interception/interceptor-store';
 import { ApiStore } from './model/api/api-store';
 import { SendStore } from './model/send/send-store';
 import { CollectionsStore } from './model/collections/collections-store';
+import { DevicesStore } from './model/devices/devices-store'; // wirepane: View's Devices panel
 
 import { serverVersion, desktopVersion, lastServerVersion, UI_VERSION } from './services/service-versions';
 import {
@@ -88,6 +89,7 @@ const rulesStore = new RulesStore(accountStore, proxyStore,
 const eventsStore = new EventsStore(proxyStore, apiStore, rulesStore);
 const sendStore = new SendStore(accountStore, eventsStore, rulesStore, proxyStore);
 const collectionsStore = new CollectionsStore(sendStore);
+const devicesStore = new DevicesStore(eventsStore); // wirepane
 
 const stores = {
     accountStore,
@@ -98,7 +100,8 @@ const stores = {
     interceptorStore,
     rulesStore,
     sendStore,
-    collectionsStore
+    collectionsStore,
+    devicesStore // wirepane
 };
 
 const appStartupPromise = Promise.all(

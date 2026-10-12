@@ -14,9 +14,11 @@ import { ProxyStore } from '../model/proxy-store';
 import { RulesStore } from '../model/rules/rules-store';
 import { TrafficSource } from '../model/http/sources';
 import { countActiveUserRules, getConnectedClients } from '../model/traffic-summary';
+import { DevicesStore } from '../model/devices/devices-store';
 
 import { UnstyledButton } from './common/inputs';
 import { ClientIcon } from './common/client-icon';
+import { DeviceIcon } from './devices/device-icon';
 
 export const STATUS_BAR_HEIGHT = 28;
 
@@ -93,6 +95,10 @@ const statusItemStyles = css`
 
 const StatusButton = styled(UnstyledButton)`${statusItemStyles}`;
 const StatusLink = styled(Link)`${statusItemStyles}`;
+// Short, so it keeps its place and the clients item gives way instead
+const DevicesLink = styled(StatusLink)`
+    flex-shrink: 0;
+`;
 
 const Spacer = styled.div`
     flex: 1 1 auto;
@@ -168,15 +174,32 @@ const ClientsItem = (props: { clients: TrafficSource[] }) => {
     </StatusLink>;
 };
 
+// Only with traffic from more than one device: how many, and a way to the Devices panel
+const DevicesItem = observer((props: { devicesStore: DevicesStore }) => {
+    const { devices, showPanel } = props.devicesStore;
+    if (devices.length < 2) return null;
+
+    const deviceList = devices.map((device) =>
+        `${device.name}${device.address ? ` (${device.address})` : ''}: ` +
+        `${device.eventCount.toLocaleString()} request${device.eventCount === 1 ? '' : 's'}`
+    ).join('\n');
+
+    return <DevicesLink to='/view' onClick={showPanel} title={`Devices with traffic:\n${deviceList}`}>
+        <DeviceIcon type='all' size={14} />
+        <span>{ devices.length } devices</span>
+    </DevicesLink>;
+});
+
 /**
  * The bar along the bottom of every page: what Wirepane is doing right now (recording,
  * the proxy address, connected clients) and what it has (requests, active rules).
  * It's also the one place to pause & resume recording.
  */
-export const StatusBar = inject('eventsStore', 'proxyStore', 'rulesStore')(observer((props: {
+export const StatusBar = inject('eventsStore', 'proxyStore', 'rulesStore', 'devicesStore')(observer((props: {
     eventsStore?: EventsStore,
     proxyStore?: ProxyStore,
-    rulesStore?: RulesStore
+    rulesStore?: RulesStore,
+    devicesStore?: DevicesStore
 }) => {
     const eventsStore = props.eventsStore!;
     const proxyStore = props.proxyStore!;
@@ -244,6 +267,7 @@ export const StatusBar = inject('eventsStore', 'proxyStore', 'rulesStore')(obser
         <LiveRegion aria-live='polite'>{ copied ? 'Proxy address copied' : '' }</LiveRegion>
 
         <ClientsItem clients={clients} />
+        <DevicesItem devicesStore={props.devicesStore!} />
 
         <Spacer />
 

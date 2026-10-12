@@ -17,6 +17,7 @@ import { THIS_MACHINE_TYPE, getDeviceDirectory } from './device-directory';
 import {
     DeviceType,
     THIS_MACHINE_KEY,
+    getClientEvent,
     getEventAddress,
     getEventAppName,
     getThisMachineName,
@@ -139,18 +140,24 @@ export function deviceMatchesKeyword(
     }
 }
 
+// The client IP of an event, if it has one (requests from the Send page don't)
+function getClientAddress(event: ViewableEvent): string | undefined {
+    const address = getEventAddress(getClientEvent(event));
+    return address === THIS_MACHINE_KEY ? undefined : address;
+}
+
 // --- Suggestions from the captured traffic ---
 
 const getAddressSuggestions = (events: ViewableEvent[]) =>
     _(events)
-        .map(getEventAddress)
+        .map((event) => getClientAddress(event))
         .uniq()
-        .filter((address): address is string => !!address && address !== THIS_MACHINE_KEY)
+        .filter((address): address is string => !!address)
         .valueOf();
 
 const getAppSuggestions = (events: ViewableEvent[]) =>
     _(events)
-        .map(getEventAppName)
+        .map((event) => getEventAppName(event))
         .uniq()
         .filter((name): name is string => !!name)
         .valueOf();
@@ -248,8 +255,8 @@ export function buildDeviceFilterClasses(FilterBase: FilterBaseClass): FilterCla
         }
 
         matches(event: ViewableEvent): boolean {
-            const address = getEventAddress(event);
-            if (!address || address === THIS_MACHINE_KEY) return false;
+            const address = getClientAddress(event);
+            if (!address) return false;
             return this.predicate(address.toLowerCase(), this.expectedAddress);
         }
 

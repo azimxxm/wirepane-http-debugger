@@ -73,6 +73,7 @@ function eventsListOperation(
                             '- body (body*=error)\n' +
                             '- bodySize (bodySize>=1000)\n' +
                             '- completed, pending, aborted, errored\n' +
+                            '- device (device=iphone, device=android, device=this), client-ip (client-ip=192.168.0.23), app (app=Safari)\n' + // wirepane: the Devices panel's filters
                             '- contains(x) - search method, URL, headers & body at once\n' +
                             '- not(filter) and or(a, b) for logical composition\n' +
                             '\n' +

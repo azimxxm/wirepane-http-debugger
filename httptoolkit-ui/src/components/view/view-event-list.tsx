@@ -29,6 +29,7 @@ import {
     RowPin
 } from './event-rows/event-row-components';
 import { EventRow, EventRowProps } from './event-rows/event-row';
+import { DeviceColumnHeader } from '../devices/device-marker'; // wirepane: device markers
 
 const SCROLL_BOTTOM_MARGIN = 5; // If you're in the last 5 pixels of the scroll area, we say you're at the bottom
 
@@ -53,6 +54,8 @@ interface ViewEventListProps {
     activeEventId: string | undefined;
 
     isPaused: boolean;
+    // wirepane: what to say when the filters hide everything, e.g. for a device with no requests
+    noMatchesMessage?: string;
 
     contextMenuBuilder: ViewEventContextMenuBuilder;
     uiStore: UiStore;
@@ -168,6 +171,7 @@ export class ViewEventList extends React.Component<ViewEventListProps> {
                 <Method role="columnheader">Method</Method>
                 <Status role="columnheader">Status</Status>
                 <Source role="columnheader">Source</Source>
+                <DeviceColumnHeader />
                 <Host role="columnheader">Host</Host>
                 <PathAndQuery role="columnheader">Path and query</PathAndQuery>
             </TableHeaderRow>
@@ -185,7 +189,7 @@ export class ViewEventList extends React.Component<ViewEventListProps> {
 
                 : filteredEvents.length === 0
                 ? <EmptyStateOverlay icon='QuestionMark'>
-                        No requests match this search filter{
+                        { this.props.noMatchesMessage ?? 'No requests match this search filter' }{
                             isPaused ? ' and interception is paused' : ''
                         }
                 </EmptyStateOverlay>

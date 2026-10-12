@@ -7,6 +7,7 @@ import { HttpExchange } from '../../../types';
 import { describeEventCategory } from '../../../model/events/categorization';
 
 import { ViewEventContextMenuBuilder } from '../view-context-menu-builder';
+import { DeviceCell } from '../../devices/device-marker'; // wirepane: device markers
 
 import {
     TrafficEventListRow,
@@ -70,6 +71,7 @@ export const BuiltInApiRow = observer((p: {
                 fixedWidth={true}
             />
         </Source>
+        <DeviceCell event={p.exchange} />
         <BuiltInApiRequestDetails role='gridcell'>
             { apiRequestDescription }
         </BuiltInApiRequestDetails>

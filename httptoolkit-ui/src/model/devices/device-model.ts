@@ -10,8 +10,13 @@ import {
 } from '../interception/phone-setup';
 
 /**
- * Which device sent each request. Devices are told apart by the client's IP address,
- * and named from what their user agents say (iPhone, Android, Mac...).
+ * Which device sent each request. Devices are told apart by the client's IP address:
+ * loopback traffic (and requests sent from the Send page) is this machine, and every
+ * other address is a device of its own, named from what its user agents say.
+ *
+ * This machine's own LAN address counts as another device on purpose: real phones
+ * always have their own address, and the traffic that does come from this machine's
+ * LAN address is usually a simulator or a test tool pretending to be a phone.
  */
 
 export type DeviceType =
@@ -24,7 +29,7 @@ export type DeviceType =
     | 'linux'
     | 'other';
 
-// The key of the device Wirepane runs on: loopback & this machine's own addresses
+// The key of the device Wirepane runs on
 export const THIS_MACHINE_KEY = 'this-machine';
 
 // Requests made from the Send page
@@ -49,9 +54,16 @@ export function getThisMachineName(platformType: DeviceType) {
 
 // --- Addresses ---
 
-// Normalising is called for every event while filtering, so results are cached
-const normalizedAddresses = new Map<string, string>();
+// These run for every event while filtering, so their results are cached
 const MAX_CACHED_ADDRESSES = 5000;
+const normalizedAddresses = new Map<string, string>();
+const deviceKeys = new Map<string, string>();
+
+function cacheResult(cache: Map<string, string>, key: string, value: string) {
+    if (cache.size >= MAX_CACHED_ADDRESSES) cache.clear();
+    cache.set(key, value);
+    return value;
+}
 
 /**
  * The canonical form of a client address: IPv4 clients on dual-stack sockets show up
@@ -69,18 +81,15 @@ export function normalizeAddress(address: string | undefined): string | undefine
     } catch (e) {
         normalized = address; // Not an IP we can parse, but still a stable key
     }
-
-    if (normalizedAddresses.size >= MAX_CACHED_ADDRESSES) normalizedAddresses.clear();
-    normalizedAddresses.set(address, normalized);
-    return normalized;
+    return cacheResult(normalizedAddresses, address, normalized);
 }
 
 export const isSentFromSendPage = (event: ViewableEvent) =>
     event.isHttp() && event.request.tags.includes(MANUALLY_SENT_TAG);
 
 /**
- * The address a captured event came from. Requests made from the Send page have no
- * client address, but they're sent by this machine, so they get its key.
+ * The address a captured event came from. Requests made from the Send page are sent
+ * by this machine, so they get its key instead of an address.
  */
 export function getEventAddress(event: ViewableEvent): string | undefined {
     if (event.isHttp()) {
@@ -93,15 +102,25 @@ export function getEventAddress(event: ViewableEvent): string | undefined {
     return undefined; // WebRTC: the browser extension doesn't say which device
 }
 
-export function isThisMachineAddress(address: string, ownAddresses: ReadonlySet<string>) {
-    return address === THIS_MACHINE_KEY ||
-        ownAddresses.has(address) ||
-        isLoopbackAddress(address);
+// The device key for an address: this machine's key for loopback, or the address itself
+export function getDeviceKey(address: string): string {
+    const cached = deviceKeys.get(address);
+    if (cached !== undefined) return cached;
+
+    const key = address === THIS_MACHINE_KEY || isLoopbackAddress(address)
+        ? THIS_MACHINE_KEY
+        : address;
+    return cacheResult(deviceKeys, address, key);
 }
 
-// The device key for an address: this machine's key, or the address itself
-export const getDeviceKey = (address: string, ownAddresses: ReadonlySet<string>) =>
-    isThisMachineAddress(address, ownAddresses) ? THIS_MACHINE_KEY : address;
+export function getEventDeviceKey(event: ViewableEvent): string | undefined {
+    const address = getEventAddress(event);
+    return address ? getDeviceKey(address) : undefined;
+}
+
+// The device & the app are the client's, even for a request a rule rewrote
+export const getClientEvent = (event: ViewableEvent): ViewableEvent =>
+    event.isHttp() ? event.downstream : event;
 
 // --- Device types ---
 
@@ -129,7 +148,8 @@ const IPAD_MODEL_ID = /\biPad\d/;
 
 /**
  * The type of device that sent a request from another machine. Phones are recognised
- * the same way as on the Connect iPhone & Android pages.
+ * the same way as on the Connect iPhone & Android pages, which only trust Apple's
+ * networking (CFNetwork) and OkHttp user agents when they come from another device.
  */
 export function detectDeviceType(
     request: Pick<HtkRequest, 'headers' | 'remoteIpAddress' | 'url'>
@@ -137,8 +157,7 @@ export function detectDeviceType(
     const userAgent = getHeaderValue(request.headers, 'user-agent');
     if (!userAgent) return undefined;
 
-    const iosMatch = matchPhoneRequest(request, 'ios');
-    if (iosMatch) {
+    if (matchPhoneRequest(request, 'ios')) {
         const deviceName = getAppleDeviceName(userAgent);
         if (deviceName === 'iPad' || IPAD_MODEL_ID.test(userAgent)) return 'ipad';
         if (deviceName === 'iPhone' || IPHONE_MODEL_ID.test(userAgent)) return 'iphone';
@@ -217,7 +236,8 @@ export function getAppName(request: Pick<HtkRequest, 'source'>): string {
 }
 
 export function getEventAppName(event: ViewableEvent): string | undefined {
-    return event.isHttp() ? getAppName(event.request) : undefined;
+    const clientEvent = getClientEvent(event);
+    return clientEvent.isHttp() ? getAppName(clientEvent.request) : undefined;
 }
 
 // The hostname a request or connection went to
