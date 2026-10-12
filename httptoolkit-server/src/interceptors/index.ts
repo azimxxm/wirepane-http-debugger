@@ -29,6 +29,8 @@ import { ElectronInterceptor } from './electron';
 import { JvmInterceptor } from './jvm';
 import { FridaAndroidInterceptor } from './frida/frida-android-interceptor';
 import { FridaIosInterceptor } from './frida/frida-ios-interceptor';
+// wirepane: iPhone traffic through a WireGuard VPN (the wirepane-tunnel helper)
+import { WireGuardVpnInterceptor } from './wireguard-vpn';
 
 export interface Interceptor {
     id: string;
@@ -100,7 +102,10 @@ export function buildInterceptors(config: HtkConfig): _.Dictionary<Interceptor> 
         new FridaIosInterceptor(config),
 
         new JvmInterceptor(config),
-        new DockerContainerInterceptor(config)
+        new DockerContainerInterceptor(config),
+
+        // wirepane:
+        new WireGuardVpnInterceptor(config)
     ];
 
     // When the server exits, try to shut down the interceptors too
