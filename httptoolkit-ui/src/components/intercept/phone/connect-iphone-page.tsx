@@ -34,6 +34,7 @@ import {
 // Wirepane's own CA, separate from the official app's ca.pem (see CLAUDE.md, Branding)
 const CA_NAME = 'Wirepane CA';
 const CERTIFICATE_FILENAME = 'wirepane-ca-certificate.crt';
+const CERTIFICATE_MIME_TYPE = 'application/x-x509-ca-cert';
 
 const StepsLayout = styled.div`
     display: flex;
@@ -52,6 +53,29 @@ const StepsLayout = styled.div`
 const InlineCopy = styled.span`
     white-space: nowrap;
 `;
+
+// The AirDrop route, right in step 3 for when Safari isn't an option
+const StepAlternative = styled.div`
+    padding-top: 4px;
+
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px 10px;
+`;
+
+const CaptionLine = styled.span`
+    display: block;
+
+    & + & {
+        margin-top: 6px;
+    }
+`;
+
+const SaveCertificateButton = (props: { onSave: () => void }) =>
+    <ActionButton icon='DownloadSimple' onClick={props.onSave}>
+        Save certificate (.crt)
+    </ActionButton>;
 
 /**
  * Connect an iPhone or iPad over Wi-Fi: the proxy address to type in, the certificate
@@ -72,6 +96,10 @@ export const ConnectIPhonePage = inject('proxyStore', 'eventsStore')(observer((p
     const port = proxyStore.httpProxyPort;
     const server = addresses?.[0]?.address;
     const { certContent } = proxyStore;
+    // Both "Save certificate" buttons (step 3 & the AirDrop card) save the same file
+    const saveCertificate = certContent
+        ? () => saveFile(CERTIFICATE_FILENAME, CERTIFICATE_MIME_TYPE, certContent)
+        : undefined;
 
     return <PhoneSetupLayout
         title='iPhone or iPad'
@@ -114,12 +142,28 @@ export const ConnectIPhonePage = inject('proxyStore', 'eventsStore')(observer((p
                             Authentication off. Then tap Save.
                         </p>
                     </SetupStep>
-                    <SetupStep number={3} title='Download the certificate'>
+                    <SetupStep number={3} title='Download the certificate in Safari'>
                         <p>
-                            In Safari, open <Mono>{ CERTIFICATE_PAGE_URL }</Mono> <InlineCopy>
+                            Open <Mono>{ CERTIFICATE_PAGE_URL }</Mono> <InlineCopy>
                                 <CopyButton value={CERTIFICATE_PAGE_URL} label='the certificate page address' />
-                            </InlineCopy>, or scan the code with the Camera. Tap Allow to download the profile.
+                            </InlineCopy> in <strong>Safari</strong> and tap Allow to download the profile.
+                            Chrome and other browsers can't download it and show an empty page.
                         </p>
+                        <StepAlternative>
+                            { saveCertificate
+                                ? <>
+                                    <span>
+                                        Or skip Safari: save the certificate and AirDrop it to the
+                                        iPhone, then go to step 4.
+                                    </span>
+                                    <SaveCertificateButton onSave={saveCertificate} />
+                                </>
+                                : <span>
+                                    Or skip Safari: AirDrop the certificate file to the iPhone
+                                    (see below), then go to step 4.
+                                </span>
+                            }
+                        </StepAlternative>
                     </SetupStep>
                     <SetupStep number={4} title='Install the profile'>
                         <MenuPath items={[
@@ -148,8 +192,14 @@ export const ConnectIPhonePage = inject('proxyStore', 'eventsStore')(observer((p
                 </SetupSteps>
 
                 <CertificateQrCode caption={<>
-                    The certificate page, for step 3. Scan it after step 2: it only opens
-                    through Wirepane's proxy.
+                    <CaptionLine>
+                        The certificate page, for step 3. Scan it after step 2: it only opens
+                        through Wirepane's proxy.
+                    </CaptionLine>
+                    <CaptionLine>
+                        The Camera opens it in your default browser. If that isn't Safari, copy
+                        the address into Safari instead.
+                    </CaptionLine>
                 </>} />
             </StepsLayout>
         </Card>
@@ -161,18 +211,9 @@ export const ConnectIPhonePage = inject('proxyStore', 'eventsStore')(observer((p
                     If Safari won't download it, save the certificate here and AirDrop it to the
                     iPhone (in Finder: right-click the file › Share › AirDrop). Then do steps&nbsp;4&nbsp;and&nbsp;5.
                 </p>
-                { certContent
+                { saveCertificate
                     ? <div>
-                        <ActionButton
-                            icon='DownloadSimple'
-                            onClick={() => saveFile(
-                                CERTIFICATE_FILENAME,
-                                'application/x-x509-ca-cert',
-                                certContent
-                            )}
-                        >
-                            Save certificate (.crt)
-                        </ActionButton>
+                        <SaveCertificateButton onSave={saveCertificate} />
                     </div>
                     : <p>The certificate is on this computer at <Mono>{ proxyStore.certPath }</Mono>.</p>
                 }
