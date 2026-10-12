@@ -260,6 +260,26 @@ Gatekeeper birinchi ochishda to'xtatadi: o'ng tugma → Open yoki "Open Anyway".
   - collection example'laridan mock.
 - Test ma'lumotlari: `~/Library/Preferences/httptoolkit/collections`dagi 3 ta collection egasi ishlatishi uchun qoldirilgan.
 
+## 8.5. v1.1: telefondagi hamma ilovani ko'rish (VPN rejimi)
+
+**Nega (egasi, 2026-10-12):** proxy rejimida faqat iOS proxy sozlamasiga amal qiladigan ilovalar (Chrome, Safari) ko'rinadi. Flutter ilovalari, o'yinlar, UDP/QUIC va o'z socket'iga ega ilovalar Wirepane'ni chetlab o'tadi. Egasi "telefondan nima ketsa hammasini" ko'rmoqchi.
+
+**Reja:** [`docs/research/phone-vpn-mode.md`](research/phone-vpn-mode.md).
+
+- Kichik Rust sidecar `wirepane-tunnel` mitmproxy_rs (MIT: boringtun + smoltcp) ustiga quriladi va root talab qilmaydi.
+- Telefon rasmiy **WireGuard** ilovasini ishlatadi, sozlama QR orqali beriladi.
+- TCP oqimlar Mockttp'ga SOCKS5 orqali asl manzil va qurilma tegi bilan uzatiladi.
+- UDP, DNS va QUIC metadata'sini sidecar yig'adi va View'ga beradi.
+- Asosiy xavf: macOS 15+ Local Network ruxsati.
+- Hajm: 4–6 hafta (bitta dasturchi), QUIC SNI'siz MVP 3–4 hafta.
+
+**Arzon interim yaxshilanishlar:**
+
+- `unknown-protocol` passthrough (raw tunnels) hozir hech qachon yoqilmaydi: `featureFlags` doim bo'sh (`proxy-store.ts`, `account-store.ts`). Yoqilsa, HTTP bo'lmagan TCP ulanishlar yopilish o'rniga tunnel bo'lib ko'rinadi.
+- Pinning qiladigan host'lar uchun bir bosishda TLS passthrough.
+- iPhone sahifasida qaysi trafik ko'rinishi va qaysi ko'rinmasligi haqida tushuntirish.
+- Sertifikatni **Safari'da** ochish kerakligi (Chrome'da ochilmaydi), QR esa default brauzerda ochiladi.
+
 ## 9. "Bitta dastur" uchun qolgan feature'lar
 
 Postman'dan (`docs/research/postman.md`):
