@@ -1,0 +1,165 @@
+import * as React from 'react';
+import { observer } from 'mobx-react-lite';
+
+import { styled } from '../../../styles';
+
+import { QueryParam } from '../../../model/send/send-extras';
+import { RequestInput } from '../../../model/send/send-request-model';
+import { getQueryParams, setQueryParams } from '../../../model/send/params/query-params';
+import { decodePathValue, getPathParams, PathParam, setPathParamValue } from '../../../model/send/params/path-params';
+
+import {
+    FieldCellInput,
+    FieldDeleteButton,
+    FieldEnabledCheckbox,
+    FieldRow,
+    FieldTable,
+    focusRowAfterRemoval,
+    onFieldTableKeyDown
+} from '../body/field-table';
+import { PanelNote, PanelScroll, PanelSection, PanelSectionHeading } from './panel-layout';
+
+// The same columns as the body's form table: enabled, name, value, remove
+const PARAM_COLUMNS = '20px minmax(0, 1fr) minmax(0, 2fr) min-content';
+
+const PathParamName = styled.div`
+    height: 30px;
+    padding: 0 11px;
+    overflow: hidden;
+
+    display: flex;
+    align-items: center;
+
+    font-family: ${p => p.theme.monoFontFamily};
+    font-size: ${p => p.theme.textInputFontSize};
+    color: ${p => p.theme.mainLowlightColor};
+    white-space: nowrap;
+    text-overflow: ellipsis;
+`;
+
+// One query param, or (with no param) the empty last row, which adds one when typed into
+const QueryParamRow = (props: {
+    param: QueryParam | undefined,
+    onChange: (change: Partial<QueryParam>) => void,
+    onRemove: () => void
+}) => {
+    const { param } = props;
+    const name = param?.name ?? '';
+
+    return <FieldRow
+        gridColumns={PARAM_COLUMNS}
+        isDisabled={!!param && !param.enabled}
+        data-field-row=''
+    >
+        <FieldEnabledCheckbox
+            enabled={param?.enabled ?? true}
+            fieldName={name}
+            placeholder={!param}
+            onChange={(enabled) => props.onChange({ enabled })}
+        />
+        <FieldCellInput
+            value={name}
+            placeholder='Name'
+            aria-label='Query param name'
+            title={param?.description}
+            onChange={(event) => props.onChange({ name: event.target.value })}
+        />
+        <FieldCellInput
+            value={param?.value ?? ''}
+            placeholder='Value'
+            aria-label={name ? `Value of ${name}` : 'Query param value'}
+            onChange={(event) => props.onChange({ value: event.target.value })}
+        />
+        <FieldDeleteButton
+            fieldName={name}
+            placeholder={!param}
+            onClick={props.onRemove}
+        />
+    </FieldRow>;
+};
+
+const PathParamRow = (props: {
+    param: PathParam,
+    onChange: (value: string) => void
+}) => {
+    const { name, value } = props.param;
+
+    return <FieldRow gridColumns={PARAM_COLUMNS} data-field-row=''>
+        <span />
+        <PathParamName title={`:${name} in the URL's path`}>:{ name }</PathParamName>
+        <FieldCellInput
+            value={decodePathValue(value)}
+            placeholder='Value'
+            aria-label={`Value of path param ${name}`}
+            onChange={(event) => props.onChange(event.target.value)}
+        />
+        <FieldDeleteButton fieldName={name} placeholder={true} onClick={() => {}} />
+    </FieldRow>;
+};
+
+/**
+ * The Params tab: the URL's query params as a table that edits the URL (and follows it as
+ * it's typed), plus the path's :name params when it has some.
+ */
+export const ParamsPanel = observer((props: { requestInput: RequestInput }) => {
+    const { requestInput } = props;
+    const tableRef = React.useRef<HTMLDivElement>(null);
+    const headingId = React.useId();
+
+    const params = getQueryParams(requestInput.url, requestInput.extras.queryParams);
+    const pathParams = getPathParams(requestInput.url, requestInput.extras.pathTemplate);
+
+    const updateParam = (index: number, change: Partial<QueryParam>) => {
+        setQueryParams(requestInput, index === params.length
+            ? [...params, { name: '', value: '', enabled: true, ...change }]
+            : params.map((param, i) => i === index ? { ...param, ...change } : param)
+        );
+    };
+
+    const removeParam = (index: number) => {
+        setQueryParams(requestInput, params.filter((_param, i) => i !== index));
+        focusRowAfterRemoval(tableRef.current, index);
+    };
+
+    // Rows are keyed by position, so the empty last row keeps its inputs (and the focus)
+    // when typing turns it into a param
+    const rows = [...params, undefined].map((param, index) =>
+        <QueryParamRow
+            key={index}
+            param={param}
+            onChange={(change) => updateParam(index, change)}
+            onRemove={() => removeParam(index)}
+        />
+    );
+
+    return <PanelScroll>
+        <PanelSection aria-labelledby={`${headingId}-query`}>
+            <PanelSectionHeading id={`${headingId}-query`}>Query params</PanelSectionHeading>
+            <FieldTable ref={tableRef} onKeyDown={onFieldTableKeyDown}>
+                { rows }
+            </FieldTable>
+        </PanelSection>
+
+        { pathParams.length > 0 && <PanelSection aria-labelledby={`${headingId}-path`}>
+            <PanelSectionHeading id={`${headingId}-path`}>Path params</PanelSectionHeading>
+            <FieldTable onKeyDown={onFieldTableKeyDown}>
+                { pathParams.map((param, index) =>
+                    <PathParamRow
+                        key={index}
+                        param={param}
+                        onChange={(value) => setPathParamValue(requestInput, index, value)}
+                    />
+                ) }
+            </FieldTable>
+        </PanelSection> }
+
+        <PanelNote>
+            { params.length === 0 && pathParams.length === 0
+                ? <>Params you add here go after <code>?</code> in the URL, and params typed in the
+                    URL show up here. A part of the path like <code>/users/:id</code> becomes a path param.</>
+                : <>Values are sent as written, <code>{'{{variables}}'}</code> included. Untick a
+                    param to leave it out of the URL but keep it here.</>
+            }
+        </PanelNote>
+    </PanelScroll>;
+});

@@ -204,8 +204,8 @@ const MultipartFieldRow = observer((props: {
 
 /**
  * The Multipart (multipart/form-data) body: a table of text fields and file fields. Files can
- * be chosen, or dropped from Finder on a row (dropping elsewhere on the card adds a file
- * field, see SendBodyCard).
+ * be chosen, or dropped from Finder on a row (dropping elsewhere on the Body tab adds a file
+ * field, see SendBodyPanel).
  */
 export const MultipartBodyEditor = observer((props: {
     extras: SendExtras,

@@ -2,10 +2,14 @@ import * as React from 'react';
 import * as polished from 'polished';
 import { observer } from 'mobx-react-lite';
 import { Warning, X } from '@phosphor-icons/react';
+import * as portals from 'react-reverse-portal';
 
 import { styled } from '../../../styles';
+import { RawHeaders } from '../../../types';
 import { getReadableSize } from '../../../util/buffer';
 
+import { EditableContentType } from '../../../model/events/content-types';
+import { EditableBody } from '../../../model/http/editable-body';
 import { RequestInput } from '../../../model/send/send-request-model';
 import {
     BODY_MODE_OPTION_GROUPS,
@@ -17,26 +21,55 @@ import {
 import { getSendBodySize } from '../../../model/send/body-modes/body-size';
 import { attachBinaryFile, attachMultipartFiles } from '../../../model/send/body-modes/attach-files';
 
-import { CollapsibleCardHeading } from '../../common/card';
-import { CollapsingButtons } from '../../common/collapsing-buttons';
-import { ExpandShrinkButton } from '../../common/expand-shrink-button';
+import { ContainerSizedEditor } from '../../editor/base-editor';
 import { FormatButton } from '../../common/format-button';
-import { Pill, PillSelect } from '../../common/pill';
+import { PillSelect } from '../../common/pill';
 import { UnstyledButton } from '../../common/inputs';
-import { SendBodyCardSection, SendEditorCardContent } from '../send-card-section';
-import { SendRequestBodyProps } from '../send-request-body-card';
 import { GraphqlBodyEditor } from '../graphql/graphql-body-editor';
 
-import { RawBodyEditor, rawBodyFromText } from './raw-body-editor';
+import { RawBodyEditor, rawBodyFromText, BodyEditorContent } from './raw-body-editor';
 import { FormBodyEditor } from './form-body-editor';
 import { MultipartBodyEditor } from './multipart-body-editor';
 import { BinaryBodyEditor } from './binary-body-editor';
 import { DroppedFiles, folderDropMessage, useFileDrop } from './file-drop';
 
+const BodyPanelContainer = styled.div`
+    /* For the drop overlay */
+    position: relative;
+
+    flex: 1 1 auto;
+    min-height: 0;
+
+    display: flex;
+    flex-direction: column;
+`;
+
+const BodyToolbar = styled.div`
+    flex-shrink: 0;
+    min-height: 40px;
+    padding: 6px 12px 6px 20px;
+
+    display: flex;
+    align-items: center;
+    gap: 12px;
+
+    border-bottom: 1px solid ${p => p.theme.containerBorder};
+`;
+
+// Plain text, so it doesn't look like a second picker next to the body type
+const BodySize = styled.span`
+    font-size: ${p => p.theme.smallPrintSize};
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+    color: ${p => p.theme.containerWatermark};
+`;
+
+const ToolbarSpacer = styled.div`
+    flex: 1 1 auto;
+`;
+
 const StructuredBodyContent = styled.div`
-    margin: 0 -20px -20px -20px;
     padding: 12px 20px 20px;
-    border-top: solid 1px ${p => p.theme.containerBorder};
 
     flex: 1 1 auto;
     min-height: 0;
@@ -47,7 +80,7 @@ const StructuredBodyContent = styled.div`
     gap: 12px;
 `;
 
-const GraphqlBodyContent = styled(SendEditorCardContent)`
+const GraphqlBodyContent = styled(BodyEditorContent)`
     display: flex;
     flex-direction: column;
 `;
@@ -105,7 +138,7 @@ const PendingNote = styled.p`
     color: ${p => p.theme.mainLowlightColor};
 `;
 
-// Shown over the card while files are dragged over it. It lets the drag through.
+// Shown over the panel while files are dragged over it. It lets the drag through.
 const DropOverlay = styled.div`
     position: absolute;
     inset: 0;
@@ -153,12 +186,17 @@ const BodyModePicker = (props: {
 </PillSelect>;
 
 /**
- * The request body card in Send, with the body mode picker: the raw modes (Text, JSON, XML...)
- * use upstream's editor, and Form, Multipart, Binary and GraphQL have their own editors.
- * Multipart and Binary bodies take files dropped anywhere on the card.
+ * The Body tab of Send's request pane, with the body mode picker: the raw modes (Text, JSON,
+ * XML...) use upstream's editor, and Form, Multipart, Binary and GraphQL have their own
+ * editors. Multipart and Binary bodies take files dropped anywhere on the tab.
  */
-export const SendBodyCard = observer((props: SendRequestBodyProps & {
-    requestInput: RequestInput
+export const SendBodyPanel = observer((props: {
+    requestInput: RequestInput,
+    headers: RawHeaders,
+    contentType: EditableContentType,
+    body: EditableBody,
+    onBodyUpdated: (body: Buffer) => void,
+    editorNode: portals.HtmlPortalNode<typeof ContainerSizedEditor>
 }) => {
     const {
         requestInput,
@@ -166,9 +204,7 @@ export const SendBodyCard = observer((props: SendRequestBodyProps & {
         headers,
         contentType,
         body,
-        onBodyUpdated,
-        onContentTypeUpdated,
-        ...cardProps
+        onBodyUpdated
     } = props;
     const mode = requestInput.extras.bodyMode;
 
@@ -200,14 +236,11 @@ export const SendBodyCard = observer((props: SendRequestBodyProps & {
         }
     };
 
-    const headerRef = React.useRef<HTMLElement>(null);
-    const getCard = React.useCallback(() => headerRef.current?.parentElement, []);
+    const panelRef = React.useRef<HTMLDivElement>(null);
+    const getPanel = React.useCallback(() => panelRef.current, []);
 
     const takesFiles = mode === 'multipart' || mode === 'binary';
-    const dragState = useFileDrop(getCard, takesFiles, (dropped: DroppedFiles) => {
-        // Dropped on the collapsed card: open it, to show where the files went
-        if (cardProps.collapsed) cardProps.onCollapseToggled?.();
-
+    const dragState = useFileDrop(getPanel, takesFiles, (dropped: DroppedFiles) => {
         const folderProblems = dropped.folderNames.length ? [folderDropMessage(dropped.folderNames)] : [];
         if (dropped.files.length) attachFiles(dropped.files, dropped.rowId, folderProblems);
         else setMessages(folderProblems);
@@ -240,34 +273,22 @@ export const SendBodyCard = observer((props: SendRequestBodyProps & {
         ) }
     </BodyMessages>;
 
-    return <SendBodyCardSection
-        {...cardProps}
-        headerAlignment='left'
-    >
-        <header ref={headerRef}>
-            <CollapsingButtons>
-                <ExpandShrinkButton
-                    expanded={cardProps.expanded}
-                    onClick={cardProps.onExpandToggled}
-                />
-                <FormatButton
-                    format={mode === 'raw' ? contentType : 'text'}
-                    content={body.decoded}
-                    onFormatted={(text) => onBodyUpdated(rawBodyFromText(body, text))}
-                />
-            </CollapsingButtons>
-
-            <Pill>{ getReadableSize(getSendBodySize(requestInput)) }</Pill>
-
+    return <BodyPanelContainer ref={panelRef}>
+        <BodyToolbar>
             <BodyModePicker
                 value={getBodyModeOption(requestInput)}
                 onChange={(option) => selectBodyMode(requestInput, option)}
             />
-
-            <CollapsibleCardHeading onCollapseToggled={cardProps.onCollapseToggled}>
-                Request body
-            </CollapsibleCardHeading>
-        </header>
+            <BodySize title='The size of the body as it will be sent'>
+                { getReadableSize(getSendBodySize(requestInput)) }
+            </BodySize>
+            <ToolbarSpacer />
+            <FormatButton
+                format={mode === 'raw' ? contentType : 'text'}
+                content={body.decoded}
+                onFormatted={(text) => onBodyUpdated(rawBodyFromText(body, text))}
+            />
+        </BodyToolbar>
 
         { mode === 'raw' && <RawBodyEditor
             body={body}
@@ -299,12 +320,12 @@ export const SendBodyCard = observer((props: SendRequestBodyProps & {
             />
         </StructuredBodyContent> }
 
-        { mode === 'graphql' && <GraphqlBodyContent showFullBorder={false}>
+        { mode === 'graphql' && <GraphqlBodyContent>
             <GraphqlBodyEditor requestInput={requestInput} />
         </GraphqlBodyContent> }
 
         { dragState.isDragging && <DropOverlay aria-hidden={true}>
             <span>{ dropLabel }</span>
         </DropOverlay> }
-    </SendBodyCardSection>;
+    </BodyPanelContainer>;
 });

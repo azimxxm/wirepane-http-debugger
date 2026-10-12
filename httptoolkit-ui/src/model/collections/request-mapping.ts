@@ -4,8 +4,15 @@ import { RawHeaders } from '../../types';
 import { getHeaderValue } from '../http/headers';
 import { EditableContentType, getEditableContentType } from '../events/content-types';
 import { RequestInput } from '../send/send-request-model';
-import { SendBodyMode, SendExtras, SendExtrasData } from '../send/send-extras';
+import { QueryParam, SendBodyMode, SendExtras, SendExtrasData } from '../send/send-extras';
 import { newMultipartBoundary } from '../send/build-request';
+import {
+    encodeQueryName,
+    encodeQueryValue,
+    getQueryParams,
+    isBlankQueryParam
+} from '../send/params/query-params';
+import { matchPathTemplate, pathTemplateOf } from '../send/params/path-params';
 
 import {
     BrunoBody,
@@ -196,31 +203,92 @@ function matchingEntries<T extends { name?: string | null }>(existing: T[], case
     };
 }
 
-function toUrlAndParams(url: string, baseRequest: BrunoRequest | undefined): { url: string, params: BrunoParam[] } {
+// What a tab's Params tab adds to its URL (see SendExtras)
+interface TabParams {
+    // The query table, disabled params included, when the tab has its own
+    queryParams?: QueryParam[];
+    // The path, with :name segments, that the tab's URL was filled in from
+    pathTemplate?: string;
+}
+
+// The tab keeps its own query table only for items with disabled params: the URL has the rest
+function tabQueryParamsOf(params: BrunoParam[]): QueryParam[] | undefined {
+    const queryParams = params.filter((param) => param.type === 'query' && param.name !== null && param.name !== undefined);
+    if (!queryParams.some((param) => param.enabled === false)) return undefined;
+
+    return queryParams.map((param) => ({
+        name: param.name ?? '',
+        value: param.value ?? '',
+        enabled: param.enabled !== false,
+        ...(param.description ? { description: param.description } : {})
+    }));
+}
+
+// Params sent in the URL are stored as written there. Disabled ones aren't in it: they're kept as typed.
+function tabQueryParamsToItem(rows: readonly QueryParam[], baseParams: BrunoParam[]): BrunoParam[] {
+    const reuse = matchingEntries(baseParams.filter((param) => param.type === 'query'), true);
+    return rows.filter((row) => !isBlankQueryParam(row)).map((row): BrunoParam => {
+        const name = row.enabled ? encodeQueryName(row.name) : row.name;
+        const value = row.enabled ? encodeQueryValue(row.value) : row.value;
+        return { ...reuse(name), name, value, enabled: row.enabled, type: 'query' };
+    });
+}
+
+const disabledParamsKey = (params: Array<{ name?: string | null, value?: string | null }>) =>
+    JSON.stringify(params.map(({ name, value }) => [name ?? '', value ?? '']));
+
+const sameDisabledParams = (rows: readonly QueryParam[], baseParams: BrunoParam[]) =>
+    disabledParamsKey(rows.filter((row) => !row.enabled && !isBlankQueryParam(row))) ===
+    disabledParamsKey(baseParams.filter((param) => param.type === 'query' && param.enabled === false));
+
+function toUrlAndParams(
+    url: string,
+    baseRequest: BrunoRequest | undefined,
+    tab: TabParams = {}
+): { url: string, params: BrunoParam[] } {
     const baseParams = baseRequest?.params ?? [];
+    const tabQueryParams = tab.queryParams && getQueryParams(url, tab.queryParams);
 
     // An unchanged URL keeps the item's own URL & params, including its :path templates
-    if (baseRequest && applyPathParams(baseRequest.url, baseParams) === url) {
+    if (baseRequest && applyPathParams(baseRequest.url, baseParams) === url &&
+        (!tabQueryParams || sameDisabledParams(tabQueryParams, baseParams))
+    ) {
         return { url: baseRequest.url, params: baseParams };
     }
 
-    const reuseQuery = matchingEntries(baseParams.filter((param) => param.type === 'query' && param.enabled !== false), true);
-    const queryParams: BrunoParam[] = parseQuery(url).map(({ name, value }) => ({
-        ...reuseQuery(name),
-        name,
-        value,
-        enabled: true,
-        type: 'query'
-    }));
-    // Disabled params aren't in the URL, so Send never shows them: they're kept as they were
-    const disabledQueryParams = baseParams.filter((param) => param.type === 'query' && param.enabled === false);
+    let queryParams: BrunoParam[];
+    if (tabQueryParams) {
+        queryParams = tabQueryParamsToItem(tabQueryParams, baseParams);
+    } else {
+        const reuseQuery = matchingEntries(baseParams.filter((param) => param.type === 'query' && param.enabled !== false), true);
+        queryParams = parseQuery(url).map(({ name, value }) => ({
+            ...reuseQuery(name),
+            name,
+            value,
+            enabled: true,
+            type: 'query'
+        }));
+        // Disabled params aren't in the URL: without the tab's own table, they're kept as they were
+        queryParams.push(...baseParams.filter((param) => param.type === 'query' && param.enabled === false));
+    }
 
     const basePathParams = baseParams.filter((param) => param.type === 'path');
+
+    // A URL filled in from its path template keeps the template, with the values from the URL
+    const templateValues = tab.pathTemplate !== undefined ? matchPathTemplate(tab.pathTemplate, url) : undefined;
+    if (templateValues) {
+        const pathParams = _.uniqBy(templateValues, 'name').map(({ name, value }): BrunoParam => {
+            const base = basePathParams.find((param) => param.name === name);
+            return base ? { ...base, value } : { name, value, enabled: true, type: 'path' };
+        });
+        return { url: `${tab.pathTemplate}${splitUrl(url).suffix}`, params: [...queryParams, ...pathParams] };
+    }
+
     const pathParams: BrunoParam[] = pathParamNames(url).map((name) =>
         basePathParams.find((param) => param.name === name) ?? { name, value: '', enabled: true, type: 'path' }
     );
 
-    return { url, params: [...queryParams, ...disabledQueryParams, ...pathParams] };
+    return { url, params: [...queryParams, ...pathParams] };
 }
 
 // --- Bodies ------------------------------------------------------------------------
@@ -502,7 +570,10 @@ function httpItemToParts(item: BrunoItem, request: BrunoRequest, files: ItemFile
         formFields: toFormFields(body?.formUrlEncoded),
         multipartFields: toMultipartFields(body?.multipartForm, files),
         binaryFile: toBinaryFile(body?.file, files),
-        graphql: toGraphqlBody(body?.graphql)
+        graphql: toGraphqlBody(body?.graphql),
+        // The Params tab shows the disabled query params, and fills in :name path params
+        queryParams: tabQueryParamsOf(request.params ?? []),
+        pathTemplate: pathTemplateOf(request.url ?? '')
     }).toData();
 
     const { text, textMode } = rawTextOf(body, extras.bodyMode);
@@ -605,7 +676,7 @@ function httpPartsToItem(
         : structuredBody(parts, bodyMode, baseBody);
     addStructuredData(body, parts, baseBody, filePathOf, warnings);
 
-    const { url, params } = toUrlAndParams(parts.url, isFromWebSocket ? undefined : baseRequest);
+    const { url, params } = toUrlAndParams(parts.url, isFromWebSocket ? undefined : baseRequest, parts.extras);
     const request: BrunoRequest = {
         auth: { mode: defaults.authMode ?? 'inherit' },
         script: {},

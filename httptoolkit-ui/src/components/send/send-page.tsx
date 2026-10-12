@@ -177,6 +177,7 @@ class SendPage extends React.Component<{
                         editorNode={this.requestEditorNode}
                         updateFromHar={this.updateFromHar}
                         belowRequestLine={<SendProblemMessage sendRequest={selectedRequest} />}
+                        sendTab={selectedRequest} // wirepane: for the Docs tab
                     /> }</CollectionRequestColumn>
                     { isWebSocket
                     ? <WebSocketMessagesPane sendRequest={selectedRequest} />

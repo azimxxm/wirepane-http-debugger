@@ -1,5 +1,6 @@
 import { RequestParts } from './request-mapping';
 import { savedExtrasKey } from './extras-mapping';
+import { disabledQueryParamsKey } from '../send/params/query-params';
 
 /**
  * What a Send tab held when it was last opened from or saved to its collection request,
@@ -14,6 +15,8 @@ export interface TabSnapshot {
     // The structured body modes and WebSocket messages (savedExtrasKey). Snapshots taken
     // before those existed don't have it: they match plain HTTP tabs, whose key is empty.
     extras?: string;
+    // The disabled query params of the Params tab, which aren't in the URL. Empty without any.
+    params?: string;
 }
 
 // FNV-1a: cheap and stable. Each body buffer is only hashed once, as edits make new buffers.
@@ -38,9 +41,10 @@ export const snapshotOf = (parts: RequestParts, docs: string): TabSnapshot => ({
     headers: JSON.stringify(parts.headers),
     body: fingerprint(parts.body),
     docs,
-    extras: savedExtrasKey(parts.extras)
+    extras: savedExtrasKey(parts.extras),
+    params: disabledQueryParamsKey(parts.url, parts.extras?.queryParams)
 });
 
 export const isSameSnapshot = (a: TabSnapshot, b: TabSnapshot) =>
     a.method === b.method && a.url === b.url && a.headers === b.headers && a.body === b.body && a.docs === b.docs &&
-    (a.extras ?? '') === (b.extras ?? '');
+    (a.extras ?? '') === (b.extras ?? '') && (a.params ?? '') === (b.params ?? '');

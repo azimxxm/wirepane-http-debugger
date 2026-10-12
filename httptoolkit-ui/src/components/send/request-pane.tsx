@@ -1,7 +1,7 @@
 import * as _ from 'lodash';
 import * as React from 'react';
-import { action, reaction } from 'mobx';
-import { disposeOnUnmount, inject, observer } from 'mobx-react';
+import { action } from 'mobx';
+import { inject, observer } from 'mobx-react';
 import * as portals from 'react-reverse-portal';
 import * as HarFormat from 'har-format';
 
@@ -10,8 +10,7 @@ import { RawHeaders } from '../../types';
 import { AccountStore } from '../../model/account/account-store';
 import { RulesStore } from '../../model/rules/rules-store';
 import { UiStore } from '../../model/ui/ui-store';
-import { RequestInput } from '../../model/send/send-request-model';
-import { EditableContentType } from '../../model/events/content-types';
+import { RequestInput, SendRequest } from '../../model/send/send-request-model';
 import { ContextMenuItem } from '../../model/ui/context-menu';
 import { generateSendSnippet } from '../../model/send/body-modes/send-snippets'; // wirepane: every body mode
 import {
@@ -27,26 +26,11 @@ import { useHotkeys, copyToClipboard } from '../../util/ui';
 
 import { SendCardContainer } from './send-card-section';
 import { SendRequestLine } from './send-request-line';
-import { SendRequestHeadersCard } from './send-request-headers-card';
-import { SendBodyCard } from './body/send-body-card';
 import { switchRequestType } from '../../model/send/websocket/request-type';
-
-// Layout here is tricky. Current setup seems to work (flex grow & shrink everywhere,
-// card basis: auto and min-height: 0, with editor 50% + min-height, and then
-// overflow-y: auto and basis: auto on the card contents too).
-//
-// It's worth reiterating the UI goals here explicitly for reference
-// - When multiple areas are open & full+, the area is split even-ish with scrolling
-//   in any areas required
-// - When areas are closed, remaining areas expand to the space, even if unused
-// - When multiple areas are open, if there is spare space (e.g. few headers), the
-//   other areas that need it (body editor) expand and use the space.
-
-const METHODS_WITHOUT_BODY = [
-    'GET',
-    'HEAD',
-    'OPTIONS'
-];
+// wirepane: Params · Headers · Body · Docs tabs instead of the headers & body cards. Each
+// tab fills the pane, and the tab a request opens on follows its method & body, as the
+// cards' auto-collapse did (request-editor-tabs.ts).
+import { RequestEditor } from './request-editor/request-editor';
 
 const RequestPaneKeyboardShortcuts = (props: {
     sendRequest: () => void
@@ -74,42 +58,21 @@ export class RequestPane extends React.Component<{
     isSending: boolean,
     updateFromHar: (harRequest: HarFormat.Request) => void,
     // Shown right under the URL, e.g. why the last Send didn't go out
-    belowRequestLine?: React.ReactNode
+    belowRequestLine?: React.ReactNode,
+    // wirepane: the Send tab, for its collection docs
+    sendTab?: SendRequest
 }> {
-
-    get cardProps() {
-        return this.props.uiStore!.sendCardProps;
-    }
-
-    componentDidMount() {
-        // Auto-collapse the body if you pick a body-less HTTP method
-        disposeOnUnmount(this, reaction(() => this.props.requestInput.method, (method) => {
-            // If the body is empty, match the open/closed status to the method:
-            if (METHODS_WITHOUT_BODY.includes(method)) {
-                // If there's a body entered, don't mess with it
-                if (this.props.requestInput.rawBody.decoded.length > 0) return;
-                // wirepane: nor with form, file & GraphQL bodies (GraphQL can be sent with GET)
-                else if (!this.props.requestInput.extras.sendsRawBody) return;
-                else if (this.cardProps.requestBody.collapsed) return;
-                else this.cardProps.requestBody.onCollapseToggled();
-            } else {
-                if (!this.cardProps.requestBody.collapsed) return;
-                this.cardProps.requestBody.onCollapseToggled();
-            }
-        }, { fireImmediately: true }));
-    }
 
     render() {
         const {
             requestInput,
             sendRequest,
             isSending,
-            editorNode,
-            uiStore
+            editorNode
         } = this.props;
 
         return <SendCardContainer
-            hasExpandedChild={!!uiStore?.expandedSendRequestCard}
+            hasExpandedChild={false} // wirepane: the tabs fill the pane, nothing expands
         >
             <RequestPaneKeyboardShortcuts
                 sendRequest={sendRequest}
@@ -127,20 +90,12 @@ export class RequestPane extends React.Component<{
                 onSelectWebSocket={() => switchRequestType(requestInput, 'websocket')} // wirepane
             />
             { this.props.belowRequestLine }
-            <SendRequestHeadersCard
-                {...this.cardProps.requestHeaders}
-                headers={requestInput.headers}
-                updateHeaders={this.updateHeaders}
-            />
-            <SendBodyCard
-                {...this.cardProps.requestBody}
+            <RequestEditor
                 requestInput={requestInput}
-                headers={requestInput.headers}
-                contentType={requestInput.requestContentType}
-                onContentTypeUpdated={this.updateRequestContentType}
-                body={requestInput.rawBody}
-                onBodyUpdated={this.updateBody}
+                sendRequest={this.props.sendTab}
                 editorNode={editorNode}
+                onHeadersChange={this.updateHeaders}
+                onBodyUpdated={this.updateBody}
             />
         </SendCardContainer>;
     }
@@ -159,12 +114,6 @@ export class RequestPane extends React.Component<{
     updateHeaders(headers: RawHeaders) {
         const { requestInput } = this.props;
         requestInput.headers = headers;
-    }
-
-    @action.bound
-    updateRequestContentType(contentType: EditableContentType) {
-        const { requestInput } = this.props;
-        requestInput.requestContentType = contentType;
     }
 
     @action.bound

@@ -287,22 +287,90 @@ const SentWithNotes = (props: { collection: BrunoCollection, location: ItemLocat
     return notes.length ? <NoteList>{ notes }</NoteList> : null;
 };
 
+type DocsMode = 'view' | 'edit';
+
+const DocsModeControl = (props: { mode: DocsMode, onChange: (mode: DocsMode) => void }) =>
+    <SegmentedControl
+        aria-label='Docs mode'
+        value={props.mode}
+        onChange={props.onChange}
+        options={[
+            { value: 'view', label: 'Preview' },
+            { value: 'edit', label: 'Edit' }
+        ]}
+    />;
+
+// Where the request is in its collection. Clicking it shows the request in the tree.
+const DocsBreadcrumb = observer((props: { collectionsStore: CollectionsStore, sendRequest: SendRequest }) => {
+    const { collectionsStore, sendRequest } = props;
+    const link = collectionsStore.linkFor(sendRequest.id);
+    const linked = collectionsStore.linkedItem(sendRequest.id);
+
+    const breadcrumb = linked
+        ? [linked.collection.name, ...linked.location.parents.map((folder) => folder.name)].join(' › ')
+        : link?.itemUid ? link.itemName : undefined;
+    if (!breadcrumb) return null;
+
+    return <Breadcrumb
+        title={linked ? `${breadcrumb}: show it in Collections` : breadcrumb}
+        disabled={!linked}
+        onClick={() => collectionsStore.revealTab(sendRequest.id)}
+    >
+        { breadcrumb }
+    </Breadcrumb>;
+});
+
+// The docs: what the collection sends along, the Markdown (shown or edited) and saved examples
+const DocsContent = observer((props: {
+    collectionsStore: CollectionsStore,
+    sendRequest: SendRequest,
+    mode: DocsMode
+}) => {
+    const { collectionsStore, sendRequest, mode } = props;
+    const link = collectionsStore.linkFor(sendRequest.id);
+    const linked = collectionsStore.linkedItem(sendRequest.id);
+    const docs = link?.docs ?? '';
+    const examples = linked?.location.item.examples ?? [];
+
+    return <>
+        { linked && <SentWithNotes collection={linked.collection} location={linked.location} /> }
+
+        { mode === 'edit'
+            ? <DocsTextArea
+                autoFocus
+                aria-label='Request docs (Markdown)'
+                value={docs}
+                placeholder={'What this request does, its parameters, and what the response means. Markdown works: **bold**, `code`, lists, links.'}
+                onChange={(event) => collectionsStore.setTabDocs(sendRequest.id, event.target.value)}
+            />
+            : docs.trim()
+                ? <MarkdownView docs={docs} />
+                : <Placeholder>
+                    { link?.itemUid
+                        ? 'No docs for this request yet. Choose Edit to describe it for the people you share it with.'
+                        : `Notes about this request, in Markdown. They're kept when you save it to a collection with ${formatShortcut('Cmd+S')}.`
+                    }
+                </Placeholder>
+        }
+
+        { examples.length > 0 && <>
+            <ExamplesHeading>Saved examples</ExamplesHeading>
+            <ExampleList>
+                { examples.map((example, index) =>
+                    <ExampleEntry key={example.uid ?? index} example={example} />
+                ) }
+            </ExampleList>
+        </> }
+    </>;
+});
+
 const RequestDocsCard = observer((props: {
     collectionsStore: CollectionsStore,
     sendRequest: SendRequest
 }) => {
     const { collectionsStore, sendRequest } = props;
-    const link = collectionsStore.linkFor(sendRequest.id);
-    const linked = collectionsStore.linkedItem(sendRequest.id);
-    const docs = link?.docs ?? '';
     const isCollapsed = collectionsStore.docsCardCollapsed;
-
-    const [mode, setMode] = React.useState<'view' | 'edit'>('view');
-    const examples = linked?.location.item.examples ?? [];
-
-    const breadcrumb = linked
-        ? [linked.collection.name, ...linked.location.parents.map((folder) => folder.name)].join(' › ')
-        : link?.itemUid ? link.itemName : undefined;
+    const [mode, setMode] = React.useState<DocsMode>('view');
 
     return <DocsCardSection
         collapsed={isCollapsed}
@@ -312,64 +380,88 @@ const RequestDocsCard = observer((props: {
     >
         <header>
             { !isCollapsed && <HeaderActions>
-                <SegmentedControl
-                    aria-label='Docs mode'
-                    value={mode}
-                    onChange={setMode}
-                    options={[
-                        { value: 'view', label: 'Preview' },
-                        { value: 'edit', label: 'Edit' }
-                    ]}
-                />
+                <DocsModeControl mode={mode} onChange={setMode} />
             </HeaderActions> }
-            { breadcrumb && <Breadcrumb
-                title={linked ? `${breadcrumb}: show it in Collections` : breadcrumb}
-                disabled={!linked}
-                onClick={() => collectionsStore.revealTab(sendRequest.id)}
-            >
-                { breadcrumb }
-            </Breadcrumb> }
+            <DocsBreadcrumb collectionsStore={collectionsStore} sendRequest={sendRequest} />
             <CollapsibleCardHeading onCollapseToggled={collectionsStore.toggleDocsCard}>
                 Docs
             </CollapsibleCardHeading>
         </header>
 
         <CardBody>
-            { linked && <SentWithNotes collection={linked.collection} location={linked.location} /> }
-
-            { mode === 'edit'
-                ? <DocsTextArea
-                    autoFocus
-                    aria-label='Request docs (Markdown)'
-                    value={docs}
-                    placeholder={'What this request does, its parameters, and what the response means. Markdown works: **bold**, `code`, lists, links.'}
-                    onChange={(event) => collectionsStore.setTabDocs(sendRequest.id, event.target.value)}
-                />
-                : docs.trim()
-                    ? <MarkdownView docs={docs} />
-                    : <Placeholder>
-                        { link?.itemUid
-                            ? 'No docs for this request yet. Choose Edit to describe it for the people you share it with.'
-                            : `Notes about this request, in Markdown. They're kept when you save it to a collection with ${formatShortcut('Cmd+S')}.`
-                        }
-                    </Placeholder>
-            }
-
-            { examples.length > 0 && <>
-                <ExamplesHeading>Saved examples</ExamplesHeading>
-                <ExampleList>
-                    { examples.map((example, index) =>
-                        <ExampleEntry key={example.uid ?? index} example={example} />
-                    ) }
-                </ExampleList>
-            </> }
+            <DocsContent collectionsStore={collectionsStore} sendRequest={sendRequest} mode={mode} />
         </CardBody>
     </DocsCardSection>;
 });
 
+// The Docs tab of HTTP requests (components/send/request-editor). WebSocket requests keep
+// the card under their pane.
+
+const DocsPanelColumn = styled.div`
+    flex: 1 1 auto;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+`;
+
+const DocsPanelToolbar = styled.div`
+    flex-shrink: 0;
+    min-height: 40px;
+    padding: 6px 12px 6px 20px;
+
+    display: flex;
+    align-items: center;
+    gap: 8px;
+
+    border-bottom: 1px solid ${p => p.theme.containerBorder};
+
+    > [role=radiogroup] {
+        margin-left: auto;
+    }
+`;
+
+const DocsPanelBody = styled.div`
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    padding: 16px 20px 20px;
+
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+
+    /* The editor takes the space the tab has */
+    > ${DocsTextArea} {
+        flex: 1 0 240px;
+        height: auto;
+    }
+`;
+
+export const hasDocsText = (collectionsStore: CollectionsStore, sendRequestId: string) =>
+    !!collectionsStore.linkFor(sendRequestId)?.docs.trim();
+
+export const RequestDocsPanel = observer((props: {
+    collectionsStore: CollectionsStore,
+    sendRequest: SendRequest
+}) => {
+    const { collectionsStore, sendRequest } = props;
+    const [mode, setMode] = React.useState<DocsMode>('view');
+
+    return <DocsPanelColumn>
+        <DocsPanelToolbar>
+            <DocsBreadcrumb collectionsStore={collectionsStore} sendRequest={sendRequest} />
+            <DocsModeControl mode={mode} onChange={setMode} />
+        </DocsPanelToolbar>
+        <DocsPanelBody>
+            <DocsContent collectionsStore={collectionsStore} sendRequest={sendRequest} mode={mode} />
+        </DocsPanelBody>
+    </DocsPanelColumn>;
+});
+
 /**
- * The request side of Send with collections added: the request pane on top, and the
- * request's docs (plus what the collection sends along with it) below.
+ * The request side of Send with collections added: the request pane on top, and for
+ * WebSocket requests, the request's docs (plus what the collection sends along with it)
+ * below. HTTP requests show their docs in the request pane's Docs tab.
  */
 export const CollectionRequestColumn = inject('collectionsStore', 'uiStore')(observer((props: {
     collectionsStore?: CollectionsStore,
@@ -379,10 +471,11 @@ export const CollectionRequestColumn = inject('collectionsStore', 'uiStore')(obs
 }) => {
     // An expanded request card fills the whole pane, so the docs step aside
     const isCardExpanded = !!props.uiStore!.expandedSendRequestCard;
+    const showsDocsCard = props.sendRequest.request.extras.requestType === 'websocket';
 
     return <Column>
         <PaneSlot>{ props.children }</PaneSlot>
-        { !isCardExpanded && <RequestDocsCard
+        { showsDocsCard && !isCardExpanded && <RequestDocsCard
             key={props.sendRequest.id}
             collectionsStore={props.collectionsStore!}
             sendRequest={props.sendRequest}
