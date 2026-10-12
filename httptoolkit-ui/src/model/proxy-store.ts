@@ -109,6 +109,31 @@ type TlsInterceptionConfig =
     | Required<Pick<MockttpHttpsOptions, 'tlsPassthrough'>>
     | Required<Pick<MockttpHttpsOptions, 'tlsInterceptOnly'>>;
 
+// wirepane: Apple services that pin their certificates (push, iCloud, location). Intercepting
+// them breaks the phone while its traffic goes through VPN mode, so they pass through untouched.
+// They're added when the proxy starts and never saved into the user's own list in Settings.
+export const DEFAULT_TLS_PASSTHROUGH_HOSTNAMES = [
+    '*.push.apple.com',
+    '*.icloud.com',
+    'wps.apple.com',
+    'iphone-ld.apple.com'
+];
+
+export function withDefaultTlsPassthrough(config: TlsInterceptionConfig): TlsInterceptionConfig {
+    // "Only intercept these hosts" already leaves everything else alone
+    if (!('tlsPassthrough' in config)) return config;
+
+    const userHostnames = new Set(config.tlsPassthrough.map(({ hostname }) => hostname));
+    return {
+        tlsPassthrough: [
+            ...config.tlsPassthrough,
+            ...DEFAULT_TLS_PASSTHROUGH_HOSTNAMES
+                .filter((hostname) => !userHostnames.has(hostname))
+                .map((hostname) => ({ hostname }))
+        ]
+    };
+}
+
 export function isValidPortConfiguration(portConfig: PortRange | undefined) {
     return portConfig === undefined || (
         portConfig.endPort >= portConfig.startPort &&
@@ -235,10 +260,12 @@ export class ProxyStore {
                     // User configurable settings:
                     http2: this._http2CurrentlyEnabled,
                     https: {
-                        ...this._currentTlsInterceptionConfig,
+                        ...withDefaultTlsPassthrough(this._currentTlsInterceptionConfig), // wirepane:
                         keyLogFile: this._currentKeyLogFilePath
                     } as MockttpHttpsOptions, // Cert/Key options are set by the server
-                    socks: true,
+                    // wirepane: VPN mode's tunnel sends every flow over SOCKS5 with the custom-metadata
+                    // method, so requests carry tags saying which phone they came from
+                    socks: { authMethods: ['no-auth', 'custom-metadata'] },
                     passthrough: this.accountStore.featureFlags.includes('raw-tunnels')
                         ? ['unknown-protocol']
                         : undefined

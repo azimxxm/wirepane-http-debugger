@@ -10,6 +10,7 @@ import { appHistory } from '../../../routing';
 import { ProxyStore } from '../../../model/proxy-store';
 import { EventsStore } from '../../../model/events/events-store';
 import { CERTIFICATE_PAGE_URL, CHECK_PAGE_URL } from '../../../model/interception/phone-setup';
+import { getVpnModeStore } from '../../../model/interception/vpn-mode';
 
 import { ActionButton } from '../../common/action-button';
 import {
@@ -30,6 +31,9 @@ import {
     useConnectedPhone,
     useLanAddresses
 } from './phone-setup-parts';
+import { VpnModeChoice } from './vpn-mode-choice';
+import type { IPhoneConnectionMode } from './vpn-mode-choice';
+import { VPN_STEPS_BEFORE_CERTIFICATE, VpnChecking, VpnSetup, VpnUnavailableNote } from './vpn-setup';
 
 // Wirepane's own CA, separate from the official app's ca.pem (see CLAUDE.md, Branding)
 const CA_NAME = 'Wirepane CA';
@@ -78,6 +82,70 @@ const SaveCertificateButton = (props: { onSave: () => void }) =>
     </ActionButton>;
 
 /**
+ * Download, install and trust the certificate, then check it. The same for both ways to
+ * connect: the certificate page opens through the proxy or through the VPN tunnel.
+ */
+const CertificateSteps = (props: {
+    firstNumber: number,
+    saveCertificate: (() => void) | undefined,
+    // Whether the page has the separate AirDrop card, for the wording when the file can't be saved here
+    airDropCardBelow: boolean
+}) => {
+    const { firstNumber, saveCertificate } = props;
+    const installStep = firstNumber + 1;
+
+    return <>
+        <SetupStep number={firstNumber} title='Download the certificate in Safari'>
+            <p>
+                Open <Mono>{ CERTIFICATE_PAGE_URL }</Mono> <InlineCopy>
+                    <CopyButton value={CERTIFICATE_PAGE_URL} label='the certificate page address' />
+                </InlineCopy> in <strong>Safari</strong> and tap Allow to download the profile.
+                Chrome and other browsers can't download it and show an empty page.
+            </p>
+            <StepAlternative>
+                { saveCertificate
+                    ? <>
+                        <span>
+                            Or skip Safari: save the certificate and AirDrop it to the
+                            iPhone, then go to step { installStep }.
+                        </span>
+                        <SaveCertificateButton onSave={saveCertificate} />
+                    </>
+                    : <span>
+                        Or skip Safari: AirDrop the certificate file to the iPhone
+                        { props.airDropCardBelow && ' (see below)' }, then go to step { installStep }.
+                    </span>
+                }
+            </StepAlternative>
+        </SetupStep>
+        <SetupStep number={installStep} title='Install the profile'>
+            <MenuPath items={[
+                'Settings',
+                'General',
+                'VPN & Device Management',
+                CA_NAME,
+                'Install'
+            ]} />
+        </SetupStep>
+        <SetupStep number={firstNumber + 2} title='Trust it for HTTPS'>
+            <MenuPath items={[
+                'Settings',
+                'General',
+                'About',
+                'Certificate Trust Settings'
+            ]} />
+            <p>Turn on full trust for <strong>{ CA_NAME }</strong>.</p>
+        </SetupStep>
+        <SetupStep number={firstNumber + 3} title='Check it works'>
+            <p>
+                Open <Mono>{ CHECK_PAGE_URL }</Mono> in Safari. It should say
+                "You're being intercepted by Wirepane".
+            </p>
+        </SetupStep>
+    </>;
+};
+
+/**
  * Connect an iPhone or iPad over Wi-Fi: the proxy address to type in, the certificate
  * steps, and a live status that flips once the device's traffic comes through.
  */
@@ -96,16 +164,25 @@ export const ConnectIPhonePage = inject('proxyStore', 'eventsStore')(observer((p
     const port = proxyStore.httpProxyPort;
     const server = addresses?.[0]?.address;
     const { certContent } = proxyStore;
-    // Both "Save certificate" buttons (step 3 & the AirDrop card) save the same file
+    // Every "Save certificate" button (the download step & the AirDrop card) saves the same file
     const saveCertificate = certContent
         ? () => saveFile(CERTIFICATE_FILENAME, CERTIFICATE_MIME_TYPE, certContent)
         : undefined;
 
-    return <PhoneSetupLayout
-        title='iPhone or iPad'
-        purpose="Send an iPhone's or iPad's traffic through Wirepane over Wi-Fi."
-        onBack={() => navigate('/intercept')}
-    >
+    // VPN mode (WireGuard): one store for the app, polled while this page is open
+    const vpnStore = getVpnModeStore(() => proxyStore.httpProxyPort);
+    React.useEffect(() => vpnStore.startPolling(), [vpnStore]);
+
+    const [chosenMode, setChosenMode] = React.useState<IPhoneConnectionMode | undefined>();
+    const { availability } = vpnStore;
+    // VPN is the recommended way when this build has it, the proxy when it doesn't
+    const mode = chosenMode ?? (
+        availability === 'available' ? 'vpn' :
+        availability === 'unavailable' ? 'proxy' :
+        undefined
+    );
+
+    const proxySetup = <>
         <CardRow sideWidth={360}>
             <Card aria-labelledby='iphone-proxy-heading'>
                 <CardTitle id='iphone-proxy-heading'>Proxy settings for the iPhone</CardTitle>
@@ -142,53 +219,7 @@ export const ConnectIPhonePage = inject('proxyStore', 'eventsStore')(observer((p
                             Authentication off. Then tap Save.
                         </p>
                     </SetupStep>
-                    <SetupStep number={3} title='Download the certificate in Safari'>
-                        <p>
-                            Open <Mono>{ CERTIFICATE_PAGE_URL }</Mono> <InlineCopy>
-                                <CopyButton value={CERTIFICATE_PAGE_URL} label='the certificate page address' />
-                            </InlineCopy> in <strong>Safari</strong> and tap Allow to download the profile.
-                            Chrome and other browsers can't download it and show an empty page.
-                        </p>
-                        <StepAlternative>
-                            { saveCertificate
-                                ? <>
-                                    <span>
-                                        Or skip Safari: save the certificate and AirDrop it to the
-                                        iPhone, then go to step 4.
-                                    </span>
-                                    <SaveCertificateButton onSave={saveCertificate} />
-                                </>
-                                : <span>
-                                    Or skip Safari: AirDrop the certificate file to the iPhone
-                                    (see below), then go to step 4.
-                                </span>
-                            }
-                        </StepAlternative>
-                    </SetupStep>
-                    <SetupStep number={4} title='Install the profile'>
-                        <MenuPath items={[
-                            'Settings',
-                            'General',
-                            'VPN & Device Management',
-                            CA_NAME,
-                            'Install'
-                        ]} />
-                    </SetupStep>
-                    <SetupStep number={5} title='Trust it for HTTPS'>
-                        <MenuPath items={[
-                            'Settings',
-                            'General',
-                            'About',
-                            'Certificate Trust Settings'
-                        ]} />
-                        <p>Turn on full trust for <strong>{ CA_NAME }</strong>.</p>
-                    </SetupStep>
-                    <SetupStep number={6} title='Check it works'>
-                        <p>
-                            Open <Mono>{ CHECK_PAGE_URL }</Mono> in Safari. It should say
-                            "You're being intercepted by Wirepane".
-                        </p>
-                    </SetupStep>
+                    <CertificateSteps firstNumber={3} saveCertificate={saveCertificate} airDropCardBelow={true} />
                 </SetupSteps>
 
                 <CertificateQrCode caption={<>
@@ -236,5 +267,32 @@ export const ConnectIPhonePage = inject('proxyStore', 'eventsStore')(observer((p
                 </p>
             </Note>
         </CardRow>
+    </>;
+
+    return <PhoneSetupLayout
+        title='iPhone or iPad'
+        purpose="Send an iPhone's or iPad's traffic through Wirepane over Wi-Fi."
+        onBack={() => navigate('/intercept')}
+    >
+        <VpnModeChoice
+            mode={mode}
+            vpnAvailable={availability === 'checking' ? undefined : availability === 'available'}
+            onChange={setChosenMode}
+        />
+
+        { mode === 'proxy' && proxySetup }
+        { mode === 'vpn' && availability === 'available' && <VpnSetup
+            store={vpnStore}
+            certificateSteps={<CertificateSteps
+                firstNumber={VPN_STEPS_BEFORE_CERTIFICATE + 1}
+                saveCertificate={saveCertificate}
+                airDropCardBelow={false}
+            />}
+            onViewRequests={() => navigate('/view')}
+        /> }
+        { mode === 'vpn' && availability === 'unavailable' &&
+            <VpnUnavailableNote onUseProxy={() => setChosenMode('proxy')} />
+        }
+        { (mode === undefined || (mode === 'vpn' && availability === 'checking')) && <VpnChecking /> }
     </PhoneSetupLayout>;
 }));
