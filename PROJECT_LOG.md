@@ -2,6 +2,12 @@
 
 ## 2026-10-12
 
+### Released v1.0.0 (macOS arm64 .pkg only)
+
+- **Merged:** `feature/rebrand` fast-forwarded into `main` and pushed to `azimxxm/wirepane-http-debugger`.
+- **Release:** GitHub release `v1.0.0` with one file, `Wirepane-1.0.0-mac-arm64.pkg`: the build the owner installed and tested ("ishlash yaxshi"). Its SHA-256 is in the release notes.
+- **Windows and Linux:** "coming soon" until the owner says. The first CI run (`38241881241`) built mac fine; the Windows and Linux builds were cancelled before they finished, so they have never completed in CI yet.
+
 ### Pre-release fixes (a58bfce..67e523a, not pushed)
 
 - **Toolbar:** one 52 px window toolbar with breadcrumbs ("View › GET /todos/1", ⌘[ back) and the "Search or run a command ⌘K" field; the rail starts below it.

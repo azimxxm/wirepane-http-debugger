@@ -2,7 +2,7 @@
 
 > **Bu fayl keyingi sessiyalar uchun asosiy ish ro'yxati.**
 >
-> **Holat:** branch `feature/rebrand`, hali push qilinmagan. Nima tugagani `PROJECT_LOG.md`da.
+> **Holat:** `feature/rebrand` `main`ga merge qilingan va push qilingan (2026-10-12). Release **v1.0.0** chiqdi, unda faqat macOS arm64 `.pkg` bor. Windows va Linux egasi aytguncha "tez orada" bo'lib turadi. Nima tugagani `PROJECT_LOG.md`da.
 >
 > **Har bir ish uchun tartib:**
 >
@@ -233,9 +233,9 @@ Tekshirilgan (2026-10-12, 1.0.0, shu Mac'da):
 3. [x] **`tls-impersonate`** (bajarildi 2026-10-12). Release'ning `node_modules`i build yuklagan Node 24.19.0 va uning o'z npm'i bilan o'rnatiladi: `scripts/stage-server-deps.cjs` server lockfile'idan faqat kerakli qismini oladi, keyin `npm ci` (`build/server-deps/<target>`). Tizim Node'iga tegilmaydi. `build-server.sh` uni release'ning node'i bilan `isSupported()` orqali tekshiradi.
 4. ~~**Yashirin rejimdagi app SIGTERM bilan yopilmaydi**~~ — **xato emas** (2026-10-12). Tayyor app SIGTERM'da 2 s ichida yopiladi va server bilan birga hamma jarayonlari to'xtaydi. Oldingi kuzatish mening test xatoim edi: Bash tool zsh'da ishlaydi va `kill -TERM $PIDS` ro'yxatni bo'lmagan, shuning uchun signal yuborilmagan.
 5. [x] **Build va tekshiruv** (2026-10-12): `./scripts/build-pkg.sh`, `codesign --verify --deep --strict`, `pkgutil --check-signature`, yashirin ishga tushirish. Natijalar yuqorida.
-6. [ ] **Egasi bilan:** `.pkg`ni yuklab, Gatekeeper oqimini sinash (o'ng tugma → Open).
+6. [x] **Egasi bilan** (2026-10-12): egasi `.pkg`ni o'z Mac'ida o'rnatib sindi, "ishlash yaxshi". Release **v1.0.0** shu `.pkg` bilan chiqdi (faqat macOS arm64).
 7. [x] **Collections release'da ochilmasdi** (egasi o'rnatilgan `.pkg`da topdi, tuzatildi 2026-10-12). Birinchi ochishda "n.grammar is not a function", keyingilarida "Cannot access 'e\_' before initialization" chiqardi. Sabab: rspack ohm-js'ning ESM build'ini olgan, unda faqat `default` export bor. Dev'da Node `main` (CommonJS)ni yuklaydi, shuning uchun u yerda ishlardi. Tuzatish: `httptoolkit-server/rspack.config.js` `../bruno` ichidagi hamma narsani Node kabi resolve qiladi (`mainFields: ['main', 'module']`). `build-server.sh` endi har bir release'da `.bru` collection o'qish va Postman import'ini tekshiradi: tuzatishsiz bu tekshiruv yiqiladi.
-8. [ ] **Windows va Linux:** birinchi CI yig'ishi va qo'lda sinov (yuqoridagi "Qoldi").
+8. [ ] **Windows va Linux: tez orada**, egasi aytganda (2026-10-12 qarori). Birinchi CI run'da (`38241881241`) mac build o'tdi, Windows va Linux build'lari tugashidan oldin bekor qilindi, ya'ni ular CI'da hali bir marta ham oxirigacha yig'ilmagan. Egasi aytganda: Actions → Release → Run workflow, keyin qo'lda sinov (yuqoridagi "Qoldi").
 
 **Tarqatish (egasining qarori, 2026-10-12):** imzosiz **`.pkg`** installer, ichida ad-hoc imzolangan arm64 `Wirepane.app`. Windows va Linux installer'lari ham imzosiz (2026-10-12). Apple Developer akkaunti yo'q, egasi ariza beradi. Shuning uchun:
 

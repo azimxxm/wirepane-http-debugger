@@ -8,21 +8,17 @@ Developerlar va QA uchun bepul, ochiq kodli HTTP(S) debugger. U brauzer, iPhone,
 
 ## O'rnatish
 
-Tayyor installer'lar [GitHub Releases](https://github.com/azimxxm/wirepane-http-debugger/releases) sahifasida. Eng oxirgi versiyani oching va o'z tizimingiz uchun faylni yuklab oling:
+Tayyor installer [GitHub Releases](https://github.com/azimxxm/wirepane-http-debugger/releases) sahifasida. Eng oxirgi versiyani oching va faylni yuklab oling:
 
-| Tizim                                                  | Fayl                                                                                                    |
-| ------------------------------------------------------ | ------------------------------------------------------------------------------------------------------- |
-| macOS 12 yoki yangiroq, Apple Silicon (M1 va yangiroq) | `Wirepane-<versiya>-mac-arm64.pkg`                                                                      |
-| Windows 10 va 11, x64                                  | `Wirepane-<versiya>-win-x64-setup.exe` (yoki o'rnatmasdan ishlaydigan `Wirepane-<versiya>-win-x64.zip`) |
-| Linux, x64                                             | `.deb` (Ubuntu, Debian), `.rpm` (Fedora) yoki `.AppImage` (istalgan distributiv)                        |
+| Tizim                                                  | Fayl                               |
+| ------------------------------------------------------ | ---------------------------------- |
+| macOS 12 yoki yangiroq, Apple Silicon (M1 va yangiroq) | `Wirepane-<versiya>-mac-arm64.pkg` |
+| Windows 10 va 11, x64                                  | tez orada                          |
+| Linux, x64                                             | tez orada                          |
 
-Installer'lar hali imzolanmagan: Apple Developer akkaunti ham, kod imzolash sertifikati ham yo'q. Shuning uchun birinchi ochishda tizim ogohlantiradi:
+Installer hali imzolanmagan: Apple Developer akkaunti ham, kod imzolash sertifikati ham yo'q. Shuning uchun birinchi ochishda macOS ogohlantiradi: `.pkg`ni ikki marta bosing, macOS uni tekshira olmaganini aytsa, `.pkg` ustida o'ng tugma → **Open** → **Open**, yoki System Settings → Privacy & Security → **Open Anyway**. Keyin qadamlardan o'ting: app `/Applications`ga o'rnatiladi ("faqat men uchun" tanlansa, `~/Applications`ga). App ham shunday to'xtatilsa, unda ham o'ng tugma → **Open**.
 
-- **macOS:** `.pkg`ni ikki marta bosing. macOS uni tekshira olmaganini aytsa: `.pkg` ustida o'ng tugma → **Open** → **Open**, yoki System Settings → Privacy & Security → **Open Anyway**. Keyin qadamlardan o'ting: app `/Applications`ga o'rnatiladi ("faqat men uchun" tanlansa, `~/Applications`ga). App ham shunday to'xtatilsa, unda ham o'ng tugma → **Open**.
-- **Windows:** setup `.exe`ni ishga tushiring. "Windows protected your PC" (SmartScreen) chiqsa: **More info** → **Run anyway**. `.zip`ni esa ochib, ichidagi `Wirepane.exe`ni ishga tushirish kifoya.
-- **Linux:** `sudo apt install ./Wirepane-<versiya>-linux-amd64.deb` yoki `sudo dnf install ./Wirepane-<versiya>-linux-x86_64.rpm`. AppImage uchun: `chmod +x Wirepane-<versiya>-linux-x86_64.AppImage`, keyin uni ishga tushiring. Ubuntu 24.04 va yangiroqda AppImage ochilmasa, uni `--no-sandbox` bilan ishga tushiring yoki `.deb`ni o'rnating.
-
-Har bir faylning SHA-256'i release'dagi `SHA256SUMS.txt`da. HTTPS trafikni ko'rish uchun qurilma **Wirepane CA** sertifikatiga ishonishi kerak: buni app'dagi **Intercept** sahifasi har bir qurilma uchun ko'rsatadi.
+`.pkg`ning SHA-256'i release sahifasida yozilgan. HTTPS trafikni ko'rish uchun qurilma **Wirepane CA** sertifikatiga ishonishi kerak: buni app'dagi **Intercept** sahifasi har bir qurilma uchun ko'rsatadi.
 
 ## Asosiy source'lar
 
@@ -126,8 +122,8 @@ O'zgartirgan kodingiz saqlanib qoladi. Conflict chiqsa, uni oddiy `git merge`dag
   2. Server o'zini yangilamaydi: `update-requested` e'tiborsiz qoldiriladi, oclif'ning update plugin'i olib tashlandi. Server'ni ishga tushiruvchi skript faqat app ichidagi server'ni ishga tushiradi. Rasmiy app'ning `~/.local/share/httptoolkit-server` papkasiga tegilmaydi.
   3. UI app ichida va `wirepane://app` manzilidan ochiladi. Release server faqat shu origin'ga ruxsat beradi. Sozlamalar va Send tab'lari app qayta ochilganda ham saqlanadi.
   4. App ad-hoc imzolanadi, `.pkg` imzosiz, notarize yo'q. Build sertifikatsiz Mac'da ishlaydi.
-  - [ ] Egasi tekshiradi: `.pkg`ni boshqa (toza) foydalanuvchida o'rnatish va Gatekeeper oqimi.
-  - [ ] Windows (setup `.exe`, `.zip`) va Linux (`.AppImage`, `.deb`, `.rpm`), hammasi imzosiz: `./scripts/build-release.sh <mac|win|linux>` va GitHub Actions'dagi `release.yml` tayyor (2026-10-12). Birinchi CI yig'ishi egasi "done" degandan keyin.
+  - [x] Birinchi release **v1.0.0** (2026-10-12): faqat macOS arm64 `.pkg`. Egasi uni o'z Mac'ida o'rnatib sinadi.
+  - [ ] Windows (setup `.exe`, `.zip`) va Linux (`.AppImage`, `.deb`, `.rpm`): **tez orada**, egasi aytganda chiqariladi. Hammasi imzosiz; `./scripts/build-release.sh <mac|win|linux>` va GitHub Actions'dagi `release.yml` tayyor. Birinchi CI run'da mac build o'tdi, Windows va Linux build'lari tugashidan oldin to'xtatildi.
   - Akkaunt kelgach: Developer ID imzosi, hardened runtime va notarize. Ular `ENABLE_SIGNING=true` bilan yoqiladigan yo'lga qo'shiladi, imzosiz yo'l zaxira bo'lib qoladi.
 - [x] Barcha Pro feature'lar hamma uchun bepul. Akkaunt, login va to'lov yo'q. Map Local, Map Remote, mock, rewrite, delay, block, Settings (proxy, connection, API, themes), saqlanadigan rules, HAR import/export va MCP/CLI cheklovsiz ishlaydi.
 - [ ] Proxyman'dagi feature'lar:
