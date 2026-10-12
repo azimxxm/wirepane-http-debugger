@@ -2,6 +2,14 @@
 
 ## 2026-10-12
 
+### iPhone test fixes and VPN mode phase 1 (WireGuard)
+
+- **Proxy-mode findings (owner's iPhone):** Flutter apps (Jett, Road24) and TelecomTV bypass the Wi-Fi proxy; a mitmproxy WireGuard test showed them all decrypted. Plan with contracts: `docs/plans/2026-10-12-iphone-fixes-and-vpn.md`; results: `docs/research/phone-vpn-mode.md` section 14.
+- **UI fixes:** binary bodies open as Summary/Hex/Protobuf instead of Text or URL-encoded; non-strict JSON (Firebase iOS) is shown as sent, without error markers; View column headers sort and filter (chips in the filter bar); status bar, Devices panel, iPhone card and toolbar name devices and real apps (bundle ids, SDK labels, VPN tags).
+- **VPN mode:** Rust sidecar `wirepane-tunnel/` (WireGuard → SOCKS5 custom-metadata tags → Mockttp, DNS, QUIC block, UDP relay, 1.1 MB), server interceptor `wireguard-vpn`, iPhone page "Capture all apps (VPN)" with QR and live status, default TLS passthrough for pinned Apple hosts, the helper inside the pkg (`scripts/build-tunnel.sh`, `NSLocalNetworkUsageDescription`).
+- **Checks:** UI 1635 tests, tsc clean; server 41 VPN tests; sidecar 14 tests; end to end with a userspace WireGuard client (DNS + HTTP 200 arrived in the UI with the tags); the owner's iPhone completed a handshake with Wirepane's own sidecar (dev); pkg has the signed helper and VPN mode is available in the packaged app (hidden check).
+- **Next:** the owner's app-by-app result over Wirepane's VPN, the packaged app's Local Network prompt, then IKEv2 (no extra app).
+
 ### v1.0.0 release held back (macOS arm64 .pkg only, when the owner says)
 
 - **Merged:** `feature/rebrand` fast-forwarded into `main` and pushed to `azimxxm/wirepane-http-debugger`.
