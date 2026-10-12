@@ -58,7 +58,7 @@ module.exports = {
             {
                 // Some browser launchers (Opera) use resource files from within the browser-launcher
                 // module. We need to reroute that to point to the unbundled files:
-                test: /node_modules\/@httptoolkit\/browser-launcher\/dist\/run.js$/,
+                test: /node_modules[\\/]@httptoolkit[\\/]browser-launcher[\\/]dist[\\/]run\.js$/, // wirepane: Windows paths too
                 loader: 'string-replace-loader',
                 options: {
                     search: '../res/',
@@ -66,6 +66,15 @@ module.exports = {
                     flags: 'g',
                     strict: true
                 }
+            },
+            {
+                // wirepane: our Bruno packages and their dependencies (../bruno) are CommonJS,
+                // and Node gives their require() calls each package's "main" entry. For node
+                // targets rspack prefers "module" instead, and an ESM build can export something
+                // else: ohm-js's has only a default export, so bruno-lang's
+                // require('ohm-js').grammar was undefined in releases and no .bru file could be read.
+                include: path.resolve(__dirname, '..', 'bruno'),
+                resolve: { mainFields: ['main', 'module'] }
             }
         ]
     },
