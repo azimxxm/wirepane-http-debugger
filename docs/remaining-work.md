@@ -207,10 +207,7 @@ Tekshirilgan (2026-10-12): `codesign --verify --deep --strict` o'tdi (`Signature
    - `app.name` o'zgarsa, menyuda "About/Hide/Quit <name>" chiqadi: `menu.ts`da shu role'larga aniq label berilsin.
 2. **Hajm.** App 874 MB, pkg 220 MB. UI'ning `dist/api` papkasi 375 MB (2549 ta `.json` spec). UI ularni `fetch('/api/${specId}.json')` bilan yuklaydi (`httptoolkit-ui/src/model/api/api-store.ts:19`). Build'da brotli bilan siqilsin, `bundled-ui.ts` oqim bilan ochsin (`createBrotliDecompress`), MIME'i `.json` qolsin. App ~330 MB kichrayadi, pkg deyarli o'zgarmaydi.
 3. **`tls-impersonate`.** Optional dependency, `engines: node >=24.19.0`. Mac'dagi Node 24.14, shuning uchun o'rnatilmaydi. Tizim Node'iga tegilmaydi: npm build'ning o'zi yuklaydigan Node 24.19.0 tarball'idan olinsin, `npm ci --omit=dev --ignore-scripts` staging'da ishga tushirilsin, `assemble-server.cjs` uni qo'shimcha manba sifatida olsin. Tekshiruv: upstream'ning `isSupported()` (`test/distributables-test/unix.sh:39`).
-4. **Yashirin rejimdagi app SIGTERM bilan yopilmaydi** (dev'da ko'rildi, 8 s'dan keyin ham ishlab turdi). Sababi hali topilmagan.
-   - UI'dagi `beforeunload` va `will-quit` sabab emas.
-   - SIGTERM Electron binary'ning PID'iga yuborilsin, `.bin/electron` wrapper'iga emas.
-   - Repro vaqtinchalik HOME, `CFFIXED_USER_HOME` va `TMPDIR` bilan qilinsin.
+4. ~~**Yashirin rejimdagi app SIGTERM bilan yopilmaydi**~~ — **xato emas** (2026-10-12). Tayyor app SIGTERM'da 2 s ichida yopiladi va server bilan birga hamma jarayonlari to'xtaydi. Oldingi kuzatish mening test xatoim edi: Bash tool zsh'da ishlaydi va `kill -TERM $PIDS` ro'yxatni bo'lmagan, shuning uchun signal yuborilmagan.
 5. **Build va tekshiruv:** `./scripts/build-pkg.sh`, keyin:
    - `codesign --verify --deep --strict`;
    - `pkgutil --check-signature`;
