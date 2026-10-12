@@ -159,7 +159,7 @@ export const ConnectIPhonePage = inject('proxyStore', 'eventsStore')(observer((p
                 <CardTitle id='iphone-airdrop-heading'>Or send the certificate with AirDrop</CardTitle>
                 <p>
                     If Safari won't download it, save the certificate here and AirDrop it to the
-                    iPhone (in Finder: right-click the file › Share › AirDrop). Then do steps 4 and 5.
+                    iPhone (in Finder: right-click the file › Share › AirDrop). Then do steps&nbsp;4&nbsp;and&nbsp;5.
                 </p>
                 { certContent
                     ? <div>

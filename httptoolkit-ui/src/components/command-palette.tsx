@@ -14,10 +14,12 @@ import {
     Pencil,
     Plugs,
     Plus,
+    PushPin,
     Record,
     Rows,
     SidebarSimple,
     Sparkle,
+    TerminalWindow,
     Trash,
     UploadSimple
 } from '@phosphor-icons/react';
@@ -31,6 +33,10 @@ import { CommandMatch, searchCommands } from '../model/ui/command-search';
 import { AppModal } from './common/modal';
 
 const ACTION_ICONS: { [id in AppActionId]?: Icon } = {
+    'request-mock-response': Pencil,
+    'request-resend': PaperPlaneTilt,
+    'request-copy-curl': TerminalWindow,
+    'request-pin': PushPin,
     'go-intercept': Plugs,
     'go-view': Rows,
     'go-modify': Pencil,

@@ -46,6 +46,10 @@ const FilterInputField = styled.input`
         the placeholder gets selected by selection.selectAllChildren. This stops that:
         */
         user-select: none;
+
+        /* wirepane: the theme's placeholder colour (4.5:1), not the browser's grey */
+        color: ${p => p.theme.inputPlaceholderColor};
+        opacity: 1;
     }
 `;
 
@@ -59,7 +63,7 @@ const FilterSuggestionsBox = styled.div`
     background-color: ${p => p.theme.mainBackground};
     color: ${p => p.theme.mainColor};
 
-    border: 1px solid ${p => p.theme.containerBorder};
+    border: 1px solid ${p => p.theme.inputBorder}; /* wirepane: the same border as the filter box */
     box-shadow: 0 2px 4px 0 rgba(0,0,0,${p => p.theme.boxShadowAlpha});
 
     border-radius: 4px;

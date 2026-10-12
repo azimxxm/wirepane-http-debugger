@@ -42,7 +42,7 @@ describe('Traffic summary', () => {
         it('should recognise the Send page source in observable copies too', () => {
             // The events list keeps its sources in an observable array, which copies them
             const sources = observable.array([MANUALLY_SENT_SOURCE, parseSource('curl/8.7.1')]);
-            expect(getConnectedClients(sources).map((source) => source.summary)).to.deep.equal(['Curl/8.7.1']);
+            expect(getConnectedClients(sources).map((source) => source.summary)).to.deep.equal(['curl/8.7.1']);
         });
     });
 

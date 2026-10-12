@@ -62,6 +62,31 @@ const HintActions = styled.div`
     gap: 6px;
 `;
 
+// The collapsed strip's toggle, with a count once there's traffic from more than one device
+const ShowPanelButton = styled(PanelToolButton)`
+    position: relative;
+`;
+
+const DeviceCountBadge = styled.span`
+    position: absolute;
+    top: -2px;
+    right: -3px;
+    min-width: 15px;
+    height: 15px;
+    padding: 0 4px;
+    border-radius: 8px;
+    box-sizing: border-box;
+
+    font-size: ${p => p.theme.tinyTextSize};
+    font-weight: 600;
+    line-height: 15px;
+    text-align: center;
+    font-variant-numeric: tabular-nums;
+
+    color: ${p => p.theme.mainBackground};
+    background-color: ${p => p.theme.mainLowlightColor};
+`;
+
 // In the collapsed strip: says the list only shows one device, and opens the panel
 const SelectionMarker = styled(PanelToolButton)`
     color: ${p => p.theme.popColor};
@@ -118,17 +143,21 @@ export const DevicesPanel = inject('devicesStore', 'uiStore')(observer((props: {
             ? (selection.deviceKey === THIS_MACHINE_KEY ? store.thisMachine : store.getDevice(selection.deviceKey))
             : undefined;
         const selectionLabel = selection && `Showing only ${store.describeSelection(selection)}`;
+        // Hidden while everything is from this machine, so only other devices make it worth a count
+        const deviceCount = store.devices.length;
+        const countLabel = deviceCount > 1 ? `, ${deviceCount} devices` : '';
 
         return <CollapsedPanelStrip aria-label='Devices (hidden)'>
             <PanelToggleShortcut onToggle={store.togglePanel} />
-            <PanelToolButton
-                title={`Show devices (${toggleLabel})`}
-                aria-label='Show devices'
+            <ShowPanelButton
+                title={`Show devices${countLabel} (${toggleLabel})`}
+                aria-label={`Show devices${countLabel}`}
                 aria-expanded={false}
                 onClick={store.togglePanel}
             >
                 <SidebarSimple size={18} />
-            </PanelToolButton>
+                { deviceCount > 1 && <DeviceCountBadge aria-hidden={true}>{ deviceCount }</DeviceCountBadge> }
+            </ShowPanelButton>
             { selection && <SelectionMarker
                 title={`${selectionLabel}. Click to show the Devices panel.`}
                 aria-label={`${selectionLabel}. Show devices`}

@@ -36,6 +36,18 @@ export const DEFAULT_DEVICES_PANEL_WIDTH = 216;
 export const MIN_DEVICES_PANEL_WIDTH = 180;
 export const MAX_DEVICES_PANEL_WIDTH = 440;
 
+// Where the panel's width & the user's show/hide choice are saved
+export const DEVICES_STORE_KEY = 'devices-store';
+
+export type PanelChoice = 'open' | 'closed';
+
+// Older versions saved only whether the panel was open, which it was by default. A saved
+// "hidden" can only have come from the user, so it stays their choice.
+export function migrateSavedPanelState(data: { panelOpen?: unknown, panelChoice?: unknown }) {
+    if (data.panelChoice !== undefined || data.panelOpen !== false) return data;
+    return { ...data, panelChoice: 'closed' };
+}
+
 // A device is shown as active if it sent something in the last minute
 export const ACTIVE_WINDOW_MS = 60_000;
 const ACTIVE_CHECK_INTERVAL_MS = 5_000;
@@ -109,13 +121,18 @@ export class DevicesStore implements DeviceDirectory {
 
     readonly initialized = lazyObservablePromise(async () => {
         try {
-            await hydrate({ key: 'devices-store', store: this });
+            await hydrate({
+                key: DEVICES_STORE_KEY,
+                store: this,
+                dataTransform: migrateSavedPanelState
+            });
         } catch (e) {
             // Only the panel's width & visibility are saved, so the defaults are fine
             console.warn("Couldn't restore the Devices panel layout", e);
         }
 
         this.startTracking();
+        this.watchForOtherDevices();
         this.watchSelection();
         setDeviceDirectory(this);
 
@@ -130,20 +147,43 @@ export class DevicesStore implements DeviceDirectory {
 
     // --- Panel state ---
 
+    // The user's own choice, once they've shown or hidden the panel. Until then it stays out of
+    // the way while all the traffic is from this machine, and opens once another device sends some.
     @persist @observable
-    panelOpen = true;
+    panelChoice: PanelChoice | undefined = undefined;
+
+    // Stays set after Clear, so the panel doesn't close again between a phone's requests
+    @observable
+    private hasSeenOtherDevices = false;
+
+    @computed
+    get panelOpen(): boolean {
+        return this.panelChoice !== undefined
+            ? this.panelChoice === 'open'
+            : this.hasSeenOtherDevices;
+    }
 
     @persist @observable
     panelWidth = DEFAULT_DEVICES_PANEL_WIDTH;
 
     @action.bound
     togglePanel() {
-        this.panelOpen = !this.panelOpen;
+        this.panelChoice = this.panelOpen ? 'closed' : 'open';
     }
 
     @action.bound
     showPanel() {
-        this.panelOpen = true;
+        this.panelChoice = 'open';
+    }
+
+    private watchForOtherDevices() {
+        this.disposers.push(reaction(
+            () => this.otherDevices.length > 0,
+            (hasOtherDevices) => {
+                if (hasOtherDevices) runInAction(() => { this.hasSeenOtherDevices = true; });
+            },
+            { fireImmediately: true }
+        ));
     }
 
     @action.bound

@@ -60,10 +60,12 @@ const SearchBox = styled.label`
 
     color: ${p => p.theme.mainLowlightColor};
     background-color: ${p => p.theme.inputBackground};
-    border: 1px solid ${p => p.theme.containerBorder};
+    border: 1px solid ${p => p.theme.inputBorder};
 
+    /* The input inside has no outline of its own, so the box shows keyboard focus */
     &:focus-within {
-        border-color: ${p => p.theme.inputBorder};
+        outline: 2px solid ${p => p.theme.focusRing};
+        outline-offset: -1px;
     }
 
     input {

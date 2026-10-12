@@ -1,5 +1,5 @@
 import * as React from 'react';
-import * as dateFns from 'date-fns';
+import { buildHarFilename } from '../../util/export-filenames'; // wirepane: one place for our file names
 import { inject, observer } from 'mobx-react';
 
 import { css, styled } from '../../styles';
@@ -208,9 +208,7 @@ export const MultiSelectionSummaryPane = inject('accountStore', 'uiStore')(obser
                 const harContent = JSON.stringify(
                     await generateHar(selectedEvents, { bodySizeLimit: Infinity })
                 );
-                const filename = `Wirepane_${ // wirepane: our name
-                    dateFns.format(Date.now(), 'YYYY-MM-DD_HH-mm')
-                }.har`;
+                const filename = buildHarFilename(); // wirepane: our name
                 saveFile(filename, 'application/har+json;charset=utf-8', harContent);
             }}
         >

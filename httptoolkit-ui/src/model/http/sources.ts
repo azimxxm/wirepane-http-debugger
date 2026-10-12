@@ -18,15 +18,20 @@ function formatVersion(version: string | undefined): string {
     return ' ' + version.split('.').slice(0, 2).join('.').replace(/\.0$/, '');
 }
 
+// wirepane: names keep their own casing ("iOS", not "IOS"). Only the all-lowercase OS names the
+// parser copies straight from a UA ("linux") get a capital.
+const formatOsName = (name: string | undefined) =>
+    name && name === name.toLowerCase() ? _.upperFirst(name) : name;
+
 const getSummary = (useragent: IUAParser.IResult) => {
     const hasOS = _(useragent.os).values().some();
     const hasBrowser = _(useragent.browser).values().some();
 
-    const clientName = _.upperFirst(useragent.ua.split(' ')[0]);
+    const clientName = useragent.ua.split(' ')[0]; // wirepane: as the client writes it, e.g. "curl/8.7.1"
 
     if (hasOS || hasBrowser) {
         const osDescription = hasOS ?
-            ` (${_.upperFirst(useragent.os.name)}${formatVersion(useragent.os.version)})`
+            ` (${formatOsName(useragent.os.name)}${formatVersion(useragent.os.version)})`
         : '';
         const browserDescription = hasBrowser ?
             (useragent.browser.name || '') + formatVersion(useragent.browser.version)

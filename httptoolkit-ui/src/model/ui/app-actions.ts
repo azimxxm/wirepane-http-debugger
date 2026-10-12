@@ -23,6 +23,10 @@ import { ANDROID_SETUP_PATH, IPHONE_SETUP_PATH } from '../../components/intercep
  * sends these ids, so keep them stable.
  */
 export const APP_ACTION_IDS = [
+    'request-mock-response',
+    'request-resend',
+    'request-copy-curl',
+    'request-pin',
     'go-intercept',
     'go-view',
     'go-modify',
@@ -46,8 +50,11 @@ export const APP_ACTION_IDS = [
 
 export type AppActionId = typeof APP_ACTION_IDS[number];
 
-export type AppActionSection = 'Go' | 'Capture' | 'Connect' | 'View' | 'Send' | 'Help';
-export const APP_ACTION_SECTIONS: readonly AppActionSection[] = ['Go', 'Capture', 'Connect', 'View', 'Send', 'Help'];
+export type AppActionSection = 'This request' | 'Go' | 'Capture' | 'Connect' | 'View' | 'Send' | 'Help';
+// The selected request's commands come first, as they're the likeliest reason to open the palette
+export const APP_ACTION_SECTIONS: readonly AppActionSection[] = [
+    'This request', 'Go', 'Capture', 'Connect', 'View', 'Send', 'Help'
+];
 
 export const DOCS_URL = 'https://httptoolkit.com/docs';
 export const REPORT_ISSUE_URL = 'https://github.com/azimxxm/wirepane/issues/new';
@@ -63,6 +70,10 @@ export const TOGGLE_RECORDING_SHORTCUT = 'Cmd+Shift+R';
 export const CLEAR_TRAFFIC_SHORTCUT = 'Cmd+Shift+Backspace';
 export const IMPORT_HAR_SHORTCUT = 'Cmd+O';
 export const NEW_SEND_TAB_SHORTCUT = 'Cmd+T';
+// View binds these itself (view-page.tsx), as they act on its selection:
+export const MOCK_RESPONSE_SHORTCUT = 'Cmd+M';
+export const RESEND_REQUEST_SHORTCUT = 'Cmd+R';
+export const PIN_REQUEST_SHORTCUT = 'Cmd+P';
 
 export interface AppAction {
     readonly id: AppActionId;
@@ -77,12 +88,25 @@ export interface AppAction {
     // The react-hotkeys-hook keys that run this action from any page. Page-specific shortcuts
     // (like the side panels' ⌘⌥S) are bound by their pages instead.
     readonly hotkeys?: string;
-    // Not listed in the palette (the palette itself):
+    // Not listed in the palette: the palette itself, and the request commands without a request
     readonly hiddenInPalette?: boolean;
     readonly enabled: boolean;
     // False when a shortcut pressed in this element belongs to it instead, like ⌘K in a code editor
     shortcutAllowedIn?(element: Element | null): boolean;
     run(): void;
+}
+
+/**
+ * The request selected in View, for the "This request" commands.
+ */
+export interface SelectedRequestCommands {
+    // WebSockets can't be mocked, resent or copied as cURL, only pinned
+    readonly isPlainHttp: boolean;
+    readonly isPinned: boolean;
+    mockResponse(): void;
+    resend(): void;
+    copyAsCurl(): void;
+    togglePinned(): void;
 }
 
 export interface AppActionDeps {
@@ -102,6 +126,8 @@ export interface AppActionDeps {
     exportHar(): void;
     canVisitModify(): boolean;
     canVisitSend(): boolean;
+    // The single request selected in View, if any
+    selectedRequest(): SelectedRequestCommands | undefined;
 }
 
 // Modify & Send need a recent enough server. Both show while its version is still unknown, so
@@ -141,6 +167,37 @@ export function buildAppActions(deps: AppActionDeps): AppAction[] {
         return current === path || current.startsWith(`${path}/`);
     };
 
+    // Only in View, where the selection is on screen
+    const selectedRequest = () => isOnPage('/view') ? deps.selectedRequest() : undefined;
+
+    type RequestText = string | ((request: SelectedRequestCommands | undefined) => string);
+    const textFor = (text: RequestText) => typeof text === 'function' ? text(selectedRequest()) : text;
+
+    const forRequest = (id: AppActionId, action: {
+        label: RequestText,
+        description: RequestText,
+        keywords: string[],
+        shortcut?: string,
+        enabled?: (request: SelectedRequestCommands) => boolean,
+        run: (request: SelectedRequestCommands) => void
+    }): AppAction => ({
+        id,
+        section: 'This request',
+        keywords: action.keywords,
+        shortcut: action.shortcut,
+        get label() { return textFor(action.label); },
+        get description() { return textFor(action.description); },
+        get hiddenInPalette() { return !selectedRequest(); },
+        get enabled() {
+            const request = selectedRequest();
+            return !!request && (action.enabled?.(request) ?? true);
+        },
+        run: () => {
+            const request = selectedRequest();
+            if (request) action.run(request);
+        }
+    });
+
     const goTo = (
         id: AppActionId,
         path: string,
@@ -160,6 +217,39 @@ export function buildAppActions(deps: AppActionDeps): AppAction[] {
     });
 
     return [
+        forRequest('request-mock-response', {
+            label: 'Mock response',
+            description: 'A Modify rule that answers with this response',
+            keywords: ['rule', 'stub', 'fake', 'modify'],
+            shortcut: MOCK_RESPONSE_SHORTCUT,
+            enabled: (request) => request.isPlainHttp && deps.canVisitModify(),
+            run: (request) => request.mockResponse()
+        }),
+        forRequest('request-resend', {
+            label: 'Resend',
+            description: 'Edit it and send it again, in Send',
+            keywords: ['repeat', 'replay', 'retry', 'send', 'edit'],
+            shortcut: RESEND_REQUEST_SHORTCUT,
+            enabled: (request) => request.isPlainHttp && deps.canVisitSend(),
+            run: (request) => request.resend()
+        }),
+        forRequest('request-copy-curl', {
+            label: 'Copy as cURL',
+            description: 'A curl command that sends this request',
+            keywords: ['curl', 'clipboard', 'snippet', 'command', 'terminal'],
+            enabled: (request) => request.isPlainHttp,
+            run: (request) => request.copyAsCurl()
+        }),
+        forRequest('request-pin', {
+            label: (request) => request?.isPinned ? 'Unpin' : 'Pin',
+            description: (request) => request?.isPinned
+                ? 'Clear deletes it again'
+                : 'Pinned requests stay when you clear the list',
+            keywords: ['keep', 'star', 'bookmark', 'unpin'],
+            shortcut: PIN_REQUEST_SHORTCUT,
+            run: (request) => request.togglePinned()
+        }),
+
         goTo('go-intercept', '/intercept', 'Go to Intercept', GO_INTERCEPT_SHORTCUT,
             ['connect', 'sources', 'clients', 'browser', 'terminal']),
         goTo('go-view', '/view', 'Go to View', GO_VIEW_SHORTCUT,

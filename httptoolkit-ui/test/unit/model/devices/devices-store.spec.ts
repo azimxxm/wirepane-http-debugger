@@ -6,7 +6,12 @@ import { CollectedEvent } from '../../../../src/types';
 import { THIS_MACHINE_KEY } from '../../../../src/model/devices/device-model';
 import { DEVICE_NAMES_KEY } from '../../../../src/model/devices/device-names';
 import { getDeviceDirectory } from '../../../../src/model/devices/device-directory';
-import { ACTIVE_WINDOW_MS, DevicesStore } from '../../../../src/model/devices/devices-store';
+import {
+    ACTIVE_WINDOW_MS,
+    DEVICES_STORE_KEY,
+    DevicesStore,
+    migrateSavedPanelState
+} from '../../../../src/model/devices/devices-store';
 
 import { MemoryStorage, UA, deviceExchange, failedTls } from './device-test-helpers';
 
@@ -345,6 +350,15 @@ describe('Devices store', () => {
     });
 
     describe('panel', () => {
+        // A fresh start each time, with nothing saved by earlier tests
+        beforeEach(async () => {
+            store.dispose();
+            localStorage.removeItem(DEVICES_STORE_KEY);
+            await createStore();
+        });
+
+        const iphone = () => deviceExchange({ ip: '192.168.0.23', ua: UA.iphoneSafari });
+
         it('keeps its width within limits', () => {
             store.setPanelWidth(10);
             expect(store.panelWidth).to.equal(180);
@@ -360,6 +374,78 @@ describe('Devices store', () => {
             expect(store.panelOpen).to.equal(!wasOpen);
             store.showPanel();
             expect(store.panelOpen).to.equal(true);
+        });
+
+        it('stays hidden while all the traffic is from this machine', () => {
+            expect(store.panelOpen).to.equal(false);
+
+            add(deviceExchange({ ip: '127.0.0.1', ua: UA.curl }), deviceExchange({ sentFromSendPage: true }));
+            expect(store.panelOpen).to.equal(false);
+        });
+
+        it('opens by itself once another device sends traffic, and stays open after Clear', () => {
+            add(deviceExchange({ ip: '127.0.0.1', ua: UA.curl }));
+            add(iphone());
+            expect(store.panelOpen).to.equal(true);
+
+            runInAction(() => { events.clear(); });
+            expect(store.panelOpen).to.equal(true);
+        });
+
+        it("opens for devices that were there before the store started", async () => {
+            store.dispose();
+            add(iphone());
+            await createStore();
+            expect(store.panelOpen).to.equal(true);
+        });
+
+        it("keeps the user's own choice, whatever the traffic", () => {
+            store.showPanel();
+            store.togglePanel(); // Hidden by hand
+            add(iphone());
+            expect(store.panelOpen).to.equal(false);
+
+            store.togglePanel();
+            runInAction(() => { events.clear(); });
+            expect(store.panelOpen).to.equal(true);
+        });
+
+        it('remembers the choice after a restart', async () => {
+            add(iphone());
+            store.togglePanel(); // Hidden by hand
+            store.dispose();
+            runInAction(() => { events.clear(); });
+
+            await createStore();
+            add(iphone());
+            expect(store.panelChoice).to.equal('closed');
+            expect(store.panelOpen).to.equal(false);
+        });
+
+        it('keeps a panel hidden in an older version hidden, and its width', async () => {
+            store.dispose();
+            localStorage.setItem(DEVICES_STORE_KEY, JSON.stringify({ panelOpen: false, panelWidth: 250 }));
+
+            await createStore();
+            add(iphone());
+            expect(store.panelOpen).to.equal(false);
+            expect(store.panelWidth).to.equal(250);
+        });
+
+        it("doesn't take an older version's default open panel as a choice", async () => {
+            store.dispose();
+            localStorage.setItem(DEVICES_STORE_KEY, JSON.stringify({ panelOpen: true, panelWidth: 216 }));
+
+            await createStore();
+            expect(store.panelChoice).to.equal(undefined);
+            expect(store.panelOpen).to.equal(false);
+        });
+
+        it('only migrates a saved hidden panel', () => {
+            expect(migrateSavedPanelState({ panelOpen: false })).to.deep.equal({ panelOpen: false, panelChoice: 'closed' });
+            expect(migrateSavedPanelState({ panelOpen: true })).to.deep.equal({ panelOpen: true });
+            expect(migrateSavedPanelState({ panelChoice: 'open', panelOpen: false }))
+                .to.deep.equal({ panelChoice: 'open', panelOpen: false });
         });
     });
 });

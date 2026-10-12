@@ -1,5 +1,4 @@
 import * as React from 'react';
-import * as polished from 'polished';
 import { action } from 'mobx';
 import { observer } from 'mobx-react-lite';
 
@@ -7,11 +6,12 @@ import { CollectedEvent, HttpExchangeView } from '../../../types';
 import { styled } from '../../../styles';
 import { copyToClipboard } from '../../../util/ui';
 import { toAccelerator } from '../../../util/shortcuts';
+import { MOCK_RESPONSE_SHORTCUT, RESEND_REQUEST_SHORTCUT } from '../../../model/ui/app-actions';
 import { logError } from '../../../errors';
 
 import { UiStore } from '../../../model/ui/ui-store';
 import { ContextMenuItem } from '../../../model/ui/context-menu';
-import { getMethodThemeColor, getStatusColor } from '../../../model/events/categorization';
+import { getMethodThemeColor } from '../../../model/events/categorization';
 import { getStatusMessage } from '../../../model/http/http-docs';
 import { generateCodeSnippet } from '../../../model/ui/export';
 import {
@@ -20,19 +20,26 @@ import {
 } from '../../../model/ui/snippet-formats';
 
 import { ActionButton } from '../../common/action-button';
+import { StatusPill } from './exchange-pills';
 
 export const DETAILS_HEADER_HEIGHT = 44;
 
-// As the pane narrows, the buttons drop their shortcut hints, then the secondary
-// labels, and finally every label (they all stay in the tooltips):
-type HeaderDensity = 'full' | 'no-shortcuts' | 'primary-label' | 'icons';
+// As the pane narrows, the actions give way in steps. Mock response & Resend, the hand-offs to
+// Modify & Send, keep their labels down to 480px, and every shortcut stays in the tooltips:
+//   full     Mock response ⌘M · Resend ⌘R · Breakpoint · More ▾
+//   compact  Mock response ⌘M · Resend ⌘R · More ▾ (Breakpoint moves into More)
+//   labels   Mock response · Resend · More ▾
+//   icons    the Mock & Resend icons · More ▾
+export type HeaderDensity = 'full' | 'compact' | 'labels' | 'icons';
 
-function getDensity(width: number | undefined): HeaderDensity {
+export function getHeaderDensity(width: number | undefined): HeaderDensity {
     if (width === undefined || width >= 760) return 'full';
-    if (width >= 640) return 'no-shortcuts';
-    if (width >= 480) return 'primary-label';
+    if (width >= 640) return 'compact';
+    if (width >= 480) return 'labels';
     return 'icons';
 }
+
+const showsBreakpointButton = (density: HeaderDensity) => density === 'full';
 
 const COPIED_FEEDBACK_MS = 1500;
 
@@ -49,25 +56,20 @@ const HeaderContainer = styled.div<{ density: HeaderDensity }>`
     background-color: ${p => p.theme.mainBackground};
     border-bottom: 1px solid ${p => p.theme.containerBorder};
 
-    ${p => p.density !== 'full' && `
+    ${p => (p.density === 'labels' || p.density === 'icons') && `
         .action-shortcut {
             display: none;
         }
     `}
 
-    ${p => p.density === 'primary-label' && `
-        button:not([data-primary]) .action-label {
-            display: none;
-        }
-    `}
-
     ${p => p.density === 'icons' && `
-        .action-label {
+        button:not([data-keeps-label]) .action-label {
             display: none;
         }
     `}
 `;
 
+// Which request this is: the method & path first, then the host, which gives way first
 const RequestSummary = styled.div`
     flex: 1 1 auto;
     min-width: 0;
@@ -78,6 +80,7 @@ const RequestSummary = styled.div`
 
     font-family: ${p => p.theme.monoFontFamily};
     font-size: ${p => p.theme.textInputFontSize};
+    white-space: nowrap;
 `;
 
 const Method = styled.span<{ httpMethod: string }>`
@@ -86,13 +89,21 @@ const Method = styled.span<{ httpMethod: string }>`
     color: ${p => getMethodThemeColor(p.httpMethod, p.theme)};
 `;
 
-const RequestUrl = styled.span`
+// The path, then the host in a quieter colour. They share one ellipsis at the end, so the host
+// gives way first, and the path only once the host is gone.
+const RequestTarget = styled.span`
+    flex: 0 1 auto;
     min-width: 0;
     overflow: hidden;
-    white-space: nowrap;
     text-overflow: ellipsis;
 
+    font-weight: 500;
     color: ${p => p.theme.mainColor};
+`;
+
+const RequestHost = styled.span`
+    font-weight: 400;
+    color: ${p => p.theme.mainLowlightColor};
 `;
 
 const HeaderActions = styled.div`
@@ -113,44 +124,16 @@ const ExchangeStatus = observer((props: { exchange: HttpExchangeView }) => {
     const { response } = props.exchange;
 
     if (response === undefined) {
-        return <StatusPill status={undefined} label='Pending…' />;
+        return <StatusPill status={undefined}>Pending…</StatusPill>;
     } else if (response === 'aborted') {
-        return <StatusPill status='aborted' label='Failed' />;
+        return <StatusPill status='aborted'>Failed</StatusPill>;
     } else {
         const message = response.statusMessage || getStatusMessage(response.statusCode);
-        return <StatusPill
-            status={response.statusCode}
-            label={`${response.statusCode} ${message}`.trim()}
-        />;
+        return <StatusPill status={response.statusCode}>
+            { `${response.statusCode} ${message}`.trim() }
+        </StatusPill>;
     }
 });
-
-const StatusPill = styled((props: {
-    className?: string,
-    status: number | 'aborted' | undefined,
-    label: string
-}) => <span className={props.className}>{ props.label }</span>)`
-    flex-shrink: 0;
-    padding: 2px 8px;
-    border-radius: 10px;
-
-    font-family: ${p => p.theme.fontFamily};
-    font-size: ${p => p.theme.smallPrintSize};
-    font-weight: 600;
-    white-space: nowrap;
-
-    ${p => {
-        const color = p.status === undefined
-            ? p.theme.containerWatermark
-            : getStatusColor(p.status, p.theme);
-
-        return `
-            color: ${color};
-            background-color: ${polished.rgba(color, 0.12)};
-            border: 1px solid ${polished.rgba(color, 0.35)};
-        `;
-    }}
-`;
 
 function useElementWidth(ref: React.RefObject<HTMLElement>) {
     const [width, setWidth] = React.useState<number | undefined>(undefined);
@@ -188,7 +171,7 @@ export const HttpDetailsHeader = observer((props: {
     const { request } = exchange;
 
     const containerRef = React.useRef<HTMLDivElement>(null);
-    const density = getDensity(useElementWidth(containerRef));
+    const density = getHeaderDensity(useElementWidth(containerRef));
 
     const [copied, setCopied] = React.useState(false);
     React.useEffect(() => {
@@ -207,6 +190,13 @@ export const HttpDetailsHeader = observer((props: {
         const curlFormat = getCodeSnippetOptionFromKey(DEFAULT_SNIPPET_FORMAT_KEY);
 
         const items: Array<ContextMenuItem<HttpExchangeView>> = [
+            // Too narrow for its own button:
+            ...(!showsBreakpointButton(density) ? [{
+                type: 'option' as const,
+                label: 'Add a Breakpoint',
+                enabled: isPlainHttp,
+                callback: props.onCreateBreakpoint
+            }] : []),
             {
                 type: 'option',
                 label: 'Copy as cURL',
@@ -260,9 +250,10 @@ export const HttpDetailsHeader = observer((props: {
     >
         <RequestSummary title={request.url}>
             <Method httpMethod={request.method}>{ request.method }</Method>
-            <RequestUrl>
-                { request.parsedUrl.host }{ request.parsedUrl.pathname }{ request.parsedUrl.search }
-            </RequestUrl>
+            <RequestTarget>
+                { request.parsedUrl.pathname }{ request.parsedUrl.search }{ ' ' }
+                <RequestHost>{ request.parsedUrl.host }</RequestHost>
+            </RequestTarget>
             <ExchangeStatus exchange={exchange} />
         </RequestSummary>
 
@@ -271,10 +262,10 @@ export const HttpDetailsHeader = observer((props: {
 
             <ActionButton
                 variant='primary'
-                data-primary={true}
                 icon='Pencil'
-                shortcut='Cmd+M'
-                title='Create a Modify rule that mocks this response'
+                shortcut={MOCK_RESPONSE_SHORTCUT}
+                title='Mock this response with a Modify rule'
+                aria-label='Mock response'
                 disabled={!isPlainHttp}
                 onClick={() => props.onBuildRuleFromExchange(exchange)}
             >
@@ -283,26 +274,30 @@ export const HttpDetailsHeader = observer((props: {
             { props.onPrepareToResendRequest &&
                 <ActionButton
                     icon='PaperPlaneTilt'
-                    shortcut='Cmd+R'
-                    title='Open this request in Send, to edit & resend it'
+                    shortcut={RESEND_REQUEST_SHORTCUT}
+                    title='Edit and resend in Send'
+                    aria-label='Resend'
                     disabled={!isPlainHttp}
                     onClick={() => props.onPrepareToResendRequest!(exchange)}
                 >
                     Resend
                 </ActionButton>
             }
-            <ActionButton
-                icon='PauseCircle'
-                title='Create a Modify rule that pauses matching requests, so you can edit them'
-                disabled={!isPlainHttp}
-                onClick={props.onCreateBreakpoint}
-            >
-                Breakpoint
-            </ActionButton>
+            { showsBreakpointButton(density) &&
+                <ActionButton
+                    icon='PauseCircle'
+                    title='Pause matching requests with a Modify rule, so you can edit them'
+                    disabled={!isPlainHttp}
+                    onClick={props.onCreateBreakpoint}
+                >
+                    Breakpoint
+                </ActionButton>
+            }
             <ActionButton
                 trailingIcon='CaretDown'
                 title='More actions'
                 aria-haspopup='menu'
+                data-keeps-label={true}
                 onClick={openMoreMenu}
             >
                 More

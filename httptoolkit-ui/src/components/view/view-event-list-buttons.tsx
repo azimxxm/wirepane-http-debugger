@@ -1,6 +1,6 @@
 import * as React from 'react';
 import { observer, inject } from 'mobx-react';
-import * as dateFns from 'date-fns';
+import { buildHarFilename } from '../../util/export-filenames'; // wirepane: one place for our file names
 import * as dedent from 'dedent';
 import * as Ajv from 'ajv';
 
@@ -48,9 +48,7 @@ export const ExportAsHarButton = inject('accountStore')(observer((props: {
             const harContent = JSON.stringify(
                 await generateHar(props.events)
             );
-            const filename = `Wirepane_${ // wirepane: our name
-                dateFns.format(Date.now(), 'YYYY-MM-DD_HH-mm')
-            }.har`;
+            const filename = buildHarFilename(); // wirepane: our name
 
             saveFile(filename, 'application/har+json;charset=utf-8', harContent);
         }}

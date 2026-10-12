@@ -7,7 +7,6 @@ import { HtkResponse, HttpVersion } from '../../../types';
 import { Theme } from '../../../styles';
 
 import { ApiExchange } from '../../../model/api/api-interfaces';
-import { getStatusColor } from '../../../model/events/categorization';
 import { getStatusDocs, getStatusMessage } from '../../../model/http/http-docs';
 
 import {
@@ -15,7 +14,7 @@ import {
     CollapsibleCardProps,
     CollapsibleCardHeading
 } from '../../common/card';
-import { Pill } from '../../common/pill';
+import { StatusPill } from './exchange-pills'; // wirepane: the same status pill as the header
 import { HeaderDetails, HeaderHeadingContainer } from './header-details';
 import {
 } from '../../common/card';
@@ -62,9 +61,9 @@ export const HttpResponseCard = observer((props: HttpResponseCardProps) => {
 
     return <CollapsibleCard {...props} direction='left'>
         <header>
-            <Pill color={getStatusColor(response.statusCode, theme)}>{
+            <StatusPill status={response.statusCode}>{ /* wirepane: as in the header */
                 response.statusCode
-            }</Pill>
+            }</StatusPill>
             <CollapsibleCardHeading onCollapseToggled={props.onCollapseToggled}>
                 Response
             </CollapsibleCardHeading>

@@ -189,7 +189,7 @@ export const Source = styled(Column)`
 export const Host = styled(Column)`
     flex-shrink: 1;
     flex-grow: 0;
-    flex-basis: 500px;
+    flex-basis: 750px; /* wirepane: about 43/57 with the path, so host names stay readable */
 `;
 
 export const PathAndQuery = styled(Column)`
@@ -218,7 +218,7 @@ export const EventTypeColumn = styled(Column)`
 export const RTCEventLabel = styled(Column)`
     flex-shrink: 1;
     flex-grow: 0;
-    flex-basis: 500px;
+    flex-basis: 750px; /* wirepane: as Host */
 
     > svg {
         padding-right: 0; /* Right, not left - it's rotated */

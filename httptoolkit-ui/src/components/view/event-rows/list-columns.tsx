@@ -43,8 +43,10 @@ const COLUMN_WIDTHS: { readonly [column in ListColumn]: number } = {
 export const LIST_OPTIONS_SLOT_WIDTH = 28;
 
 // The host & path never shrink below these. Past that the list scrolls sideways instead,
-// so turning on more columns never hides the URL.
-export const HOST_MIN_WIDTH = 48;
+// so turning on more columns never hides the URL. Most of the host's room comes from its
+// flex-basis (event-row-components); a higher floor would make the list scroll sideways as
+// soon as a phone adds the Device column at 1440px.
+export const HOST_MIN_WIDTH = 72;
 export const PATH_MIN_WIDTH = 72;
 
 // Every cell's right margin (TrafficEventListRow & TableHeaderRow)

@@ -118,7 +118,10 @@ export class RuleList extends React.Component<{
     moveRule: (currentPath: ItemPath, targetPath: ItemPath) => void,
     combineRulesAsGroup: (sourcePath: ItemPath, targetPath: ItemPath) => void,
 
-    collapsedRulesMap: { [id: string]: boolean }
+    collapsedRulesMap: { [id: string]: boolean },
+
+    // wirepane: hidden while the rule templates show, so there's one way to add a rule
+    hideAddRuleRow?: boolean
 }> {
 
     @observable currentlyDraggingRuleId: string | undefined;
@@ -244,10 +247,10 @@ export class RuleList extends React.Component<{
                     ref={provided.innerRef}
                     {...provided.droppableProps}
                 >
-                    <AddRuleRow
+                    { !this.props.hideAddRuleRow && <AddRuleRow /* wirepane */
                         onAdd={addRule}
                         disabled={currentlyDraggingRuleId !== undefined}
-                    />
+                    /> }
 
                     { ruleRows }
 

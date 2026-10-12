@@ -62,14 +62,14 @@ describe('HTTP source parsing', () => {
             it('should parse Git UA', () => {
                 const source = parseSource(GIT);
 
-                expect(source.summary).to.equal('Git/2.20.1');
+                expect(source.summary).to.equal('git/2.20.1'); // wirepane: the client's own casing
                 expect(source.icon).to.equal(SourceIcons.Git);
             });
 
             it('should parse NPM UA', () => {
                 const source = parseSource(LINUX_NPM);
 
-                expect(source.summary).to.equal('Npm/6.4.1 (Linux x64)');
+                expect(source.summary).to.equal('npm/6.4.1 (Linux x64)'); // wirepane: the client's own casing
                 expect(source.icon).to.equal(SourceIcons.Npm);
             });
 
@@ -114,6 +114,12 @@ describe('HTTP source parsing', () => {
             it('should prefer a specific client over a generic tool in the same UA', () => {
                 // Guzzle's UA mentions curl, but PHP is the more useful icon:
                 expect(parseSource(GUZZLE_PHP).icon).to.equal(SourceIcons.Php);
+            });
+
+            it("should keep the client's & the OS's own casing", () => {
+                expect(parseSource('curl/8.7.1').summary).to.equal('curl/8.7.1');
+                expect(parseSource('okhttp/4.12.0').summary).to.equal('okhttp/4.12.0');
+                expect(parseSource(IPHONE_SAFARI).summary).to.contain('(iOS 11.4)');
             });
 
             it('should handle empty user agents', () => {

@@ -72,8 +72,28 @@ export function buildRequestBaseName(args: {
 
 /** Default filename for the archive itself. */
 export function buildArchiveFilename(now: Date = new Date()): string {
+    return `${EXPORT_NAME_PREFIX}_Export_${formatExportTimestamp(now)}.zip`; // wirepane: our name
+}
+
+/*
+ * Wirepane: every exported file's default name is built here, from our name and the local
+ * date & time: Wirepane_2026-10-12_14-05.har
+ */
+
+const EXPORT_NAME_PREFIX = 'Wirepane';
+
+function formatExportTimestamp(now: Date): string {
     const pad = (n: number) => String(n).padStart(2, '0');
-    const stamp = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`
+    return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`
         + `_${pad(now.getHours())}-${pad(now.getMinutes())}`;
-    return `Wirepane_Export_${stamp}.zip`; // wirepane: our name
+}
+
+/** Default filename for a HAR export. */
+export function buildHarFilename(now: Date = new Date()): string {
+    return `${EXPORT_NAME_PREFIX}_${formatExportTimestamp(now)}.har`;
+}
+
+/** Default filename for exported Modify rules. */
+export function buildRulesFilename(now: Date = new Date()): string {
+    return `${EXPORT_NAME_PREFIX}_${formatExportTimestamp(now)}.htkrules`;
 }

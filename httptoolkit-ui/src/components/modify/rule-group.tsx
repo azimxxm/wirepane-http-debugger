@@ -47,7 +47,8 @@ const CollapsedItemPlaceholder = styled.div<{
     opacity: ${p => (p.activated ? 1 : 0.6) - p.index * 0.2};
     z-index: ${p => 9 - p.index};
 
-    border-left: 5px solid ${(p) => p.borderColor};
+    /* wirepane: a neutral control colour, not the old per-method palette */
+    border-left: 5px solid ${(p) => p.borderColor === 'transparent' ? 'transparent' : p.theme.inputBorder};
 `;
 
 const TitleButtonContainer = styled.div`

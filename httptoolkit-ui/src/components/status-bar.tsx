@@ -13,8 +13,9 @@ import { RulesStore } from '../model/rules/rules-store';
 import { TrafficSource } from '../model/http/sources';
 import { countActiveUserRules, getConnectedClients } from '../model/traffic-summary';
 import { DevicesStore } from '../model/devices/devices-store';
-// ⌘⇧R itself is bound with the other app actions, by AppActionsHost:
-import { TOGGLE_RECORDING_SHORTCUT } from '../model/ui/app-actions';
+// ⌘⇧R & ⌘K themselves are bound with the other app actions, by AppActionsHost:
+import { COMMAND_PALETTE_SHORTCUT, TOGGLE_RECORDING_SHORTCUT } from '../model/ui/app-actions';
+import { openCommandPalette } from '../model/ui/command-palette-state';
 import { copyProxyAddress, getProxyAddress, proxyAddressCopy } from '../model/ui/proxy-address';
 
 import { UnstyledButton } from './common/inputs';
@@ -123,6 +124,20 @@ const MonoValue = styled.span`
 
 const KeyHint = styled.span`
     color: ${p => p.theme.containerWatermark};
+`;
+
+// The way in to ⌘K for mouse users, and a reminder that it exists
+const KeyCap = styled.kbd`
+    flex-shrink: 0;
+    padding: 0 4px;
+    border-radius: 4px;
+
+    font-family: ${p => p.theme.fontFamily};
+    font-size: ${p => p.theme.tinyTextSize};
+    line-height: 16px;
+
+    background-color: ${p => p.theme.mainBackground};
+    border: 1px solid ${p => p.theme.containerBorder};
 `;
 
 // Just the visible text: screen readers get the button labels instead.
@@ -258,5 +273,14 @@ export const StatusBar = inject('eventsStore', 'proxyStore', 'rulesStore', 'devi
                 { activeRuleCount } rule{ activeRuleCount === 1 ? '' : 's' } active
             </span>
         </StatusLink>
+
+        <StatusButton
+            onClick={openCommandPalette}
+            aria-keyshortcuts={toAriaShortcut(COMMAND_PALETTE_SHORTCUT)}
+            title={`Search every command (${formatShortcut(COMMAND_PALETTE_SHORTCUT)})`}
+        >
+            <KeyCap aria-hidden={true}>{ formatShortcut(COMMAND_PALETTE_SHORTCUT) }</KeyCap>
+            <span>Commands</span>
+        </StatusButton>
     </StatusBarRoot>;
 }));

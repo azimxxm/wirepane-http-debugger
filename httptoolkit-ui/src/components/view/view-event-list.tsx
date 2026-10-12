@@ -98,15 +98,22 @@ const ListContainer = styled.div<{ role: 'grid' }>`
         min-width: ${PATH_MIN_WIDTH}px;
     }
 
-    /* The selection fill shows focus, so the list only gets an outline when no row is active */
-    & > div > div[tabindex="0"]:focus:not(:focus-visible),
-    & > div > div[tabindex="0"]:focus-visible:has(.active) {
+    /* wirepane: the selection fill shows focus, so the list only gets a ring when no row is
+       active. The rows would paint over the list's own outline, so the ring is an overlay. */
+    & > div > div[tabindex="0"]:focus {
         outline: none;
     }
 
-    /* When focused via keyboard and no active row is visible, ring the list (inside, so it isn't clipped) */
-    & > div > div[tabindex="0"]:focus-visible:not(:has(.active)) {
-        outline-offset: -2px;
+    &:has(> div > div[tabindex="0"]:focus-visible):not(:has(.active))::after {
+        content: '';
+        position: absolute;
+        top: ${HEADER_FOOTER_HEIGHT}px;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        z-index: 2;
+        pointer-events: none;
+        box-shadow: inset 0 0 0 2px ${p => p.theme.focusRing};
     }
 
     /* While the list has focus, selected rows take the accent fill with white text, like macOS */

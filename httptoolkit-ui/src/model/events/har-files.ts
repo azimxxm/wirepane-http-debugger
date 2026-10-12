@@ -1,25 +1,22 @@
-import * as dateFns from 'date-fns';
 import type * as Ajv from 'ajv';
 
 import { ViewableEvent } from '../../types';
 import { saveFile, uploadFile } from '../../util/ui';
 import { formatAjvError } from '../../util/json-schema';
+import { buildHarFilename } from '../../util/export-filenames';
 import { logError } from '../../errors';
 
 import { generateHar } from '../http/har';
 import type { EventsStore } from './events-store';
 
 /**
- * Importing & exporting HAR files from anywhere in the app (⌘K and the desktop menu bar).
- * Problems come back as text for the caller to show, instead of in an alert().
+ * Importing & exporting HAR files from anywhere in the app: View's toolbar, ⌘K and the desktop
+ * menu bar. Problems come back as text for the caller to show, instead of in an alert().
  */
 
 const HAR_FILE_TYPES = ['.har', 'application/har', 'application/har+json'];
 // The first few schema errors explain the problem. A broken file can have thousands.
 const MAX_LISTED_ERRORS = 5;
-
-export const buildHarFilename = (now: number = Date.now()) =>
-    `Wirepane_${dateFns.format(now, 'YYYY-MM-DD_HH-mm')}.har`;
 
 export async function exportHarFile(events: ReadonlyArray<ViewableEvent>): Promise<void> {
     const harContent = JSON.stringify(await generateHar(events));

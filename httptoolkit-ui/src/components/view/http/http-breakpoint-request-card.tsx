@@ -7,7 +7,6 @@ import { Method } from 'mockttp';
 import { BreakpointRequestResult, HttpExchange, RawHeaders } from '../../../types';
 import { styled } from '../../../styles';
 
-import { getSummaryColor } from '../../../model/events/categorization';
 import { withHeaderValue } from '../../../model/http/headers';
 
 import {
@@ -15,7 +14,7 @@ import {
     CollapsibleCard,
     CollapsibleCardProps,
 } from '../../common/card';
-import { Pill } from '../../common/pill';
+import { PillMethod, RequestPill } from './exchange-pills'; // wirepane: no content-type colour
 import { HostnameText } from '../../common/hostname-text'; // wirepane: the real hostname
 import { ContentLabelBlock, ContentLabel } from '../../common/text-content';
 import { EditableRawHeaders } from '../../common/editable-headers';
@@ -62,9 +61,9 @@ export class HttpBreakpointRequestCard extends React.Component<RequestBreakpoint
         return <CollapsibleCard {...cardProps} direction='right'>
             <header>
                 <SourceIcon source={request.source} />
-                <Pill color={getSummaryColor(exchange)}>
-                    { method } <HostnameText>{ request.parsedUrl.hostname || '' }</HostnameText>
-                </Pill>
+                <RequestPill>{ /* wirepane: the method in its own colour */ }
+                    <PillMethod httpMethod={method}>{ method }</PillMethod> <HostnameText>{ request.parsedUrl.hostname || '' }</HostnameText>
+                </RequestPill>
                 <CollapsibleCardHeading onCollapseToggled={cardProps.onCollapseToggled}>
                     Request
                 </CollapsibleCardHeading>

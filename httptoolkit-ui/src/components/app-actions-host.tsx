@@ -2,7 +2,6 @@ import * as React from 'react';
 import { inject } from 'mobx-react';
 import { observer } from 'mobx-react-lite';
 
-import { styled } from '../styles';
 import { appHistory } from '../routing';
 import { useHotkeys } from '../util/ui';
 import { logError } from '../errors';
@@ -13,6 +12,7 @@ import { ProxyStore } from '../model/proxy-store';
 import { SendStore } from '../model/send/send-store';
 import { DevicesStore } from '../model/devices/devices-store';
 import { CollectionsStore } from '../model/collections/collections-store';
+import { RulesStore } from '../model/rules/rules-store';
 import { UiStore } from '../model/ui/ui-store';
 import {
     AppAction,
@@ -22,10 +22,15 @@ import {
     canVisitSend
 } from '../model/ui/app-actions';
 import { copyProxyAddress } from '../model/ui/proxy-address';
+import {
+    closeCommandPalette,
+    commandPaletteState,
+    toggleCommandPalette
+} from '../model/ui/command-palette-state';
+import { getSelectedRequestCommands } from '../model/ui/selected-request-commands';
 import { exportHarFile, HarImportProblem, importHarFile } from '../model/events/har-files';
 
-import { ActionButton } from './common/action-button';
-import { CollectionDialog } from './collections/dialog-frame';
+import { HarImportProblemDialog } from './common/har-import-problem-dialog';
 import { CommandPalette } from './command-palette';
 
 // One action's app-wide shortcut. Pages bind their own page-specific shortcuts.
@@ -43,28 +48,6 @@ const AppActionHotkey = (props: { action: AppAction, runner: AppActionRunner }) 
     return null;
 };
 
-const ProblemMessage = styled.p`
-    white-space: pre-wrap;
-    overflow-wrap: anywhere;
-    line-height: 1.5;
-`;
-
-const ProblemDialog = (props: { problem: HarImportProblem, onClose: () => void }) => {
-    // <dialog> focuses its [autofocus] element when it opens:
-    const focusOnOpen = React.useCallback((button: HTMLButtonElement | null) => {
-        button?.setAttribute('autofocus', '');
-    }, []);
-
-    return <CollectionDialog
-        title={props.problem.title}
-        width={480}
-        onClose={props.onClose}
-        footer={<ActionButton ref={focusOnOpen} variant='primary' onClick={props.onClose}>OK</ActionButton>}
-    >
-        <ProblemMessage>{ props.problem.message }</ProblemMessage>
-    </CollectionDialog>;
-};
-
 /**
  * Runs the app actions (model/ui/app-actions.ts): binds their shortcuts, shows the ⌘K
  * palette, and runs whatever the desktop app's menu bar sends. Mounted once, in App.
@@ -75,6 +58,7 @@ export const AppActionsHost = inject(
     'sendStore',
     'devicesStore',
     'collectionsStore',
+    'rulesStore',
     'uiStore'
 )(observer((props: {
     eventsStore?: EventsStore,
@@ -82,9 +66,9 @@ export const AppActionsHost = inject(
     sendStore?: SendStore,
     devicesStore?: DevicesStore,
     collectionsStore?: CollectionsStore,
+    rulesStore?: RulesStore,
     uiStore?: UiStore
 }) => {
-    const [paletteOpen, setPaletteOpen] = React.useState(false);
     const [problem, setProblem] = React.useState<HarImportProblem | undefined>();
 
     const runner = React.useMemo(() => {
@@ -104,7 +88,7 @@ export const AppActionsHost = inject(
             navigate,
             // The desktop app opens these in the system browser
             openUrl: (url) => { window.open(url, '_blank', 'noopener,noreferrer'); },
-            toggleCommandPalette: () => setPaletteOpen((open) => !open),
+            toggleCommandPalette,
             copyProxyAddress: () => { copyProxyAddress(proxyStore); },
             importHar: () => {
                 navigate('/view'); // Where the imported requests show up
@@ -112,12 +96,19 @@ export const AppActionsHost = inject(
             },
             exportHar: () => { exportHarFile(eventsStore.events).catch(logError); },
             canVisitModify,
-            canVisitSend
+            canVisitSend,
+            selectedRequest: () => getSelectedRequestCommands({
+                uiStore: props.uiStore!,
+                eventsStore,
+                rulesStore: props.rulesStore!,
+                sendStore: props.sendStore!,
+                navigate
+            })
         });
 
         return new AppActionRunner(actions, {
             // Anything else closes the palette first
-            beforeRun: (action) => { if (action.id !== 'command-palette') setPaletteOpen(false); }
+            beforeRun: (action) => { if (action.id !== 'command-palette') closeCommandPalette(); }
         });
     }, []);
 
@@ -127,27 +118,25 @@ export const AppActionsHost = inject(
     }), [runner]);
 
     // Going to another page any other way (a link, a page's own shortcut, Back) closes it too
-    React.useEffect(() => appHistory.listen(() => setPaletteOpen(false)), []);
+    React.useEffect(() => appHistory.listen(() => closeCommandPalette()), []);
 
     const runFromPalette = React.useCallback((action: AppAction) => {
-        setPaletteOpen(false);
+        closeCommandPalette();
         // Once the palette has closed and given focus back, so the action can move focus itself
         setTimeout(() => runner.run(action.id, 'palette'));
     }, [runner]);
-
-    const closePalette = React.useCallback(() => setPaletteOpen(false), []);
 
     return <>
         { runner.actions.filter((action) => action.hotkeys).map((action) =>
             <AppActionHotkey key={action.id} action={action} runner={runner} />
         ) }
 
-        { paletteOpen && <CommandPalette
+        { commandPaletteState.isOpen && <CommandPalette
             actions={runner.actions.filter((action) => !action.hiddenInPalette)}
             onRun={runFromPalette}
-            onClose={closePalette}
+            onClose={closeCommandPalette}
         /> }
 
-        { problem && <ProblemDialog problem={problem} onClose={() => setProblem(undefined)} /> }
+        { problem && <HarImportProblemDialog problem={problem} onClose={() => setProblem(undefined)} /> }
     </>;
 }));

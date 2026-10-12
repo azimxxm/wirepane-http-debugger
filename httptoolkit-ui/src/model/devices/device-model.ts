@@ -1,4 +1,3 @@
-import * as _ from 'lodash';
 import * as ipaddr from 'ipaddr.js';
 
 import type { HtkRequest, ViewableEvent } from '../../types';
@@ -223,9 +222,9 @@ export function getAppName(request: Pick<HtkRequest, 'source'>): string {
     if (cfnetworkApp) return decodeAppName(cfnetworkApp[1]);
 
     // Without a recognised browser, the summary is the user agent's first part (see
-    // sources.ts), e.g. "Curl/8.7.1". With one, it's like "Mobile Safari 18 (iOS 18)".
+    // sources.ts), e.g. "curl/8.7.1". With one, it's like "Mobile Safari 18 (iOS 18)".
     const firstPart = source.ua.split(' ')[0];
-    const name = source.summary.startsWith(_.upperFirst(firstPart))
+    const name = source.summary.startsWith(firstPart)
         ? firstPart.split('/')[0]
         : source.summary
             .replace(/\s*\(.*\)$/, '') // The OS

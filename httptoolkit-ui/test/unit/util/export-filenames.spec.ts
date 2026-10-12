@@ -1,6 +1,8 @@
 import { expect } from 'chai';
 import {
     buildArchiveFilename,
+    buildHarFilename,
+    buildRulesFilename,
     buildRequestBaseName,
     sanitizeFilename
 } from '../../../src/util/export-filenames';
@@ -134,6 +136,20 @@ describe('export-filenames', () => {
         it('contains date and time', () => {
             const name = buildArchiveFilename(new Date(2026, 4, 17, 12, 34));
             expect(name).to.equal('Wirepane_Export_2026-05-17_12-34.zip');
+        });
+
+    });
+
+    describe('HAR & rules export names', () => {
+
+        it('use our name and the local date & time', () => {
+            const now = new Date(2026, 9, 2, 9, 5);
+            expect(buildHarFilename(now)).to.equal('Wirepane_2026-10-02_09-05.har');
+            expect(buildRulesFilename(now)).to.equal('Wirepane_2026-10-02_09-05.htkrules');
+        });
+
+        it('default to now', () => {
+            expect(buildHarFilename()).to.match(/^Wirepane_\d{4}-\d{2}-\d{2}_\d{2}-\d{2}\.har$/);
         });
 
     });

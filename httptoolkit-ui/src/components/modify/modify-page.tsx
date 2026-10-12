@@ -2,7 +2,7 @@ import * as _ from 'lodash';
 import * as React from 'react';
 import { action, observable, autorun, runInAction } from 'mobx';
 import { observer, inject, disposeOnUnmount } from 'mobx-react';
-import * as dateFns from 'date-fns';
+import { buildRulesFilename } from '../../util/export-filenames'; // wirepane: one place for our file names
 
 import { styled } from '../../styles';
 import { WithInjected } from '../../types';
@@ -117,6 +117,7 @@ class ModifyPage extends React.Component<ModifyPageProps> {
             combineDraftRulesAsGroup
         } = this.props.rulesStore;
         const isPaidUser = this.props.accountStore.user.isPaidUser();
+        const showTemplates = getUserRuleItems(draftRules).length === 0; // wirepane: rule templates
 
         return <ModifyPageContainer ref={this.containerRef}>
             <ModifyPageShortcuts onNewRule={this.addRule} onSave={this.saveIfUnsaved} />
@@ -140,13 +141,14 @@ class ModifyPage extends React.Component<ModifyPageProps> {
             </PageHeader>
 
             <ModifyPageScrollContainer>
-                { getUserRuleItems(draftRules).length === 0 &&
+                { showTemplates &&
                     <RuleTemplateGrid onCreate={this.addTemplateRule} />
                 }
                 <RuleList
                     activeRules={rules}
                     draftRules={draftRules}
                     collapsedRulesMap={this.collapsedRulesMap}
+                    hideAddRuleRow={showTemplates}
 
                     addRule={this.addRule}
                     saveRule={this.saveRule}
@@ -289,9 +291,7 @@ class ModifyPage extends React.Component<ModifyPageProps> {
             serializeRules(this.props.rulesStore.draftRules)
         );
 
-        const filename = `Wirepane_${ // wirepane: our name
-            dateFns.format(Date.now(), 'YYYY-MM-DD_HH-mm')
-        }.htkrules`;
+        const filename = buildRulesFilename(); // wirepane: our name
 
         saveFile(filename, SERIALIZED_RULES_MIME_TYPE, rulesetContent);
     }

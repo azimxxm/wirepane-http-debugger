@@ -12,6 +12,14 @@ import {
     DOCS_URL,
     REPORT_ISSUE_URL
 } from '../../../../src/model/ui/app-actions';
+import { searchCommands } from '../../../../src/model/ui/command-search';
+
+const REQUEST_ACTION_IDS: AppActionId[] = [
+    'request-mock-response',
+    'request-resend',
+    'request-copy-curl',
+    'request-pin'
+];
 
 // Fake stores & app functions that record what the actions do with them
 function buildTestActions(initial: {
@@ -22,7 +30,9 @@ function buildTestActions(initial: {
     collectionsPanelOpen?: boolean,
     mcpPaths?: string[],
     canVisitModify?: boolean,
-    canVisitSend?: boolean
+    canVisitSend?: boolean,
+    // The request selected in View: plain HTTP or a WebSocket, pinned or not
+    selected?: { isPlainHttp: boolean, isPinned: boolean }
 } = {}) {
     const state = {
         path: '/intercept',
@@ -33,6 +43,7 @@ function buildTestActions(initial: {
         mcpPaths: ['/bin/mcp'],
         canVisitModify: true,
         canVisitSend: true,
+        selected: undefined as { isPlainHttp: boolean, isPinned: boolean } | undefined,
         ...initial
     };
     const calls: string[] = [];
@@ -73,7 +84,14 @@ function buildTestActions(initial: {
         importHar: () => { calls.push('importHar'); },
         exportHar: () => { calls.push('exportHar'); },
         canVisitModify: () => state.canVisitModify,
-        canVisitSend: () => state.canVisitSend
+        canVisitSend: () => state.canVisitSend,
+        selectedRequest: () => state.selected && {
+            ...state.selected,
+            mockResponse: () => { calls.push('request.mockResponse'); },
+            resend: () => { calls.push('request.resend'); },
+            copyAsCurl: () => { calls.push('request.copyAsCurl'); },
+            togglePinned: () => { calls.push('request.togglePinned'); }
+        }
     };
 
     const actions = buildAppActions(deps);
@@ -132,10 +150,23 @@ describe('App actions', () => {
             expect(action('go-settings').hotkeys).to.contain('Ctrl+9, Cmd+9');
         });
 
-        it("doesn't list the palette in the palette", () => {
-            const { actions } = buildTestActions();
-            expect(actions.filter((action) => action.hiddenInPalette).map((action) => action.id))
-                .to.deep.equal(['command-palette']);
+        it("doesn't list the palette in the palette, or request commands without a request", () => {
+            const { actions, state } = buildTestActions({ path: '/view' });
+            const hiddenIds = () => actions.filter((action) => action.hiddenInPalette).map((action) => action.id);
+
+            expect(hiddenIds()).to.deep.equal([...REQUEST_ACTION_IDS, 'command-palette']);
+
+            state.selected = { isPlainHttp: true, isPinned: false };
+            expect(hiddenIds()).to.deep.equal(['command-palette']);
+        });
+
+        it('shows the request shortcuts, which View binds itself', () => {
+            const { action } = buildTestActions();
+
+            expect(formatShortcut(action('request-mock-response').shortcut!, true)).to.equal('⌘M');
+            expect(formatShortcut(action('request-resend').shortcut!, true)).to.equal('⌘R');
+            expect(formatShortcut(action('request-pin').shortcut!, true)).to.equal('⌘P');
+            REQUEST_ACTION_IDS.forEach((id) => expect(action(id).hotkeys).to.equal(undefined));
         });
 
         it('only shows the side panel shortcut on its own page', () => {
@@ -192,6 +223,84 @@ describe('App actions', () => {
 
             state.mcpPaths = ['/bin/mcp'];
             expect(action('connect-ai').enabled).to.equal(true);
+        });
+
+    });
+
+    describe('the selected request', () => {
+
+        it('lists its commands first in the palette', () => {
+            const { actions } = buildTestActions({
+                path: '/view/some-event',
+                selected: { isPlainHttp: true, isPinned: false }
+            });
+            const shown = actions.filter((action) => !action.hiddenInPalette);
+            const groups = searchCommands(shown, '', APP_ACTION_SECTIONS);
+
+            expect(groups[0].section).to.equal('This request');
+            expect(groups[0].matches.map((match) => match.command.label))
+                .to.deep.equal(['Mock response', 'Resend', 'Copy as cURL', 'Pin']);
+        });
+
+        it('only offers them in View', () => {
+            const { action, state } = buildTestActions({
+                path: '/send',
+                selected: { isPlainHttp: true, isPinned: false }
+            });
+            expect(action('request-resend').hiddenInPalette).to.equal(true);
+            expect(action('request-resend').enabled).to.equal(false);
+
+            state.path = '/view/some-event';
+            expect(action('request-resend').hiddenInPalette).to.equal(false);
+            expect(action('request-resend').enabled).to.equal(true);
+        });
+
+        it('runs them on the selected request', () => {
+            const { action, calls } = buildTestActions({
+                path: '/view',
+                selected: { isPlainHttp: true, isPinned: false }
+            });
+
+            REQUEST_ACTION_IDS.forEach((id) => action(id).run());
+            expect(calls).to.deep.equal([
+                'request.mockResponse',
+                'request.resend',
+                'request.copyAsCurl',
+                'request.togglePinned'
+            ]);
+        });
+
+        it('only pins a WebSocket, and says when it would unpin', () => {
+            const { action } = buildTestActions({
+                path: '/view',
+                selected: { isPlainHttp: false, isPinned: true }
+            });
+
+            expect(action('request-mock-response').enabled).to.equal(false);
+            expect(action('request-resend').enabled).to.equal(false);
+            expect(action('request-copy-curl').enabled).to.equal(false);
+            expect(action('request-pin').enabled).to.equal(true);
+            expect(action('request-pin').label).to.equal('Unpin');
+        });
+
+        it('follows the server version for mocking & resending', () => {
+            const { action } = buildTestActions({
+                path: '/view',
+                selected: { isPlainHttp: true, isPinned: false },
+                canVisitModify: false,
+                canVisitSend: false
+            });
+
+            expect(action('request-mock-response').enabled).to.equal(false);
+            expect(action('request-resend').enabled).to.equal(false);
+            expect(action('request-copy-curl').enabled).to.equal(true);
+        });
+
+        it('does nothing without a selected request', () => {
+            const { action, calls } = buildTestActions({ path: '/view' });
+
+            REQUEST_ACTION_IDS.forEach((id) => action(id).run());
+            expect(calls).to.deep.equal([]);
         });
 
     });

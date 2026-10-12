@@ -1,64 +1,22 @@
 import * as React from 'react';
-import { inject, observer } from 'mobx-react';
-import * as dateFns from 'date-fns';
-import * as dedent from 'dedent';
-import * as Ajv from 'ajv';
+import { inject } from 'mobx-react';
+import { observer } from 'mobx-react-lite';
 
 import { styled } from '../../styles';
-import { CollectedEvent, ViewableEvent } from '../../types';
-import { saveFile, uploadFile } from '../../util/ui';
-import { formatAjvError } from '../../util/json-schema';
+import { CollectedEvent } from '../../types';
 import { logError } from '../../errors';
 
 import { EventsStore } from '../../model/events/events-store';
-import { generateHar } from '../../model/http/har';
+import { exportHarFile, HarImportProblem, importHarFile } from '../../model/events/har-files';
+import { CLEAR_TRAFFIC_SHORTCUT, IMPORT_HAR_SHORTCUT } from '../../model/ui/app-actions';
 import {
     FilterSet,
     SelectableSearchFilterClasses
 } from '../../model/filters/search-filters';
 
 import { ActionButton } from '../common/action-button';
+import { HarImportProblemDialog } from '../common/har-import-problem-dialog';
 import { SearchFilter } from './filters/search-filter';
-
-// Same behaviour as the old list footer's HAR buttons (view-event-list-buttons.tsx),
-// which these labelled toolbar buttons replace:
-async function exportEventsAsHar(events: ReadonlyArray<ViewableEvent>) {
-    const harContent = JSON.stringify(await generateHar(events));
-    const filename = `Wirepane_${dateFns.format(Date.now(), 'YYYY-MM-DD_HH-mm')}.har`; // wirepane: our name
-
-    saveFile(filename, 'application/har+json;charset=utf-8', harContent);
-}
-
-async function importHarFile(eventsStore: EventsStore) {
-    const uploadedFile = await uploadFile('text', ['.har', 'application/har', 'application/har+json']);
-    if (!uploadedFile) return;
-
-    let data: {} = {};
-    try {
-        data = JSON.parse(uploadedFile);
-        await eventsStore.loadFromHar(data);
-    } catch (error: any) {
-        logError(error);
-
-        if (error.name === 'HARError' && error.errors) {
-            alert(dedent`
-                HAR file is not valid.
-
-                ${
-                    error.errors
-                    .map((e: Ajv.ErrorObject) => formatAjvError(data, e))
-                    .join('\n')
-                }
-            `);
-        } else {
-            alert(dedent`
-                Could not parse HAR file.
-
-                ${error.message || error}
-            `);
-        }
-    }
-}
 
 // The filter sits in the page header, so its growing tag list & its suggestions
 // drop down over the list instead of up, as they did in the old footer.
@@ -106,6 +64,11 @@ export const ViewToolbar = inject('eventsStore')(observer((props: {
     const [shownCount, totalCount] = props.filteredCount;
     const hasEvents = props.allEvents.length > 0;
 
+    // The same import & export as ⌘K and the menu bar, with problems shown in a dialog
+    const [importProblem, setImportProblem] = React.useState<HarImportProblem | undefined>();
+    const importHar = () => { importHarFile(props.eventsStore!).then(setImportProblem).catch(logError); };
+    const exportHar = () => { exportHarFile(props.filteredEvents).catch(logError); };
+
     return <>
         <FilterSlot>
             <SearchFilter
@@ -125,8 +88,7 @@ export const ViewToolbar = inject('eventsStore')(observer((props: {
 
         <ActionButton
             icon='Trash'
-            shortcut='Cmd+Shift+Backspace'
-            shortcutInTooltipOnly={true}
+            shortcut={CLEAR_TRAFFIC_SHORTCUT}
             title='Clear all captured traffic'
             disabled={!hasEvents}
             onClick={props.onClear}
@@ -143,8 +105,9 @@ export const ViewToolbar = inject('eventsStore')(observer((props: {
         </ActionButton>
         <ActionButton
             icon='DownloadSimple'
+            shortcut={IMPORT_HAR_SHORTCUT}
             title='Import requests & responses from a HAR file'
-            onClick={() => importHarFile(props.eventsStore!)}
+            onClick={importHar}
         >
             Import HAR
         </ActionButton>
@@ -152,9 +115,13 @@ export const ViewToolbar = inject('eventsStore')(observer((props: {
             icon='UploadSimple'
             title='Export the requests shown here as a HAR file'
             disabled={props.filteredEvents.length === 0}
-            onClick={() => exportEventsAsHar(props.filteredEvents)}
+            onClick={exportHar}
         >
             Export HAR
         </ActionButton>
+
+        { importProblem &&
+            <HarImportProblemDialog problem={importProblem} onClose={() => setImportProblem(undefined)} />
+        }
     </>;
 }));

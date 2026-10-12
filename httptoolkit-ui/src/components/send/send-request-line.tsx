@@ -70,6 +70,27 @@ export const MethodSelectContainer = styled.div`
     flex-grow: 0;
     flex-basis: 105px;
 
+    /* wirepane: the method & the URL share one control border, and one focus ring around
+       both. Each half draws its side of the ring (clip-path cuts the shared edge). */
+    margin: 5px 0 5px 6px;
+    border: 1px solid ${p => p.theme.inputBorder};
+    border-right: none;
+    border-radius: 6px 0 0 6px;
+
+    > select {
+        border-radius: 5px 0 0 5px;
+    }
+
+    &:has(select:focus-visible),
+    form:has(> input:focus-visible) > & {
+        box-shadow: 0 0 0 2px ${p => p.theme.focusRing};
+        clip-path: inset(-3px 0 -3px -3px);
+
+        > select {
+            outline: none;
+        }
+    }
+
     &:focus-within {
         > svg {
             color: ${p => p.theme.popColor};
@@ -86,15 +107,26 @@ export const UrlInput = styled(TextInput)`
     flex-basis: 100%;
     flex-grow: 1;
 
-    border-radius: 0;
-    border: none;
+    /* wirepane: the right half of the method & URL field (see MethodSelectContainer) */
+    height: 30px;
+    margin: 5px 0;
+    border: 1px solid ${p => p.theme.inputBorder};
+    border-left-color: ${p => p.theme.containerBorder};
+    border-radius: 0 6px 6px 0;
 
-    padding: 10px 10px 10px;
+    padding: 0 10px;
 
     font-size: ${p => p.theme.textSize};
 
     &:focus:not(:focus-visible) {
         outline: none;
+    }
+
+    &:focus-visible,
+    form:has(> div select:focus-visible) > & {
+        outline: none;
+        box-shadow: 0 0 0 2px ${p => p.theme.focusRing};
+        clip-path: inset(-3px -3px -3px 0);
     }
 `;
 

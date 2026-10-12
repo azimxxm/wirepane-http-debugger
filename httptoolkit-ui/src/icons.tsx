@@ -341,7 +341,7 @@ export const SourceIcons = {
     Darwin: { icon: ['fab', 'apple'], color: 'var(--wp-text-primary)' },
 
     Docker: { icon: ['fab', 'docker'], color: '#0db7ed' },
-    Terminal: { icon: ['fas', 'terminal'], color: '#20c20e' },
+    Terminal: { icon: ['fas', 'terminal'], color: 'var(--wp-text-secondary)' }, // wirepane: green means success here
     Network: { icon: ['fas', 'network-wired'], color: '#888' },
     Electron: { icon: ['fas', 'atom'], color: '#9FEAF9' },
 

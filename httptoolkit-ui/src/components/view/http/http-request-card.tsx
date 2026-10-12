@@ -3,7 +3,6 @@ import { observer } from 'mobx-react';
 
 import { HtkRequest, HttpVersion, HttpExchangeView } from '../../../types';
 
-import { getSummaryColor } from '../../../model/events/categorization';
 import { getMethodDocs } from '../../../model/http/http-docs';
 import { areStepsModifying } from '../../../model/rules/rules';
 
@@ -12,7 +11,7 @@ import {
     CollapsibleCard,
     CollapsibleCardProps
 } from '../../common/card';
-import { Pill } from '../../common/pill';
+import { PillMethod, RequestPill } from './exchange-pills'; // wirepane: no content-type colour
 import { HostnameText } from '../../common/hostname-text'; // wirepane: the real hostname
 import {
     CollapsibleSection,
@@ -124,10 +123,10 @@ export const HttpRequestCard = observer((props: HttpRequestCardProps) => {
             }
             <SourceIcon source={request.source} />
             <HttpVersionPill request={request} />
-            <Pill color={getSummaryColor(exchange)}>
+            <RequestPill>{ /* wirepane: the method in its own colour */ }
                 { exchange.isWebSocket() ? 'WebSocket ' : '' }
-                { request.method } <HostnameText>{ request.parsedUrl.hostname || '' }</HostnameText>
-            </Pill>
+                <PillMethod httpMethod={request.method}>{ request.method }</PillMethod> <HostnameText>{ request.parsedUrl.hostname || '' }</HostnameText>
+            </RequestPill>
             <CollapsibleCardHeading onCollapseToggled={props.onCollapseToggled}>
                 Request
             </CollapsibleCardHeading>

@@ -203,10 +203,11 @@ class GuidedInterceptPage extends React.Component<GuidedInterceptPageProps> {
         return this.interceptors.filter((interceptor) => !recommendedIds.includes(interceptor.id));
     }
 
+    // Every source, the recommended ones included, as the search field promises
     @computed
     private get searchResults(): Interceptor[] {
         const query = this.searchQuery.trim().toLocaleLowerCase();
-        const matches = this.otherSources.filter((interceptor) => matchesSearch(interceptor, query));
+        const matches = this.interceptors.filter((interceptor) => matchesSearch(interceptor, query));
 
         // With nothing usable to suggest, offer the manual setup instead:
         const manualSetup = this.props.interceptorStore.interceptors[MANUAL_INTERCEPT_ID];
@@ -267,7 +268,7 @@ class GuidedInterceptPage extends React.Component<GuidedInterceptPageProps> {
                         <SearchInput
                             ref={this.searchInputRef}
                             value={this.searchQuery}
-                            placeholder={`Search ${this.otherSources.length} more sources — Firefox, Docker, JVM, Electron, Frida…`}
+                            placeholder={`Search all ${this.interceptors.length} sources: Firefox, Docker, JVM…`}
                             aria-label='Search all intercept options'
                             aria-keyshortcuts='Meta+F Control+F'
                             title={`Search all sources (${formatShortcut('Cmd+F')})`}
@@ -315,12 +316,7 @@ class GuidedInterceptPage extends React.Component<GuidedInterceptPageProps> {
                         </DisclosureList>
                     }
 
-                    { clients.length > 0 &&
-                        <ConnectedList
-                            clients={clients}
-                            onViewRequests={this.showRequests}
-                        />
-                    }
+                    { clients.length > 0 && <ConnectedList clients={clients} /> }
                 </PageContent>
             </PageScroll>
         </PageLayout>;

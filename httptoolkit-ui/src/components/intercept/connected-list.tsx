@@ -4,7 +4,6 @@ import { styled } from '../../styles';
 
 import { TrafficSource } from '../../model/http/sources';
 
-import { ActionButton } from '../common/action-button';
 import { ClientIcon } from '../common/client-icon';
 
 const ConnectedSection = styled.section`
@@ -56,23 +55,14 @@ const ClientRow = styled.li`
 `;
 
 /**
- * The clients that have sent traffic through Wirepane so far. Only shown once
- * there's at least one.
+ * The clients that have sent traffic through Wirepane so far. Only shown once there's at
+ * least one, which is also when the steps above offer the one "View requests" button.
  */
 export const ConnectedList = (props: {
-    clients: TrafficSource[],
-    onViewRequests: () => void
+    clients: TrafficSource[]
 }) => <ConnectedSection aria-labelledby='connected-clients-heading'>
     <ConnectedHeader>
         <h2 id='connected-clients-heading'>Connected ({ props.clients.length })</h2>
-        <ActionButton
-            icon='Rows'
-            shortcut='Cmd+2'
-            title='Show the captured requests'
-            onClick={props.onViewRequests}
-        >
-            View requests
-        </ActionButton>
     </ConnectedHeader>
     <ul>
         { props.clients.map((client) =>
