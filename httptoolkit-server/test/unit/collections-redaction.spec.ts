@@ -212,10 +212,161 @@ describe("Collection redaction", function () {
     });
 
     it("tells secret names from ordinary ones", () => {
-        for (const name of ['token', 'api_key', 'apiKey', 'X-Amz-Signature', 'client_secret', 'password', 'code', 'access_token', 'sig']) {
+        for (const name of ['token', 'api_key', 'apiKey', 'X-Amz-Signature', 'client_secret', 'password', 'access_token', 'sig']) {
             expect(isSecretName(name), name).to.equal(true);
         }
         for (const name of ['limit', 'page', 'token_type', 'pageToken', 'public_key', 'keyword', 'zipcode', 'expires_in']) {
+            expect(isSecretName(name), name).to.equal(false);
+        }
+    });
+});
+
+describe("Collection redaction of codes", function () {
+    this.timeout(10000);
+
+    const AUTH_CODE = 'SplxlOBeZQQYbYS6WxSbIA';
+
+    // A collection with a single request, so each case reads on its own
+    const collectionWith = (request: BrunoItem['request'], type = 'http-request'): BrunoCollection => ({
+        version: '1',
+        uid: 'codes',
+        name: 'Codes',
+        environments: [],
+        items: [{ uid: 'request', type, name: 'Request', request }]
+    });
+
+    const redactedRequest = (request: BrunoItem['request'], type?: string) => {
+        const { collection, report } = redactCollection(collectionWith(request, type));
+        return { request: collection.items[0].request!, report };
+    };
+
+    it("keeps ordinary codes in GraphQL variables", () => {
+        const variables = '{\n  "code": "UZ",\n  "first": 10\n}';
+        const { request, report } = redactedRequest({
+            url: 'https://countries.trevorblades.com/graphql',
+            method: 'POST',
+            body: {
+                mode: 'graphql',
+                graphql: { query: 'query ($code: ID!) { country(code: $code) { name } }', variables }
+            }
+        }, 'graphql-request');
+
+        expect(request.body?.graphql?.variables).to.equal(variables);
+        expect(report).to.deep.equal([]);
+    });
+
+    it("keeps ordinary codes in JSON bodies, saved responses, query and path parameters", () => {
+        const collection = collectionWith({
+            url: 'https://api.example.test/countries/:code?code=UZ&currency_code=UZS',
+            method: 'POST',
+            params: [
+                { name: 'code', value: 'UZ', type: 'path', enabled: true },
+                { name: 'code', value: 'UZ', type: 'query', enabled: true }
+            ],
+            body: { mode: 'json', json: '{"code": "UZ", "discount": {"code": "SPRING"}}' }
+        });
+        collection.items[0].examples = [{
+            name: 'Not found',
+            response: { status: 404, body: { type: 'json', content: { error: { code: 'NOT_FOUND' } } } }
+        }];
+
+        const { collection: redacted, report } = redactCollection(collection);
+        const request = redacted.items[0].request!;
+
+        expect(request.url).to.equal('https://api.example.test/countries/:code?code=UZ&currency_code=UZS');
+        expect(request.params?.map(({ value }) => value)).to.deep.equal(['UZ', 'UZ']);
+        expect(request.body?.json).to.equal('{"code": "UZ", "discount": {"code": "SPRING"}}');
+        expect(redacted.items[0].examples?.[0].response?.body?.content)
+            .to.deep.equal({ error: { code: 'NOT_FOUND' } });
+        expect(report).to.deep.equal([]);
+    });
+
+    it("still redacts OAuth authorization codes", () => {
+        // The redirect back from the authorization server
+        const callback = redactedRequest({
+            url: `https://app.example.test/oauth/callback?code=${AUTH_CODE}&state=af0ifjsldkj`,
+            method: 'GET'
+        });
+        expect(callback.request.url).to.equal('https://app.example.test/oauth/callback?code={{authCode}}&state=af0ifjsldkj');
+
+        // The token request, as a form
+        const tokenForm = redactedRequest({
+            url: 'https://auth.example.test/connect/endpoint',
+            method: 'POST',
+            body: {
+                mode: 'formUrlEncoded',
+                formUrlEncoded: [
+                    { name: 'grant_type', value: 'authorization_code', enabled: true },
+                    { name: 'code', value: AUTH_CODE, enabled: true },
+                    { name: 'redirect_uri', value: 'https://app.example.test/cb', enabled: true }
+                ]
+            }
+        });
+        expect(tokenForm.request.body?.formUrlEncoded?.map(({ name, value }) => [name, value])).to.deep.equal([
+            ['grant_type', 'authorization_code'],
+            ['code', '{{authCode}}'],
+            ['redirect_uri', 'https://app.example.test/cb']
+        ]);
+
+        // ...and as JSON
+        const tokenJson = redactedRequest({
+            url: 'https://auth.example.test/v1/exchange',
+            method: 'POST',
+            body: { mode: 'json', json: `{"grant_type": "authorization_code", "code": "${AUTH_CODE}"}` }
+        });
+        expect(tokenJson.request.body?.json).to.equal('{"grant_type": "authorization_code", "code": "{{authCode}}"}');
+
+        // OAuth 2 settings' extra parameters are always about auth
+        const oauthSettings = redactedRequest({
+            url: 'https://api.example.test/me',
+            method: 'GET',
+            auth: {
+                mode: 'oauth2',
+                oauth2: { additionalParameters: { token: [{ name: 'code', value: AUTH_CODE, enabled: true }] } }
+            }
+        });
+        expect((oauthSettings.request.auth?.oauth2?.additionalParameters as any).token[0].value).to.equal('{{authCode}}');
+
+        for (const result of [callback, tokenForm, tokenJson, oauthSettings]) {
+            expect(JSON.stringify(result.request)).to.not.include(AUTH_CODE);
+            expect(result.report.map(({ name }) => name)).to.deep.equal(['code']);
+        }
+    });
+
+    it("still redacts tokens, passwords, keys and client secrets next to ordinary codes", () => {
+        const { request } = redactedRequest({
+            url: 'https://api.example.test/graphql?api_key=key-secret-123',
+            method: 'POST',
+            headers: [{ name: 'Authorization', value: 'Bearer bearer-secret-456', enabled: true }],
+            body: {
+                mode: 'graphql',
+                graphql: {
+                    query: 'mutation { login }',
+                    variables: '{"code": "UZ", "password": "hunter2-secret", "access_token": "token-secret-789", "clientId": "my-app"}'
+                }
+            }
+        }, 'graphql-request');
+
+        expect(request.url).to.equal('https://api.example.test/graphql?api_key={{apiKey}}');
+        expect(request.headers?.[0].value).to.equal('Bearer {{authToken}}');
+        expect(request.body?.graphql?.variables).to.equal(
+            '{"code": "UZ", "password": "{{password}}", "access_token": "{{accessToken}}", "clientId": "my-app"}'
+        );
+
+        // A client secret is an OAuth parameter, so a code next to it is an authorization code
+        const tokenRequest = redactedRequest({
+            url: 'https://api.example.test/v1/exchange',
+            method: 'POST',
+            body: { mode: 'json', json: '{"clientSecret": "client-secret-000", "code": "one-time-code-111"}' }
+        });
+        expect(tokenRequest.request.body?.json).to.equal('{"clientSecret": "{{clientSecret}}", "code": "{{authCode}}"}');
+    });
+
+    it("treats names that say they're auth codes as secrets anywhere", () => {
+        for (const name of ['auth_code', 'authCode', 'authorization_code', 'AuthorizationCode']) {
+            expect(isSecretName(name), name).to.equal(true);
+        }
+        for (const name of ['code', 'country_code', 'countryCode', 'status_code', 'promo-code', 'zipcode']) {
             expect(isSecretName(name), name).to.equal(false);
         }
     });

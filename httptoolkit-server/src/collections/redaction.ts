@@ -87,19 +87,65 @@ const NOT_SECRET_WORDS: ReadonlySet<string> = new Set([
 ]);
 
 const SECRET_EXACT_NAMES: ReadonlySet<string> = new Set([
-    'code', 'auth', 'auth_code', 'authorization', 'authorization_code', 'session_id'
+    'auth', 'authorization', 'session_id'
 ]);
+
+// Names that say they hold an OAuth authorization code: auth_code, authCode, authorization_code
+const AUTH_CODE_NAMES: ReadonlySet<string> = new Set(['auth code', 'oauth code', 'authorization code']);
 
 export function isSecretName(name: string): boolean {
     if (SECRET_EXACT_NAMES.has(name.trim().toLowerCase())) return true;
 
     const words = _.words(name).map((word) => word.toLowerCase());
+    if (AUTH_CODE_NAMES.has(words.join(' '))) return true;
+
     const lastWord = words[words.length - 1];
     if (!lastWord || !SECRET_NAME_WORDS.has(lastWord)) return false;
     return !words.some((word) => NOT_SECRET_WORDS.has(word));
 }
 
-const variableNameFor = (name: string) => _.camelCase(name) || 'secret';
+// A plain "code" is usually a country, currency, status or promo code. It's only a secret
+// in an OAuth flow, where it's the authorization code: next to OAuth parameters (the token
+// request), or in a request to an OAuth-looking endpoint (the redirect back to the app).
+// client_id isn't one of them: plenty of APIs have "clients" that aren't OAuth clients.
+const OAUTH_PARAMETER_NAMES: ReadonlySet<string> = new Set([
+    'grant_type', 'redirect_uri', 'code_verifier', 'client_secret', 'session_state'
+]);
+
+const OAUTH_PATH_WORDS: ReadonlySet<string> = new Set([
+    'oauth', 'authorize', 'authorization', 'token', 'callback', 'auth', 'login', 'signin', 'sso', 'oidc', 'openid'
+]);
+
+// The same parameters as JSON keys, in any case and with or without the underscore (grantType)
+const OAUTH_JSON_KEY = new RegExp(`"(?:${
+    [...OAUTH_PARAMETER_NAMES].map((name) => name.replace('_', '[_-]?')).join('|')
+})"\\s*:`, 'i');
+
+const isOAuthCodeName = (name: string) => name.trim().toLowerCase() === 'code';
+
+const hasOAuthParameter = (names: Iterable<unknown>) => [...names].some((name) =>
+    typeof name === 'string' &&
+    OAUTH_PARAMETER_NAMES.has(_.words(name).map((word) => word.toLowerCase()).join('_'))
+);
+
+// Only the path counts: {{variables}} and the host (auth.example.com/graphql) say nothing
+function isOAuthUrl(url: string | undefined): boolean {
+    if (!url) return false;
+
+    const withoutVariables = url.replace(TEMPLATE_VARIABLE, '');
+    const withoutHost = /^[a-z][a-z0-9+.-]*:\/\//i.test(withoutVariables)
+        ? withoutVariables.replace(/^[a-z][a-z0-9+.-]*:\/\/[^/?#]*/i, '')
+        : withoutVariables.replace(/^[^/?#]*\.[^/?#]*(?=[/?#]|$)/, ''); // A bare host: api.example.com/path
+    const path = withoutHost.split(/[?#]/)[0];
+
+    return _.words(path).some((word) => OAUTH_PATH_WORDS.has(word.toLowerCase()));
+}
+
+const isSecretKey = (name: string, inOAuthFlow: boolean) =>
+    isSecretName(name) || (inOAuthFlow && isOAuthCodeName(name));
+
+const variableNameFor = (name: string) =>
+    isOAuthCodeName(name) ? 'authCode' : (_.camelCase(name) || 'secret');
 
 const SECRET_HEADER_VARIABLES: ReadonlyMap<string, string> = new Map([
     ['cookie', 'cookie'],
@@ -241,11 +287,13 @@ function redactFolderRoot(root: BrunoFolderRoot | null | undefined, location: st
 // Auth settings go first, so they get the plain variable names ({{authToken}}) when two
 // different secrets would want the same one
 function redactRequest(request: BrunoRequest, location: string, context: RedactionContext) {
+    const inOAuthFlow = isOAuthUrl(request.url);
+
     redactAuth(request.auth, `${location} › auth`, context);
     redactHeaders(request.headers, `${location} › header`, context);
     if (typeof request.url === 'string') request.url = redactUrl(request.url, location, context);
-    redactParams(request.params, location, context);
-    redactBody(request.body, `${location} › body`, context);
+    redactParams(request.params, location, context, inOAuthFlow);
+    redactBody(request.body, `${location} › body`, context, inOAuthFlow);
     redactVars(request.vars, `${location} › variables`, context);
     redactScripts(request.script, request, location, context);
     if (typeof request.docs === 'string') request.docs = context.scan(request.docs, `${location} › docs`);
@@ -256,10 +304,11 @@ function redactExample(example: BrunoExample, itemLocation: string, context: Red
 
     const request = example.request;
     if (request) {
+        const inOAuthFlow = isOAuthUrl(request.url);
         if (typeof request.url === 'string') request.url = redactUrl(request.url, location, context);
-        redactParams(request.params, location, context);
+        redactParams(request.params, location, context, inOAuthFlow);
         redactHeaders(request.headers, `${location} › header`, context);
-        redactBody(request.body, `${location} › body`, context);
+        redactBody(request.body, `${location} › body`, context, inOAuthFlow);
     }
 
     const response = example.response;
@@ -271,17 +320,34 @@ function redactExample(example: BrunoExample, itemLocation: string, context: Red
     }
 }
 
-function redactParams(params: BrunoKeyValue[] | undefined, location: string, context: RedactionContext) {
-    for (const param of params ?? []) {
-        const section = param.type === 'path' ? 'path parameter' : 'query';
-        redactKeyValue(param, `${location} › ${section}`, context);
-    }
+function redactParams(
+    params: BrunoKeyValue[] | undefined,
+    location: string,
+    context: RedactionContext,
+    inOAuthFlow: boolean
+) {
+    redactKeyValues(params, context, inOAuthFlow, (param) =>
+        `${location} › ${param.type === 'path' ? 'path parameter' : 'query'}`
+    );
 }
 
-function redactKeyValue(entry: BrunoKeyValue, location: string, context: RedactionContext) {
+// A list of parameters or form fields: an OAuth parameter in the list makes it an OAuth request
+function redactKeyValues(
+    entries: BrunoKeyValue[] | null | undefined,
+    context: RedactionContext,
+    inOAuthFlow: boolean,
+    locationOf: (entry: BrunoKeyValue) => string
+) {
+    if (!entries) return;
+
+    const listInOAuthFlow = inOAuthFlow || hasOAuthParameter(entries.map(({ name }) => name));
+    for (const entry of entries) redactKeyValue(entry, locationOf(entry), context, listInOAuthFlow);
+}
+
+function redactKeyValue(entry: BrunoKeyValue, location: string, context: RedactionContext, inOAuthFlow = false) {
     if (typeof entry.value !== 'string' || typeof entry.name !== 'string') return;
 
-    entry.value = isSecretName(entry.name)
+    entry.value = isSecretKey(entry.name, inOAuthFlow)
         ? context.replace(entry.value, variableNameFor(entry.name), location, entry.name)
         : context.scan(entry.value, location);
 }
@@ -313,19 +379,28 @@ function redactUrl(url: string, location: string, context: RedactionContext): st
 
     const redacted = queryIndex === -1
         ? beforeHash
-        : beforeHash.slice(0, queryIndex + 1) + redactQueryString(beforeHash.slice(queryIndex + 1), location, context);
+        : beforeHash.slice(0, queryIndex + 1) + redactQueryString(
+            beforeHash.slice(queryIndex + 1),
+            isOAuthUrl(beforeHash.slice(0, queryIndex)),
+            location,
+            context
+        );
 
     return context.scan(redacted + hash, `${location} › URL`);
 }
 
-function redactQueryString(query: string, location: string, context: RedactionContext): string {
-    return query.split('&').map((part) => {
+function redactQueryString(query: string, isOAuthPath: boolean, location: string, context: RedactionContext): string {
+    const parts = query.split('&');
+    const names = parts.map((part) => safeDecode(part.split('=')[0]));
+    const inOAuthFlow = isOAuthPath || hasOAuthParameter(names);
+
+    return parts.map((part) => {
         const equalsIndex = part.indexOf('=');
         if (equalsIndex === -1) return part;
 
         const name = safeDecode(part.slice(0, equalsIndex));
         const value = safeDecode(part.slice(equalsIndex + 1));
-        if (!isSecretName(name)) return part;
+        if (!isSecretKey(name, inOAuthFlow)) return part;
 
         const replaced = context.replace(value, variableNameFor(name), `${location} › query`, name);
         return replaced === value ? part : `${part.slice(0, equalsIndex)}=${replaced}`;
@@ -391,27 +466,29 @@ function redactAuth(auth: BrunoAuth | undefined, location: string, context: Reda
     if (isRecord(oauth2) && isRecord(oauth2.additionalParameters)) {
         for (const params of Object.values(oauth2.additionalParameters)) {
             if (!Array.isArray(params)) continue;
-            params.filter(isRecord).forEach((param) => redactKeyValue(param as BrunoKeyValue, location, context));
+            // OAuth's own settings, so a "code" here is always an authorization code
+            params.filter(isRecord).forEach((param) => redactKeyValue(param as BrunoKeyValue, location, context, true));
         }
     }
 }
 
-function redactBody(body: BrunoBody | undefined, location: string, context: RedactionContext) {
+function redactBody(body: BrunoBody | undefined, location: string, context: RedactionContext, inOAuthFlow: boolean) {
     if (!body) return;
 
-    if (typeof body.json === 'string') body.json = redactJsonText(body.json, location, context);
+    if (typeof body.json === 'string') body.json = redactJsonText(body.json, location, context, inOAuthFlow);
     if (typeof body.text === 'string') body.text = context.scan(body.text, location);
     if (typeof body.xml === 'string') body.xml = context.scan(body.xml, location);
     if (typeof body.sparql === 'string') body.sparql = context.scan(body.sparql, location);
 
-    for (const field of [...body.formUrlEncoded ?? [], ...body.multipartForm ?? []]) {
-        redactKeyValue(field, location, context);
-    }
+    redactKeyValues(body.formUrlEncoded, context, inOAuthFlow, () => location);
+    redactKeyValues(body.multipartForm, context, inOAuthFlow, () => location);
 
     const graphql = body.graphql;
     if (graphql) {
         if (typeof graphql.query === 'string') graphql.query = context.scan(graphql.query, location);
-        if (typeof graphql.variables === 'string') graphql.variables = redactJsonText(graphql.variables, location, context);
+        if (typeof graphql.variables === 'string') {
+            graphql.variables = redactJsonText(graphql.variables, location, context, inOAuthFlow);
+        }
     }
 
     // WebSocket requests' saved messages
@@ -419,7 +496,7 @@ function redactBody(body: BrunoBody | undefined, location: string, context: Reda
         if (typeof message.content !== 'string') continue;
         const messageLocation = message.name ? `${location} › message "${message.name}"` : `${location} › message`;
         message.content = message.type === 'json'
-            ? redactJsonText(message.content, messageLocation, context)
+            ? redactJsonText(message.content, messageLocation, context, inOAuthFlow)
             : context.scan(message.content, messageLocation);
     }
 }
@@ -428,23 +505,37 @@ function redactBody(body: BrunoBody | undefined, location: string, context: Reda
 // make invalid JSON, so secrets are swapped in place without reformatting the body
 const JSON_STRING_PAIR = /"((?:[^"\\]|\\.)*)"(\s*:\s*)"((?:[^"\\]|\\.)*)"/g;
 
-function redactJsonText(text: string, location: string, context: RedactionContext): string {
+function redactJsonText(text: string, location: string, context: RedactionContext, inOAuthFlow = false): string {
+    // The text isn't parsed (it may not be valid JSON), so an OAuth parameter anywhere in it counts
+    const textInOAuthFlow = inOAuthFlow || OAUTH_JSON_KEY.test(text);
+
     const withoutNamedSecrets = text.replace(JSON_STRING_PAIR, (match, key: string, separator: string, value: string) => {
-        if (!isSecretName(key) || !holdsSecret(value)) return match;
+        if (!isSecretKey(key, textInOAuthFlow) || !holdsSecret(value)) return match;
         return `"${key}"${separator}"${context.replace(value, variableNameFor(key), location, key)}"`;
     });
     return context.scan(withoutNamedSecrets, location);
 }
 
-function redactJsonValue(value: unknown, location: string, context: RedactionContext, key?: string): unknown {
+function redactJsonValue(
+    value: unknown,
+    location: string,
+    context: RedactionContext,
+    key?: string,
+    inOAuthFlow = false
+): unknown {
     if (typeof value === 'string') {
-        return key !== undefined && isSecretName(key)
+        return key !== undefined && isSecretKey(key, inOAuthFlow)
             ? context.replace(value, variableNameFor(key), location, key)
             : context.scan(value, location);
     }
 
-    if (Array.isArray(value)) return value.map((entry) => redactJsonValue(entry, location, context, key));
-    if (isRecord(value)) return _.mapValues(value, (entry, entryKey) => redactJsonValue(entry, location, context, entryKey));
+    if (Array.isArray(value)) return value.map((entry) => redactJsonValue(entry, location, context, key, inOAuthFlow));
+    if (isRecord(value)) {
+        const objectInOAuthFlow = inOAuthFlow || hasOAuthParameter(Object.keys(value));
+        return _.mapValues(value, (entry, entryKey) =>
+            redactJsonValue(entry, location, context, entryKey, objectInOAuthFlow)
+        );
+    }
     return value;
 }
 
