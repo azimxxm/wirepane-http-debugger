@@ -61,9 +61,9 @@ Har bir installer o'z tizimida yig'iladi:
 ./scripts/build-release.sh linux   # Linux x64'da: .AppImage, .deb va .rpm (.rpm uchun rpmbuild kerak)
 ```
 
-Skript Bruno, server, UI va desktop'ni yig'adi va oxirida fayllarni ko'rsatadi: `httptoolkit-desktop/dist/Wirepane-<versiya>-...`. Versiya — repo ildizidagi `VERSION` fayli (hozir `1.0.0`). Server ham, UI ham shu repo'dagi koddan yig'iladi. Internetdan faqat Node.js (har tizim uchun bir marta, `build/cache`da saqlanadi) va npm package'lari yuklanadi. Sertifikat yoki akkaunt kerak emas. Mac'da yig'ish bir necha daqiqa oladi.
+Skript Bruno, server, UI va desktop'ni yig'adi va oxirida fayllarni ko'rsatadi: `httptoolkit-desktop/dist/Wirepane-<versiya>-...`. Versiya — repo ildizidagi `VERSION` fayli (hozir `1.1.0`). Server ham, UI ham shu repo'dagi koddan yig'iladi. Internetdan faqat Node.js (har tizim uchun bir marta, `build/cache`da saqlanadi) va npm package'lari yuklanadi. Sertifikat yoki akkaunt kerak emas. Mac'da yig'ish bir necha daqiqa oladi.
 
-**GitHub Actions:** `.github/workflows/release.yml` uchala tizimda yig'adi va hamma fayllarni draft GitHub release'ga (`v<versiya>`) qo'yadi. Ishga tushirish: Actions → Release → **Run workflow** (versiya bo'sh qolsa, `VERSION`dan olinadi) yoki `v1.0.0` kabi tag push qilish. Draft tekshirilgach, qo'lda **Publish** qilinadi.
+**GitHub Actions:** `.github/workflows/release.yml` uchala tizimda yig'adi va hamma fayllarni draft GitHub release'ga (`v<versiya>`) qo'yadi. Ishga tushirish: Actions → Release → **Run workflow** (versiya bo'sh qolsa, `VERSION`dan olinadi) yoki `v1.1.0` kabi tag push qilish. Draft tekshirilgach, qo'lda **Publish** qilinadi.
 
 ## Nimani qayerda o'zgartirish
 
