@@ -1,7 +1,8 @@
 import * as React from 'react';
+import { runInAction } from 'mobx';
 import { observer } from 'mobx-react-lite';
 import { distanceInWordsToNow } from 'date-fns';
-import { CaretRight, GlobeSimple } from '@phosphor-icons/react';
+import { CaretRight, GlobeSimple, PushPin } from '@phosphor-icons/react';
 
 import { styled, css } from '../../styles';
 import { Icon } from '../../icons';
@@ -166,6 +167,12 @@ const RowAddressLine = styled.span`
     column-gap: 6px;
 `;
 
+// Next to a pinned device's name
+const PinMarker = styled(PushPin)`
+    flex-shrink: 0;
+    color: ${p => p.theme.mainLowlightColor};
+`;
+
 const RowAddress = styled.span`
     overflow: hidden;
     text-overflow: ellipsis;
@@ -232,11 +239,13 @@ const RenameInput = styled.input`
 
 const requestCount = (count: number) => `${count.toLocaleString()} request${count === 1 ? '' : 's'}`;
 
-// The device row's tooltip: its full name, its default name if renamed, its IP & when it was last heard from
-function deviceTooltip(device: DeviceSummary, isActive: boolean) {
+// The device row's tooltip: its full name, its default name if renamed, whether it's pinned, its IP
+// & when it was last heard from
+function deviceTooltip(device: DeviceSummary, isActive: boolean, isPinned: boolean) {
     return [
         device.name,
         device.hasCustomName ? device.defaultName : undefined,
+        isPinned ? 'pinned' : undefined,
         device.address,
         device.eventCount === 0
             ? 'no requests yet'
@@ -313,6 +322,7 @@ function describeRow(row: SelectableRow, isActive: boolean): string {
             const { device } = row;
             return [
                 device.name,
+                row.isPinned ? 'pinned' : undefined,
                 device.address,
                 device.viaVpn ? 'through the VPN' : undefined,
                 requestCount(device.eventCount),
@@ -327,8 +337,8 @@ function describeRow(row: SelectableRow, isActive: boolean): string {
 }
 
 /**
- * The devices as a tree: All devices, this machine, then each phone or computer, which
- * opens to show its apps and busiest domains. Selecting a row filters View's list.
+ * The devices as a tree: All devices, the pinned devices, this machine, then each phone or
+ * computer, which opens to show its apps and busiest domains. Selecting a row filters View's list.
  * It's one focusable tree, like the collections tree: arrow keys move the selection,
  * Enter opens & closes a device, F2 renames it, and every row has a right-click menu.
  */
@@ -345,6 +355,7 @@ export const DeviceTree = observer((props: {
         totalCount: store.totalEventCount,
         thisMachine: store.thisMachine,
         otherDevices: store.otherDevices,
+        pinnedDevices: store.pinnedDevices,
         selection: store.selection,
         isExpanded: (deviceKey) => store.isExpanded(deviceKey)
     });
@@ -387,12 +398,28 @@ export const DeviceTree = observer((props: {
         if (byKeyboard) treeRef.current?.focus();
     };
 
+    // Clears straight away, without asking: it's only this device's traffic, and pinned requests stay
+    const clearTraffic = (deviceKey: string) => runInAction(() => {
+        const deletedIds = new Set(store.clearTraffic(deviceKey).map((event) => event.id));
+
+        // A deleted request leaves View's selection, as when its row is deleted
+        [...uiStore.selectedEventIds].forEach((id) => {
+            if (deletedIds.has(id)) uiStore.selectedEventIds.delete(id);
+        });
+        if (uiStore.activeEventId !== undefined && deletedIds.has(uiStore.activeEventId)) {
+            uiStore.activeEventId = undefined;
+        }
+    });
+
     const menuFor = (row: SelectableRow): ContextMenuItem<void>[] => {
         if (row.kind === 'device') {
             const { device } = row;
             return [
                 { type: 'option', label: 'Rename', accelerator: 'F2', callback: () => setRenamingKey(device.key) },
                 { type: 'option', label: 'Show only this device', callback: () => store.select({ deviceKey: device.key }) },
+                row.isPinned
+                    ? { type: 'option', label: 'Unpin', callback: () => store.unpin(device.key) }
+                    : { type: 'option', label: 'Pin to top', callback: () => store.pin(device.key) },
                 { type: 'option', label: 'Forget name', enabled: device.hasCustomName, callback: () => store.forgetName(device.key) },
                 ...(device.address
                     ? [
@@ -404,7 +431,14 @@ export const DeviceTree = observer((props: {
                         } as const
                     ]
                     : []
-                )
+                ),
+                { type: 'separator' },
+                {
+                    type: 'option',
+                    label: "Clear this device's traffic",
+                    enabled: store.canClearTraffic(device.key),
+                    callback: () => clearTraffic(device.key)
+                }
             ];
         } else if (row.kind === 'app' || row.kind === 'host') {
             return [
@@ -502,7 +536,7 @@ export const DeviceTree = observer((props: {
                 depth={row.depth}
                 isSelected={isSelected}
                 isTall={row.kind === 'device'}
-                title={row.kind === 'device' ? deviceTooltip(row.device, isActive) : undefined}
+                title={row.kind === 'device' ? deviceTooltip(row.device, isActive, row.isPinned) : undefined}
                 onMouseDown={() => treeRef.current?.focus()}
                 onClick={() => select(row)}
                 onDoubleClick={() => { if (row.kind === 'device') toggle(row); }}
@@ -542,6 +576,7 @@ export const DeviceTree = observer((props: {
                             />
                             : <RowNameLine>
                                 <RowLabel isMuted={row.device.eventCount === 0}>{ row.device.name }</RowLabel>
+                                { row.isPinned && <PinMarker className='row-secondary' size={11} weight='fill' aria-hidden={true} /> }
                                 { row.device.viaVpn && <VpnBadge title={`Connected ${store.describeDeviceVpn(row.device)}`}>VPN</VpnBadge> }
                             </RowNameLine>
                         }

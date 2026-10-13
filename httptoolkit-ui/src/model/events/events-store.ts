@@ -741,6 +741,27 @@ export class EventsStore {
         if ('cleanup' in event) event.cleanup();
     }
 
+    // wirepane: deletes many events at once (e.g. one device's traffic), as deleteEvent() does one by
+    // one: a connection's streams go with it, streams leave their connection & every event is cleaned
+    // up. Each list changes only once, so this stays quick with a lot of traffic.
+    @action.bound
+    deleteEvents(events: ReadonlyArray<CollectedEvent>) {
+        const deleted = new Set<CollectedEvent>();
+        const addEvent = (event: CollectedEvent) => {
+            if (deleted.has(event)) return;
+            deleted.add(event);
+            if (event.isRTCConnection()) event.streams.forEach(addEvent);
+        };
+        events.forEach(addEvent);
+
+        this.eventsList.removeAll(deleted);
+
+        deleted.forEach((event) => {
+            if (event.isRTCDataChannel() || event.isRTCMediaTrack()) event.rtcConnection.removeStream(event);
+            if ('cleanup' in event) event.cleanup();
+        });
+    }
+
     @action.bound
     clearInterceptedData(clearPinned: boolean) {
         const [pinnedEvents, unpinnedEvents] = _.partition(

@@ -14,7 +14,6 @@ import {
     MAX_DEVICES_PANEL_WIDTH,
     MIN_DEVICES_PANEL_WIDTH
 } from '../../model/devices/devices-store';
-import { THIS_MACHINE_KEY } from '../../model/devices/device-model';
 
 import { ActionButton } from '../common/action-button';
 import {
@@ -139,9 +138,7 @@ export const DevicesPanel = inject('devicesStore', 'uiStore')(observer((props: {
     const { selection } = store;
 
     if (!store.panelOpen) {
-        const selectedDevice = selection
-            ? (selection.deviceKey === THIS_MACHINE_KEY ? store.thisMachine : store.getDevice(selection.deviceKey))
-            : undefined;
+        const selectedDevice = selection && store.getListedDevice(selection.deviceKey);
         const selectionLabel = selection && `Showing only ${store.describeSelection(selection)}`;
         // Hidden while everything is from this machine, so only other devices make it worth a count
         const deviceCount = store.devices.length;
@@ -168,6 +165,10 @@ export const DevicesPanel = inject('devicesStore', 'uiStore')(observer((props: {
         </CollapsedPanelStrip>;
     }
 
+    // The hint is for when only this machine is listed. A pinned device keeps its row without traffic.
+    const listsOtherDevices = store.otherDevices.length > 0 ||
+        store.pinnedDevices.some((device) => !device.isThisMachine);
+
     return <PanelRoot aria-label='Devices' style={{ width }}>
         <PanelToggleShortcut onToggle={store.togglePanel} />
         <PanelHeader>
@@ -184,7 +185,7 @@ export const DevicesPanel = inject('devicesStore', 'uiStore')(observer((props: {
 
         <PanelScroller>
             <DeviceTree devicesStore={store} uiStore={props.uiStore!} />
-            { store.otherDevices.length === 0 && <ConnectPhoneHint /> }
+            { !listsOtherDevices && <ConnectPhoneHint /> }
         </PanelScroller>
 
         <PanelResizeHandle label='Resize devices' width={width} sizing={sizing} handleProps={handleProps} />

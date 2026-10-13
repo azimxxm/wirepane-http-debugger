@@ -68,6 +68,64 @@ describe('Device tree rows', () => {
         expect(rows.map((row) => row.kind === 'device' && row.isExpandable)).to.deep.equal([false, false, true]);
     });
 
+    it('lists the pinned devices first, in the order they were pinned, then the rest as before', () => {
+        const ipad = device('192.168.0.24', { type: 'ipad' });
+        const android = device('192.168.0.42', { type: 'android' });
+
+        const rows = buildDeviceTreeRows({
+            totalCount: 5,
+            thisMachine,
+            otherDevices: [iphone, ipad, android],
+            pinnedDevices: [android, iphone],
+            selection: undefined,
+            isExpanded: () => false
+        });
+
+        expect(rowIds(rows)).to.deep.equal([
+            ALL_DEVICES_ROW_ID,
+            'device:192.168.0.42',
+            'device:192.168.0.23',
+            'device:this-machine',
+            'device:192.168.0.24'
+        ]);
+        expect(rows.map((row) => row.kind === 'device' && row.isPinned)).to.deep.equal([false, true, true, false, false]);
+    });
+
+    it('lists this machine with the pinned devices when it is pinned too', () => {
+        const rows = buildDeviceTreeRows({
+            totalCount: 5,
+            thisMachine,
+            otherDevices: [iphone],
+            pinnedDevices: [iphone, thisMachine],
+            selection: undefined,
+            isExpanded: () => false
+        });
+
+        expect(rowIds(rows)).to.deep.equal([ALL_DEVICES_ROW_ID, 'device:192.168.0.23', 'device:this-machine']);
+        expect(rows.map((row) => row.kind === 'device' && row.isPinned)).to.deep.equal([false, true, true]);
+    });
+
+    it('lists a pinned device without traffic, with nothing to open', () => {
+        const placeholder = device('192.168.0.42', { type: 'android', eventCount: 0 });
+
+        const rows = buildDeviceTreeRows({
+            totalCount: 3,
+            thisMachine,
+            otherDevices: [iphone],
+            pinnedDevices: [placeholder],
+            selection: undefined,
+            isExpanded: () => true
+        });
+
+        expect(rowIds(rows).slice(0, 4)).to.deep.equal([
+            ALL_DEVICES_ROW_ID,
+            'device:192.168.0.42',
+            'device:this-machine',
+            'device:192.168.0.23'
+        ]);
+        expect(rows[1].kind === 'device' && rows[1].isExpandable).to.equal(false);
+    });
+
     it("shows an open device's apps and domains under headings", () => {
         const rows = buildDeviceTreeRows({
             totalCount: 5,

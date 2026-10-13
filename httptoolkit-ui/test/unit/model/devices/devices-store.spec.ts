@@ -1,8 +1,12 @@
-import { IObservableArray, observable, runInAction } from 'mobx';
+import { IObservableArray, observable, observe, runInAction } from 'mobx';
 
 import { expect } from '../../../test-setup';
 
 import { CollectedEvent } from '../../../../src/types';
+import type { ProxyStore } from '../../../../src/model/proxy-store';
+import type { ApiStore } from '../../../../src/model/api/api-store';
+import type { RulesStore } from '../../../../src/model/rules/rules-store';
+import { EventsStore } from '../../../../src/model/events/events-store';
 import { THIS_MACHINE_KEY } from '../../../../src/model/devices/device-model';
 import { DEVICE_NAMES_KEY } from '../../../../src/model/devices/device-names';
 import { getDeviceDirectory } from '../../../../src/model/devices/device-directory';
@@ -459,6 +463,290 @@ describe('Devices store', () => {
             expect(migrateSavedPanelState({ panelOpen: true })).to.deep.equal({ panelOpen: true });
             expect(migrateSavedPanelState({ panelChoice: 'open', panelOpen: false }))
                 .to.deep.equal({ panelChoice: 'open', panelOpen: false });
+        });
+    });
+
+    const IPHONE = '192.168.0.23';
+    const ANDROID = '192.168.0.42';
+
+    describe('pinned devices', () => {
+        // A fresh start each time, with nothing saved by earlier tests, and nothing left for later ones
+        beforeEach(async () => {
+            store.dispose();
+            localStorage.removeItem(DEVICES_STORE_KEY);
+            await createStore();
+        });
+
+        afterEach(() => localStorage.removeItem(DEVICES_STORE_KEY));
+
+        const pinnedKeys = () => store.pinnedDevices.map((device) => device.key);
+
+        it('keeps them in the order they were pinned', () => {
+            add(
+                deviceExchange({ ip: IPHONE, ua: UA.iphoneSafari }),
+                deviceExchange({ ip: ANDROID, ua: UA.androidChrome }),
+                deviceExchange({ ip: '127.0.0.1', ua: UA.curl })
+            );
+
+            store.pin(ANDROID);
+            store.pin(THIS_MACHINE_KEY);
+            store.pin(IPHONE);
+            store.pin(ANDROID); // Already pinned, so it keeps its place
+            expect(pinnedKeys()).to.deep.equal([ANDROID, THIS_MACHINE_KEY, IPHONE]);
+            expect(store.isPinned(IPHONE)).to.equal(true);
+
+            store.unpin(THIS_MACHINE_KEY);
+            expect(pinnedKeys()).to.deep.equal([ANDROID, IPHONE]);
+            expect(store.isPinned(THIS_MACHINE_KEY)).to.equal(false);
+
+            // The devices themselves keep their order
+            expect(deviceKeys()).to.deep.equal([THIS_MACHINE_KEY, IPHONE, ANDROID]);
+        });
+
+        it('only pins a device the panel lists', () => {
+            store.pin('192.168.0.99');
+            expect(pinnedKeys()).to.deep.equal([]);
+
+            store.pin(THIS_MACHINE_KEY); // Listed even without traffic
+            expect(pinnedKeys()).to.deep.equal([THIS_MACHINE_KEY]);
+        });
+
+        it('lists a pinned device without traffic as a placeholder, with its name and type', () => {
+            add(deviceExchange({ ip: ANDROID, ua: UA.androidChrome }));
+            store.pin(ANDROID);
+
+            runInAction(() => { events.clear(); });
+            expect(store.devices).to.deep.equal([]);
+
+            const [placeholder] = store.pinnedDevices;
+            expect(placeholder).to.deep.include({
+                key: ANDROID,
+                isThisMachine: false,
+                type: 'android',
+                name: 'Pixel 8',
+                address: ANDROID,
+                eventCount: 0,
+                apps: [],
+                hosts: []
+            });
+            expect(store.getListedDevice(ANDROID)).to.deep.equal(placeholder);
+
+            // Once it sends traffic again, that's counted as usual
+            add(deviceExchange({ ip: ANDROID, ua: UA.androidChrome }));
+            expect(store.pinnedDevices[0].eventCount).to.equal(1);
+            expect(store.pinnedDevices[0]).to.deep.equal(store.getDevice(ANDROID));
+        });
+
+        it('stops listing a device without traffic once it is unpinned', () => {
+            add(deviceExchange({ ip: ANDROID, ua: UA.androidChrome }));
+            store.pin(ANDROID);
+            runInAction(() => { events.clear(); });
+
+            store.unpin(ANDROID);
+            expect(store.pinnedDevices).to.deep.equal([]);
+            expect(store.getListedDevice(ANDROID)).to.equal(undefined);
+        });
+
+        it('keeps a pinned device selected without traffic, until it is unpinned', () => {
+            add(deviceExchange({ ip: ANDROID, ua: UA.androidChrome, host: 'example.com' }));
+            store.pin(ANDROID);
+            store.select({ deviceKey: ANDROID, host: 'example.com' });
+
+            runInAction(() => { events.clear(); });
+            // Its domains have gone, but the device is still listed, like this machine
+            expect(store.selection).to.deep.equal({ deviceKey: ANDROID });
+            expect(store.describeSelection(store.selection!)).to.equal('Pixel 8');
+
+            store.unpin(ANDROID);
+            expect(store.selection).to.equal(undefined);
+        });
+
+        it("updates a pinned device's name and type as it says more about itself", async () => {
+            add(deviceExchange({ ip: IPHONE, ua: UA.iosApp }));
+            store.pin(IPHONE);
+            expect(store.pinnedDevices[0]).to.deep.include({ name: 'iOS device', type: 'ios' });
+
+            add(deviceExchange({ ip: IPHONE, ua: UA.iphoneSafari }));
+            runInAction(() => { events.clear(); });
+            expect(store.pinnedDevices[0]).to.deep.include({ name: 'iPhone', type: 'iphone' });
+
+            // That's what's saved too
+            store.dispose();
+            await createStore();
+            expect(store.pinnedDevices[0]).to.deep.include({ name: 'iPhone', type: 'iphone' });
+        });
+
+        it("forgets a placeholder's custom name when it's renamed back to its default", () => {
+            add(deviceExchange({ ip: ANDROID, ua: UA.androidChrome }));
+            store.pin(ANDROID);
+            store.rename(ANDROID, 'Test phone');
+            runInAction(() => { events.clear(); });
+            expect(store.pinnedDevices[0].name).to.equal('Test phone');
+
+            store.rename(ANDROID, 'Pixel 8');
+            expect(store.pinnedDevices[0].hasCustomName).to.equal(false);
+            expect(JSON.parse(storage.items.get(DEVICE_NAMES_KEY)!)).to.deep.equal({});
+        });
+
+        it('keeps the pins after a restart', async () => {
+            add(
+                deviceExchange({ ip: IPHONE, ua: UA.iphoneSafari }),
+                deviceExchange({ ip: ANDROID, ua: UA.androidChrome })
+            );
+            store.pin(ANDROID);
+            store.pin(THIS_MACHINE_KEY);
+            store.rename(ANDROID, 'Test phone');
+
+            store.dispose();
+            runInAction(() => { events.clear(); });
+            await createStore();
+
+            expect(store.pinnedDevices.map((device) => [device.key, device.name, device.type, device.eventCount]))
+                .to.deep.equal([
+                    [ANDROID, 'Test phone', 'android', 0],
+                    [THIS_MACHINE_KEY, 'This Mac', 'mac', 0]
+                ]);
+            expect(store.isPinned(IPHONE)).to.equal(false);
+        });
+
+        it('loads a save from before pins', async () => {
+            store.dispose();
+            localStorage.setItem(DEVICES_STORE_KEY, JSON.stringify({ panelChoice: 'open', panelWidth: 250 }));
+
+            await createStore();
+            expect(store.pinnedDevices).to.deep.equal([]);
+            expect(store.panelOpen).to.equal(true);
+            expect(store.panelWidth).to.equal(250);
+        });
+
+        it("leaves out saved pins it can't read, and loads the rest", async () => {
+            store.dispose();
+            localStorage.setItem(DEVICES_STORE_KEY, JSON.stringify({
+                panelWidth: 260,
+                pins: [
+                    { key: ANDROID, type: 'android', defaultName: 'Pixel 8' },
+                    'not a pin',
+                    { type: 'iphone', defaultName: 'iPhone' },
+                    { key: ANDROID, type: 'iphone', defaultName: 'iPhone' },
+                    { key: IPHONE, type: 'toaster', defaultName: 42 }
+                ]
+            }));
+
+            await createStore();
+            expect(store.pinnedDevices.map((device) => [device.key, device.name, device.type])).to.deep.equal([
+                [ANDROID, 'Pixel 8', 'android'],
+                [IPHONE, 'Device', 'other']
+            ]);
+            expect(store.panelWidth).to.equal(260);
+
+            store.dispose();
+            localStorage.setItem(DEVICES_STORE_KEY, JSON.stringify({ panelWidth: 270, pins: 'not a list' }));
+
+            await createStore();
+            expect(store.pinnedDevices).to.deep.equal([]);
+            expect(store.panelWidth).to.equal(270);
+        });
+    });
+
+    describe("clearing one device's traffic", () => {
+        let eventsStore: EventsStore;
+
+        // The test exchanges can't run an exchange's own cleanup, which the events store calls
+        const cleanable = <T extends CollectedEvent>(event: T): T => Object.assign(event, { cleanup: () => {} });
+
+        const capture = (...newEvents: CollectedEvent[]) => runInAction(() => {
+            eventsStore.eventsList.push(...newEvents.map(cleanable));
+        });
+        const eventIds = (list: ReadonlyArray<CollectedEvent>) => list.map((event) => event.id);
+
+        beforeEach(async () => {
+            store.dispose();
+            localStorage.removeItem(DEVICES_STORE_KEY);
+            eventsStore = new EventsStore({} as ProxyStore, {} as ApiStore, {} as RulesStore);
+            store = new DevicesStore(eventsStore, { nameStorage: storage, thisMachineType: 'mac' });
+            await store.initialized;
+        });
+
+        afterEach(() => localStorage.removeItem(DEVICES_STORE_KEY));
+
+        it("deletes only that device's traffic, and keeps its pinned requests", () => {
+            const iphoneSafari = deviceExchange({ ip: IPHONE, ua: UA.iphoneSafari });
+            const iphoneApp = deviceExchange({ ip: IPHONE, ua: UA.iosApp });
+            const iphoneTls = failedTls(IPHONE);
+            const iphoneTunnel = rawTunnel(IPHONE);
+            const iphonePinned = deviceExchange({ ip: IPHONE, ua: UA.iphoneSafari });
+            const android = deviceExchange({ ip: ANDROID, ua: UA.androidChrome });
+            const local = deviceExchange({ ip: '127.0.0.1', ua: UA.curl });
+            capture(iphoneSafari, android, iphoneApp, iphoneTls, local, iphonePinned, iphoneTunnel);
+            runInAction(() => { iphonePinned.pinned = true; });
+
+            expect(store.canClearTraffic(IPHONE)).to.equal(true);
+            const deleted = store.clearTraffic(IPHONE);
+
+            expect(eventIds(deleted)).to.deep.equal(eventIds([iphoneSafari, iphoneApp, iphoneTls, iphoneTunnel]));
+            expect(eventIds(eventsStore.events)).to.deep.equal(eventIds([android, local, iphonePinned]));
+
+            // The pinned request keeps the device listed, and it's all there is left
+            expect(store.getDevice(IPHONE)!.eventCount).to.equal(1);
+            expect(store.canClearTraffic(IPHONE)).to.equal(false);
+            expect(store.getDevice(ANDROID)!.eventCount).to.equal(1);
+            expect(store.thisMachine.eventCount).to.equal(1);
+        });
+
+        it('deletes the traffic in one change to the list', () => {
+            capture(
+                deviceExchange({ ip: IPHONE }),
+                deviceExchange({ ip: ANDROID }),
+                deviceExchange({ ip: IPHONE }),
+                deviceExchange({ ip: ANDROID }),
+                deviceExchange({ ip: IPHONE })
+            );
+
+            let changes = 0;
+            const stopObserving = observe(eventsStore.events as IObservableArray<CollectedEvent>, () => { changes += 1; });
+            store.clearTraffic(IPHONE);
+            stopObserving();
+
+            expect(changes).to.equal(1);
+            expect(deviceKeys()).to.deep.equal([ANDROID]);
+            expect(store.getDevice(ANDROID)!.eventCount).to.equal(2);
+        });
+
+        it("drops a cleared device's selection like Clear does, unless the device is pinned", () => {
+            capture(
+                deviceExchange({ ip: IPHONE, ua: UA.iphoneSafari }),
+                deviceExchange({ ip: ANDROID, ua: UA.androidChrome })
+            );
+
+            store.select({ deviceKey: IPHONE });
+            store.clearTraffic(IPHONE);
+            expect(store.selection).to.equal(undefined);
+            expect(deviceKeys()).to.deep.equal([ANDROID]);
+
+            store.pin(ANDROID);
+            store.select({ deviceKey: ANDROID });
+            store.clearTraffic(ANDROID);
+            expect(store.selection).to.deep.equal({ deviceKey: ANDROID });
+            expect(store.pinnedDevices[0]).to.deep.include({ key: ANDROID, name: 'Pixel 8', eventCount: 0 });
+        });
+
+        it('has nothing to clear for a device without traffic', () => {
+            capture(deviceExchange({ ip: ANDROID, ua: UA.androidChrome }));
+
+            expect(store.canClearTraffic(IPHONE)).to.equal(false);
+            expect(store.canClearTraffic(THIS_MACHINE_KEY)).to.equal(false);
+            expect(store.clearTraffic(IPHONE)).to.deep.equal([]);
+            expect(eventsStore.events).to.have.length(1);
+        });
+
+        it("can't clear traffic from a list it can't delete from", async () => {
+            store.dispose();
+            await createStore(); // Over a plain list
+            add(deviceExchange({ ip: ANDROID, ua: UA.androidChrome }));
+
+            expect(store.canClearTraffic(ANDROID)).to.equal(false);
+            expect(store.clearTraffic(ANDROID)).to.deep.equal([]);
+            expect(events).to.have.length(1);
         });
     });
 });

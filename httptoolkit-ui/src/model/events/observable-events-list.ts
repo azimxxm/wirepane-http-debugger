@@ -2,6 +2,7 @@ import {
     action,
     observable
 } from 'mobx';
+import type { IObservableArray } from 'mobx'; // wirepane
 
 import {
     CollectedEvent,
@@ -100,6 +101,34 @@ export class ObservableEventsList {
         if (event.isRTCConnection()) this._rtcConnections.remove(event);
         if (event.isRTCDataChannel()) this._rtcDataChannels.remove(event);
         if (event.isRTCMediaTrack()) this._rtcMediaTracks.remove(event);
+    }
+
+    // wirepane: removes many events at once (e.g. one device's traffic). Each list changes once,
+    // where remove() for each event would search the whole list again every time.
+    removeAll(events: ReadonlySet<CollectedEvent>) {
+        if (events.size === 0) return;
+
+        const removeFrom = <T extends CollectedEvent>(list: IObservableArray<T>) => {
+            const remaining = list.filter((event) => !events.has(event));
+            if (remaining.length !== list.length) list.replace(remaining);
+        };
+
+        removeFrom(this._events);
+        events.forEach((event) => {
+            if (this._eventIdIndex.get(event.id) === event) this._eventIdIndex.delete(event.id);
+        });
+
+        removeFrom(this._exchanges);
+        removeFrom(this._websockets);
+        removeFrom(this._tlsFailures);
+        removeFrom(this._rtcConnections);
+        removeFrom(this._rtcDataChannels);
+        removeFrom(this._rtcMediaTracks);
+
+        // Only the sources that a remaining exchange still has
+        const remainingSources = new Set(this._exchanges.map((exchange) => exchange.request.source.summary));
+        const activeSources = this._activeSources.filter((source) => remainingSources.has(source.summary));
+        if (activeSources.length !== this._activeSources.length) this._activeSources.replace(activeSources);
     }
 
     getById<T extends CollectedEvent>(id: string, test?: (event: CollectedEvent) => event is T): T | undefined {

@@ -29,7 +29,8 @@ import {
     getEventAppName as getRequestEventAppName,
     getEventDeviceKey,
     getEventVpn,
-    getThisMachineName
+    getThisMachineName,
+    isDeviceType
 } from './device-model';
 import { DeviceDirectory, EventDevice, THIS_MACHINE_TYPE, setDeviceDirectory } from './device-directory';
 import { NameStorage, cleanDeviceName, loadDeviceNames, saveDeviceNames } from './device-names';
@@ -50,6 +51,37 @@ export type PanelChoice = 'open' | 'closed';
 export function migrateSavedPanelState(data: { panelOpen?: unknown, panelChoice?: unknown }) {
     if (data.panelChoice !== undefined || data.panelOpen !== false) return data;
     return { ...data, panelChoice: 'closed' };
+}
+
+// A device pinned to the top of the panel, with what its row shows while it has no traffic
+export interface PinnedDevice {
+    key: string;
+    type: DeviceType;
+    defaultName: string;
+}
+
+// The saved pins. Older versions saved none, and a pin that can't be read is left out.
+function readSavedPins(saved: unknown): PinnedDevice[] {
+    if (!Array.isArray(saved)) return [];
+
+    const pins: PinnedDevice[] = [];
+    saved.forEach((item: unknown) => {
+        if (!item || typeof item !== 'object') return;
+        const { key, type, defaultName } = item as { [field in keyof PinnedDevice]?: unknown };
+        if (typeof key !== 'string' || !key || pins.some((pin) => pin.key === key)) return;
+
+        const pinType = isDeviceType(type) ? type : 'other';
+        pins.push({
+            key,
+            type: pinType,
+            defaultName: typeof defaultName === 'string' && defaultName ? defaultName : getDeviceTypeLabel(pinType)
+        });
+    });
+    return pins;
+}
+
+function migrateSavedState(data: { [field: string]: unknown }) {
+    return { ...migrateSavedPanelState(data), pins: readSavedPins(data.pins) };
 }
 
 // A device is shown as active if it sent something in the last minute
@@ -93,6 +125,13 @@ export interface DeviceMarker {
     viaVpn: boolean;
 }
 
+// The captured traffic: the events store, or a plain list in tests
+interface EventsSource {
+    readonly events: ReadonlyArray<CollectedEvent>;
+    // Deletes many events at once. Without it, a device's traffic can't be cleared.
+    deleteEvents?(events: ReadonlyArray<CollectedEvent>): void;
+}
+
 interface DevicesStoreOptions {
     nameStorage?: NameStorage;
     thisMachineType?: DeviceType;
@@ -113,7 +152,7 @@ const byCount = <T extends { count: number }>(items: T[], getName: (item: T) => 
 /**
  * The devices that sent the captured traffic, told apart by their IP address: this
  * machine (loopback & the Send page) and each phone or computer on the network.
- * It also keeps the Devices panel's state: what's selected, names, width & visibility.
+ * It also keeps the Devices panel's state: what's selected, names, pins, width & visibility.
  */
 export class DevicesStore implements DeviceDirectory {
 
@@ -123,7 +162,7 @@ export class DevicesStore implements DeviceDirectory {
     private disposers: Array<Lambda | IReactionDisposer> = [];
 
     constructor(
-        private readonly eventsSource: { readonly events: ReadonlyArray<CollectedEvent> },
+        private readonly eventsSource: EventsSource,
         private readonly options: DevicesStoreOptions = {}
     ) {
         this.thisMachineType = options.thisMachineType ?? THIS_MACHINE_TYPE;
@@ -136,10 +175,10 @@ export class DevicesStore implements DeviceDirectory {
             await hydrate({
                 key: DEVICES_STORE_KEY,
                 store: this,
-                dataTransform: migrateSavedPanelState
+                dataTransform: migrateSavedState
             });
         } catch (e) {
-            // Only the panel's width & visibility are saved, so the defaults are fine
+            // Only the panel's width, visibility & pins are saved, so the defaults are fine
             console.warn("Couldn't restore the Devices panel layout", e);
         }
 
@@ -147,6 +186,7 @@ export class DevicesStore implements DeviceDirectory {
         this.watchForOtherDevices();
         this.watchVpnPeers();
         this.watchSelection();
+        this.watchPins();
         setDeviceDirectory(this);
 
         console.log('Devices store initialized');
@@ -238,7 +278,10 @@ export class DevicesStore implements DeviceDirectory {
         this.disposers.push(observe(events as IObservableArray<CollectedEvent>, (change) => {
             runInAction(() => {
                 if (change.type === 'splice') {
-                    change.removed.forEach((event) => this.tracker.remove(event));
+                    // Deleting many events at once replaces the whole list: the events that stay
+                    // are in both lists, and keep what they were counted under
+                    const added = new Set(change.added);
+                    change.removed.forEach((event) => { if (!added.has(event)) this.tracker.remove(event); });
                     change.added.forEach((event) => this.tracker.add(event));
                 } else {
                     this.tracker.remove(change.oldValue);
@@ -257,9 +300,8 @@ export class DevicesStore implements DeviceDirectory {
     @action.bound
     rename(deviceKey: string, name: string) {
         const cleanName = cleanDeviceName(name);
-        const device = this.getDevice(deviceKey);
         // Renaming to the default name (or to nothing) forgets the custom one
-        if (!cleanName || cleanName === (device?.defaultName ?? this.defaultNameFor(deviceKey))) {
+        if (!cleanName || cleanName === this.getListedDevice(deviceKey)?.defaultName) {
             this.forgetName(deviceKey);
             return;
         }
@@ -278,10 +320,6 @@ export class DevicesStore implements DeviceDirectory {
 
         this.customNames = names;
         saveDeviceNames(names, this.options.nameStorage);
-    }
-
-    private defaultNameFor(deviceKey: string) {
-        return deviceKey === THIS_MACHINE_KEY ? getThisMachineName(this.thisMachineType) : undefined;
     }
 
     // --- The devices ---
@@ -361,19 +399,23 @@ export class DevicesStore implements DeviceDirectory {
      */
     @computed
     get thisMachine(): DeviceSummary {
-        const device = this.devicesByKey.get(THIS_MACHINE_KEY);
-        if (device) return device;
+        return this.devicesByKey.get(THIS_MACHINE_KEY) ??
+            this.placeholder(THIS_MACHINE_KEY, this.thisMachineType, getThisMachineName(this.thisMachineType));
+    }
 
-        const name = this.customNames.get(THIS_MACHINE_KEY) ?? getThisMachineName(this.thisMachineType);
+    // The row of a device the panel lists without traffic: this machine, or a pinned device
+    private placeholder(key: string, type: DeviceType, defaultName: string): DeviceSummary {
+        const isThisMachine = key === THIS_MACHINE_KEY;
+        const name = this.customNames.get(key) ?? defaultName;
         return {
-            key: THIS_MACHINE_KEY,
-            isThisMachine: true,
-            type: this.thisMachineType,
+            key,
+            isThisMachine,
+            type,
             name,
-            defaultName: getThisMachineName(this.thisMachineType),
-            hasCustomName: this.customNames.has(THIS_MACHINE_KEY),
+            defaultName,
+            hasCustomName: this.customNames.has(key),
             shortName: name,
-            address: undefined,
+            address: isThisMachine ? undefined : key,
             addresses: [],
             eventCount: 0,
             firstSeen: 0,
@@ -383,6 +425,12 @@ export class DevicesStore implements DeviceDirectory {
             viaVpn: false,
             vpnPeers: []
         };
+    }
+
+    // A device the panel lists: one with traffic, this machine, or a pinned device
+    getListedDevice(deviceKey: string): DeviceSummary | undefined {
+        if (deviceKey === THIS_MACHINE_KEY) return this.thisMachine;
+        return this.devicesByKey.get(deviceKey) ?? this.pinnedDevices.find((device) => device.key === deviceKey);
     }
 
     // Phones & other computers: every device except this machine
@@ -450,6 +498,81 @@ export class DevicesStore implements DeviceDirectory {
             : undefined;
         return name ?? getRequestEventAppName(clientEvent);
     };
+
+    // --- Pinned devices ---
+
+    // The devices pinned to the top of the panel, in the order they were pinned
+    @persist('list') @observable.ref
+    private pins: ReadonlyArray<PinnedDevice> = [];
+
+    isPinned(deviceKey: string) {
+        return this.pins.some((pin) => pin.key === deviceKey);
+    }
+
+    @action.bound
+    pin(deviceKey: string) {
+        const device = this.getListedDevice(deviceKey);
+        if (!device || this.isPinned(deviceKey)) return;
+        this.pins = [...this.pins, { key: device.key, type: device.type, defaultName: device.defaultName }];
+    }
+
+    @action.bound
+    unpin(deviceKey: string) {
+        if (this.isPinned(deviceKey)) this.pins = this.pins.filter((pin) => pin.key !== deviceKey);
+    }
+
+    /**
+     * The pinned devices, which the panel lists first, in the order they were pinned. One without
+     * traffic (after Clear, or before it reconnects) stays listed as a placeholder, with the name
+     * & icon it had.
+     */
+    @computed
+    get pinnedDevices(): ReadonlyArray<DeviceSummary> {
+        return this.pins.map((pin) => pin.key === THIS_MACHINE_KEY
+            ? this.thisMachine
+            : this.devicesByKey.get(pin.key) ?? this.placeholder(pin.key, pin.type, pin.defaultName)
+        );
+    }
+
+    // Saves what a pinned device's placeholder needs again whenever the device itself changes,
+    // like a phone that's known as "Android" until its browser names the model
+    private watchPins() {
+        this.disposers.push(reaction(
+            () => this.pins.map((pin) => {
+                const device = this.devicesByKey.get(pin.key);
+                return device ? { key: pin.key, type: device.type, defaultName: device.defaultName } : pin;
+            }),
+            (pins) => { if (!comparer.structural(pins, this.pins)) this.pins = pins; },
+            { equals: comparer.structural, fireImmediately: true }
+        ));
+    }
+
+    // --- Clearing one device's traffic ---
+
+    // Whatever the panel counts for the device, except pinned requests, which Clear keeps too
+    private isClearable(event: CollectedEvent, deviceKey: string) {
+        return !event.pinned && this.tracker.getDeviceKey(event) === deviceKey;
+    }
+
+    // False when the device has no traffic, or only pinned requests
+    canClearTraffic(deviceKey: string) {
+        if (!this.eventsSource.deleteEvents || !this.devicesByKey.has(deviceKey)) return false;
+        return this.eventsSource.events.some((event) => this.isClearable(event, deviceKey));
+    }
+
+    /**
+     * Deletes one device's traffic in one go, leaving every other device's alone. Its pinned
+     * requests stay, as they do with Clear. Returns the deleted events.
+     */
+    @action.bound
+    clearTraffic(deviceKey: string): ReadonlyArray<CollectedEvent> {
+        const source = this.eventsSource;
+        if (!source.deleteEvents) return [];
+
+        const deleted = source.events.filter((event) => this.isClearable(event, deviceKey));
+        if (deleted.length > 0) source.deleteEvents(deleted);
+        return deleted;
+    }
 
     // --- The request list's device markers ---
 
@@ -538,8 +661,10 @@ export class DevicesStore implements DeviceDirectory {
 
         const device = this.devicesByKey.get(selection.deviceKey);
         if (!device) {
-            // This machine is always listed, so it stays selected without traffic
-            return selection.deviceKey === THIS_MACHINE_KEY ? { deviceKey: THIS_MACHINE_KEY } : undefined;
+            // This machine & pinned devices are always listed, so they stay selected without traffic
+            return selection.deviceKey === THIS_MACHINE_KEY || this.isPinned(selection.deviceKey)
+                ? { deviceKey: selection.deviceKey }
+                : undefined;
         }
 
         if (
@@ -575,9 +700,7 @@ export class DevicesStore implements DeviceDirectory {
 
     // "iPhone", or "iPhone › Safari" for an app on it
     describeSelection(selection: DeviceSelection) {
-        const device = selection.deviceKey === THIS_MACHINE_KEY
-            ? this.thisMachine
-            : this.devicesByKey.get(selection.deviceKey);
+        const device = this.getListedDevice(selection.deviceKey);
 
         return [device?.shortName ?? selection.deviceKey, selection.app, selection.host]
             .filter((part) => part !== undefined)

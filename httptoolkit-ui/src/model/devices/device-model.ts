@@ -50,6 +50,10 @@ const TYPE_LABELS: { [type in DeviceType]: string } = {
 
 export const getDeviceTypeLabel = (type: DeviceType) => TYPE_LABELS[type];
 
+// For saved data, which may be from another version
+export const isDeviceType = (value: unknown): value is DeviceType =>
+    typeof value === 'string' && Object.prototype.hasOwnProperty.call(TYPE_LABELS, value);
+
 export function getThisMachineName(platformType: DeviceType) {
     return platformType === 'mac' ? 'This Mac' : 'This computer';
 }

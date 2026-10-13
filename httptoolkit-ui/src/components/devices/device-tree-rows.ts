@@ -4,8 +4,8 @@ import type { DeviceSelection } from '../../model/devices/device-selection-filte
 
 /**
  * The Devices panel as a flat list of visible rows, which is what keyboard navigation
- * walks through: All devices, this machine, then each device with (when it's open)
- * its apps and its busiest domains.
+ * walks through: All devices, the pinned devices, this machine, then each device with
+ * (when it's open) its apps and its busiest domains.
  */
 
 // Opened devices list their busiest apps & domains, so a chatty phone stays short
@@ -14,7 +14,7 @@ export const MAX_HOST_ROWS = 8;
 
 export type DeviceTreeRow =
     | { kind: 'all', id: string, depth: 0, count: number }
-    | { kind: 'device', id: string, depth: 0, device: DeviceSummary, isExpandable: boolean, isExpanded: boolean }
+    | { kind: 'device', id: string, depth: 0, device: DeviceSummary, isExpandable: boolean, isExpanded: boolean, isPinned: boolean }
     | { kind: 'heading', id: string, depth: 1, label: string }
     | { kind: 'app', id: string, depth: 1, deviceKey: string, app: AppCount }
     | { kind: 'host', id: string, depth: 1, deviceKey: string, host: DeviceHost }
@@ -93,16 +93,25 @@ export function buildDeviceTreeRows(inputs: {
     totalCount: number,
     thisMachine: DeviceSummary,
     otherDevices: readonly DeviceSummary[],
+    // In the order they were pinned, with or without traffic. They come first, this machine too
+    // when it's pinned, and the rest keep their order.
+    pinnedDevices?: readonly DeviceSummary[],
     selection: DeviceSelection | undefined,
     isExpanded: (deviceKey: string) => boolean
 }): DeviceTreeRow[] {
     const rows: DeviceTreeRow[] = [{ kind: 'all', id: ALL_DEVICES_ROW_ID, depth: 0, count: inputs.totalCount }];
 
-    for (const device of [inputs.thisMachine, ...inputs.otherDevices]) {
+    const pinnedDevices = inputs.pinnedDevices ?? [];
+    const pinnedKeys = new Set(pinnedDevices.map((device) => device.key));
+    const unpinnedDevices = [inputs.thisMachine, ...inputs.otherDevices]
+        .filter((device) => !pinnedKeys.has(device.key));
+
+    for (const device of [...pinnedDevices, ...unpinnedDevices]) {
         const isExpandable = device.apps.length > 0 || device.hosts.length > 0;
         const isExpanded = isExpandable && inputs.isExpanded(device.key);
+        const isPinned = pinnedKeys.has(device.key);
 
-        rows.push({ kind: 'device', id: deviceRowId(device.key), depth: 0, device, isExpandable, isExpanded });
+        rows.push({ kind: 'device', id: deviceRowId(device.key), depth: 0, device, isExpandable, isExpanded, isPinned });
         if (isExpanded) rows.push(...deviceChildRows(device, inputs.selection));
     }
 
