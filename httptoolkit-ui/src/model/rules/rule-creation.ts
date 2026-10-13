@@ -2,7 +2,8 @@ import * as _ from 'lodash';
 import { observable } from 'mobx';
 import {
     matchers,
-    completionCheckers
+    completionCheckers,
+    webSocketSteps
 } from 'mockttp';
 import * as querystring from 'querystring';
 
@@ -17,6 +18,7 @@ import { byteLength } from '../../util/buffer';
 import amIUsingHtml from '../../amiusing.html';
 
 import { ProxyStore } from '../proxy-store';
+import { getMockttpPort, getServerPort } from '../../services/desktop-api';
 import { versionSatisfies, FROM_FILE_HANDLER_SERVER_RANGE } from '../../services/service-versions';
 import { MethodName } from '../http/methods';
 import { getStatusMessage } from '../http/http-docs';
@@ -200,6 +202,39 @@ export function buildRuleFromExchange(exchange: HttpExchangeView): HtkRule {
     };
 }
 
+// wirepane: the proxy listens on every network interface (and VPN phones reach it too), so it must
+// never pass a request on to Wirepane's own services on this machine: the server API, the Mockttp
+// admin API that runs the proxy, and the proxy's own port. Otherwise any device could send
+// `GET http://127.0.0.1:45456/...` through the proxy. Other local ports (localhost:3000...) still
+// work. Names that only point here through DNS aren't caught: the APIs' token check covers those.
+export function buildOwnServicesUrlRegex(ports: Array<number | undefined>): RegExp {
+    const portPattern = _.uniq(ports.filter((port): port is number => port !== undefined)).join('|');
+    const ipv4Part = '(?:0x[0-9a-f]*|\\d+)';
+    const loopbackHost = [
+        '(?:[a-z0-9-]+\\.)*localhost',
+        `127(?:\\.${ipv4Part}){3}`,
+        // Other ways to write an IPv4 address (2130706433, 0x7f000001, 127.1, 0177.0.0.1, 0.0.0.0)
+        `${ipv4Part}(?:\\.${ipv4Part}){0,2}`,
+        `(?:0x[0-9a-f]*|0\\d*)(?:\\.${ipv4Part}){3}`,
+        '\\[[0:]*1?\\]', // ::1 and ::, however they're written
+        '\\[[0:]*ffff:(?:127(?:\\.\\d+){3}|7f[0-9a-f]{2}:[0-9a-f]{1,4}|0+(?:\\.0+){3}|0{1,4}:0{1,4})\\]'
+    ].join('|');
+
+    // Before matching, Mockttp turns ws://host/ into ws//host/ (and keeps a trailing dot there)
+    return new RegExp(
+        `^(?:https?:\\/\\/|wss?:?\\/\\/)(?:[^@/]*@)?(?:${loopbackHost})\\.?:0*(?:${portPattern})(?:\\/|$)`,
+        'i'
+    );
+}
+
+function getRunningProxyPort(proxyStore: ProxyStore): number | undefined {
+    try {
+        return proxyStore.httpProxyPort;
+    } catch (e) {
+        return undefined; // The proxy isn't running (yet)
+    }
+}
+
 export const buildDefaultGroupWrapper = (items: HtkRuleItem[]): HtkRuleGroup => ({
     id: 'default-group',
     title: "Default rules",
@@ -207,10 +242,45 @@ export const buildDefaultGroupWrapper = (items: HtkRuleItem[]): HtkRuleGroup => 
     items: items
 });
 
+// wirepane: close every proxied request & WebSocket for Wirepane's own services
+function buildOwnServicesRules(proxyStore: ProxyStore): HtkRuleItem[] {
+    const ownServicesUrl = buildOwnServicesUrlRegex([
+        getServerPort(),
+        getMockttpPort(),
+        getRunningProxyPort(proxyStore)
+    ]);
+
+    return [{
+        id: 'default-block-own-services',
+        type: 'http',
+        activated: true,
+        priority: RulePriority.OVERRIDE,
+        matchers: [
+            new HttpRule.WildcardMatcher(),
+            new matchers.RegexUrlMatcher(ownServicesUrl)
+        ],
+        completionChecker: new completionCheckers.Always(),
+        steps: [new HttpRule.CloseConnectionStep()]
+    }, {
+        id: 'default-block-own-services-ws',
+        type: 'websocket',
+        activated: true,
+        priority: RulePriority.OVERRIDE,
+        matchers: [
+            new WsRule.WebSocketWildcardMatcher(),
+            new matchers.RegexUrlMatcher(ownServicesUrl)
+        ],
+        completionChecker: new completionCheckers.Always(),
+        steps: [new webSocketSteps.CloseConnectionStep()]
+    }];
+}
+
 export const buildDefaultGroupRules = (
     rulesStore: RulesStore,
     proxyStore: ProxyStore
 ): HtkRuleItem[] => [
+    ...buildOwnServicesRules(proxyStore), // wirepane: first, see buildOwnServicesUrlRegex
+
     // Respond to amiusing.httptoolkit.tech with an emphatic YES
     {
         id: 'default-amiusing',

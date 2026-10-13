@@ -1,5 +1,7 @@
 import * as path from 'path';
 import * as fs from 'fs';
+import type * as http from 'http';
+import type { Duplex } from 'stream';
 import envPaths from 'env-paths';
 
 import {
@@ -14,7 +16,7 @@ import {
 } from 'mockrtc';
 
 
-import { HttpToolkitServerApi } from './api/api-server';
+import { HttpToolkitServerApi, getBearerToken } from './api/api-server';
 import { checkBrowserConfig } from './browsers';
 import { logError } from './error-tracking';
 import { IS_PROD_BUILD, MOCKTTP_ALLOWED_ORIGINS } from './constants';
@@ -76,6 +78,74 @@ function checkCertExpiry(certContents: string): void {
         console.warn('Certificate expires soon - it must be regenerated');
         throw new Error('Certificate regeneration required');
     }
+}
+
+// wirepane: the Mockttp admin API runs the proxy: it starts sessions, changes their rules and
+// stops everyone's (POST /reset). It listens on 127.0.0.1 only, but proxied requests reach it
+// too (`GET http://127.0.0.1:45456/...` from any device that can use the proxy), and its CORS
+// check stops browsers only. So it needs the desktop's per-run token, like the server API.
+// It's an "Authorization: Bearer <token>" header, or a /token/<token> prefix on the path, which
+// the UI uses because browsers can't set headers on WebSockets. Mockttp sees the path without it.
+// With no token configured (dev runs), everything is allowed, as on the server API.
+const ADMIN_TOKEN_PATH_PREFIX = /^\/token\/([^/?#]*)/;
+// The Chromium web extension (WebRTC interception) only knows its session's URL, not the token
+// (see webextension.ts). It just POSTs GraphQL there. Session ids are random UUIDs that the
+// admin API only gives to whoever started the session.
+const WEBEXTENSION_ORIGIN = 'chrome-extension://oeehdgfohghfelggpifolochpnkdmpog';
+const SESSION_QUERY_PATH = /^\/session\/[\w-]+\/?$/;
+
+function takeTokenFromPath(req: http.IncomingMessage): string | undefined {
+    const match = req.url?.match(ADMIN_TOKEN_PATH_PREFIX);
+    if (!match) return undefined;
+
+    req.url = req.url!.slice(match[0].length) || '/';
+    try {
+        return decodeURIComponent(match[1]);
+    } catch (e) {
+        return undefined; // Malformed escapes can't be our token
+    }
+}
+
+export function isAdminRequestAllowed(req: http.IncomingMessage, authToken: string | undefined) {
+    const pathToken = takeTokenFromPath(req); // Always removed, so dev runs work with or without it
+    if (!authToken) return true;
+
+    if (pathToken === authToken || getBearerToken(req) === authToken) return true;
+
+    // CORS preflights can't carry the token. Mockttp's CORS middleware answers every OPTIONS
+    // request itself, so they never reach a route.
+    if (req.method === 'OPTIONS') return true;
+
+    return req.method === 'POST' &&
+        req.headers['origin'] === WEBEXTENSION_ORIGIN &&
+        SESSION_QUERY_PATH.test(req.url ?? '');
+}
+
+// Puts the token check in front of the admin server's own request & upgrade handlers. Call it
+// straight after start(), before any connection can be handled.
+export function requireAdminToken(adminServer: http.Server, authToken: string | undefined) {
+    const requestListeners = adminServer.listeners('request');
+    const upgradeListeners = adminServer.listeners('upgrade');
+    adminServer.removeAllListeners('request');
+    adminServer.removeAllListeners('upgrade');
+
+    adminServer.on('request', (req: http.IncomingMessage, res: http.ServerResponse) => {
+        if (!isAdminRequestAllowed(req, authToken)) {
+            res.writeHead(403, { 'content-type': 'application/json' });
+            res.end(JSON.stringify({ error: { message: 'Valid token required' } }));
+            return;
+        }
+        requestListeners.forEach((listener) => listener.call(adminServer, req, res));
+    });
+
+    adminServer.on('upgrade', (req: http.IncomingMessage, socket: Duplex, head: Buffer) => {
+        if (!isAdminRequestAllowed(req, authToken)) {
+            socket.write('HTTP/1.1 403 Forbidden\r\nConnection: close\r\n\r\n');
+            socket.destroy();
+            return;
+        }
+        upgradeListeners.forEach((listener) => listener.call(adminServer, req, socket, head));
+    });
 }
 
 let shutdownTimer: NodeJS.Timeout | undefined;
@@ -221,6 +291,8 @@ export async function runHTK(options: {
         port: options.mockttpPort,
         host: '127.0.0.1'
     });
+    // wirepane: before anything else runs, so no request gets in without the token
+    requireAdminToken(standalone['server'], options.authToken);
 
     addShutdownHandler(() => standalone.stop());
 

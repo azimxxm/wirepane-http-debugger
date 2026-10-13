@@ -36,7 +36,7 @@ import { lazyObservablePromise } from '../util/observable';
 import { persist, hydrate } from '../util/mobx-persist/persist';
 import { isValidPort } from './network';
 import { serverVersion } from '../services/service-versions';
-import { getMockttpPort } from '../services/desktop-api';
+import { DesktopApi, getMockttpPort } from '../services/desktop-api';
 import {
     // wirepane: a stable proxy port
     forgetProxySessionId,
@@ -48,6 +48,20 @@ import {
     stopLeftoverProxySession,
     DEFAULT_PROXY_PORT_RANGE
 } from './proxy-port-memory';
+
+// wirepane: the admin API wants the desktop's per-run token (requireAdminToken in the server's
+// src/index.ts). Browsers can't set headers on WebSockets, so it goes in the path too: Mockttp's
+// client builds every request & WebSocket URL from this one. Dev runs have no token on the server.
+export function getAdminServerUrl(port: number, authToken: string | undefined) {
+    const baseUrl = `http://127.0.0.1:${port}`;
+    return authToken ? `${baseUrl}/token/${encodeURIComponent(authToken)}` : baseUrl;
+}
+
+function getAdminAuthToken(): string | undefined {
+    return DesktopApi.getServerAuthToken?.() ??
+        new URLSearchParams(window.location.search).get('authToken') ??
+        undefined;
+}
 
 type HtkAdminClient =
     // WebRTC is only supported for new servers:
@@ -224,11 +238,14 @@ export class ProxyStore {
     }
 
     private startIntercepting = flow(function* (this: ProxyStore) {
+        const adminServerUrl = getAdminServerUrl(getMockttpPort(), getAdminAuthToken()); // wirepane
         this.adminClient = new PluggableAdmin.AdminClient<{
             http: any,
             webrtc: any
         }>({
-            adminServerUrl: `http://127.0.0.1:${getMockttpPort()}`,
+            // wirepane: was http://127.0.0.1:${getMockttpPort()}. No Authorization header on top: it
+            // would turn the POST /stop sent while the window closes into a preflighted request.
+            adminServerUrl,
             adminStreamReconnectAttempts: Infinity
         });
 
@@ -245,7 +262,7 @@ export class ProxyStore {
         const previousSession = readWindowProxySession();
         if (previousSession.id) {
             // The previous page didn't stop its own session (e.g. it crashed), so it may hold the port:
-            yield stopLeftoverProxySession(`http://127.0.0.1:${getMockttpPort()}`, previousSession.id);
+            yield stopLeftoverProxySession(adminServerUrl, previousSession.id); // wirepane: with the token
         }
         const preferredPort = getPreferredProxyPort(
             [previousSession.port, readLastProxyPort()],

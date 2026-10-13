@@ -43,6 +43,13 @@ import { exposeWebSocketClientAPI } from './ws-client-api';
  * GraphQL API will eventually be removed.
  */
 
+// wirepane: the token from an "Authorization: Bearer <token>" header, if there is one
+export function getBearerToken(req: http.IncomingMessage): string | undefined {
+    const authHeader = req.headers['authorization'] || '';
+    const tokenMatch = authHeader.match(/Bearer (\S+)/) || [];
+    return tokenMatch[1];
+}
+
 export class HttpToolkitServerApi extends events.EventEmitter {
 
     private server: express.Application;
@@ -110,10 +117,7 @@ export class HttpToolkitServerApi extends events.EventEmitter {
             // Optional auth token. This allows us to lock down UI/server communication further
             // when started together. The desktop generates a token every run and passes it to both.
             this.server.use((req: express.Request, res: express.Response, next: () => void) => {
-                const authHeader = req.headers['authorization'] || '';
-
-                const tokenMatch = authHeader.match(/Bearer (\S+)/) || [];
-                const token = tokenMatch[1];
+                const token = getBearerToken(req); // wirepane: shared with the Mockttp admin's check (index.ts)
 
                 if (token !== config.authToken) {
                     res.status(403).send({

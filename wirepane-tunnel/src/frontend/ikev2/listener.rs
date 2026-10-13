@@ -455,9 +455,10 @@ pub async fn start_side(params: Ikev2SideParams, shutdown: shutdown::Receiver) -
     })
 }
 
-/// A packet a phone's network conditions hold back until it is due.
+/// A packet a phone's network conditions hold back until it is due. The phone's id goes with it,
+/// for the capture when the packet is released.
 enum Held {
-    FromPhone(Vec<u8>, SocketAddr),
+    FromPhone(String, Vec<u8>, SocketAddr),
     ToPhone(String, Vec<u8>),
 }
 
@@ -497,9 +498,12 @@ impl Pump {
                 }
                 _ = sleep_until_due(next_due), if next_due.is_some() => self.release_due(),
                 Some((peer, packet, from)) = self.inbound.recv() => {
-                    match self.hooks.on_packet(&peer, Direction::FromPhone, &packet, Instant::now()) {
+                    match self.hooks.admit(&peer, Direction::FromPhone, &packet, Instant::now()) {
                         Verdict::Now => self.to_network(packet, from),
-                        Verdict::At(due) => self.hold(due, Held::FromPhone(packet, from), &peer),
+                        Verdict::At(due) => {
+                            let size = packet.len();
+                            self.hold(due, Held::FromPhone(peer.clone(), packet, from), size);
+                        }
                         Verdict::Drop => {}
                     }
                 }
@@ -509,9 +513,9 @@ impl Pump {
         }
     }
 
-    fn hold(&mut self, due: Instant, held: Held, peer: &str) {
-        if !self.delayed.push(due, held) {
-            log::debug!("ikev2: the delay queue is full, dropping a packet of {peer}");
+    fn hold(&mut self, due: Instant, held: Held, bytes: usize) {
+        if !self.delayed.push_bytes(due, held, bytes) {
+            log::debug!("ikev2: the delay queue is full, dropped {} packets so far", self.delayed.dropped());
         }
     }
 
@@ -519,8 +523,14 @@ impl Pump {
         let now = Instant::now();
         while let Some(held) = self.delayed.pop_due(now) {
             match held {
-                Held::FromPhone(packet, from) => self.to_network(packet, from),
-                Held::ToPhone(peer, packet) => self.send_to_listener(&peer, packet),
+                Held::FromPhone(peer, packet, from) => {
+                    self.hooks.released(&peer, Direction::FromPhone, &packet);
+                    self.to_network(packet, from);
+                }
+                Held::ToPhone(peer, packet) => {
+                    self.hooks.released(&peer, Direction::ToPhone, &packet);
+                    self.send_to_listener(&peer, packet);
+                }
             }
         }
     }
@@ -536,9 +546,12 @@ impl Pump {
     fn to_phone(&mut self, packet: Vec<u8>) {
         let Ok(ip) = Ipv4Packet::new_checked(&packet) else { return };
         let Some(peer) = lock(&self.peers).by_ip.get(&ip.dst_addr()).cloned() else { return };
-        match self.hooks.on_packet(&peer, Direction::ToPhone, &packet, Instant::now()) {
+        match self.hooks.admit(&peer, Direction::ToPhone, &packet, Instant::now()) {
             Verdict::Now => self.send_to_listener(&peer, packet),
-            Verdict::At(due) => self.hold(due, Held::ToPhone(peer.clone(), packet), &peer),
+            Verdict::At(due) => {
+                let size = packet.len();
+                self.hold(due, Held::ToPhone(peer, packet), size);
+            }
             Verdict::Drop => {}
         }
     }
