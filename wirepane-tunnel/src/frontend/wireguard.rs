@@ -6,15 +6,19 @@
 //! AllowedIPs), so one phone can't poison another's routing; no `unwrap` on peer or endpoint
 //! lookups (unknown peers and peers without a known endpoint are dropped); an unknown peer's
 //! datagram never reaches another peer; IPv6 is dropped (v1); malformed TCP/UDP is filtered before
-//! it reaches the smoltcp network task, because that task stops on a few bad inputs.
+//! it reaches the smoltcp network task, because that task stops on a few bad inputs. Upstream never
+//! runs WireGuard's timers; here a 250 ms tick runs them for every peer, and handshakes go through a
+//! rate limiter (cookie replies under load) before any key is derived.
 
 use std::collections::HashMap;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use anyhow::{Result, anyhow};
+use boringtun::noise::errors::WireGuardError;
+use boringtun::noise::rate_limiter::RateLimiter;
 use boringtun::noise::{Packet, Tunn, TunnResult, handshake::parse_handshake_anon};
 use boringtun::x25519::{PublicKey, StaticSecret};
 use mitmproxy::messages::{
@@ -27,14 +31,21 @@ use smoltcp::wire::{IpProtocol, Ipv4Packet, TcpPacket, UdpPacket};
 use tokio::net::UdpSocket;
 use tokio::sync::{mpsc, watch};
 use tokio::task::JoinHandle;
+use tokio::time::{MissedTickBehavior, interval};
 
-use super::{PeerDirectory, PeerView};
+use super::{InjectedPacket, PeerDirectory, PeerView};
 use crate::events::EventSink;
 
 /// WireGuard adds up to 80 bytes (IPv6 outer header) to every packet.
 const WG_HEADER_SIZE: usize = 80;
-/// Same value mitmproxy uses for the WireGuard persistent keepalive.
-const KEEPALIVE_SECONDS: u16 = 25;
+/// How often every peer's WireGuard timers run. boringtun's own device does the same: its timers are
+/// rounded to a second, so 250 ms is plenty.
+const TIMER_TICK: Duration = Duration::from_millis(250);
+/// Handshake messages per second the server handles before it asks for a cookie (MAC2). This is the
+/// value boringtun's own device uses; a few phones never come near it.
+const HANDSHAKE_RATE_LIMIT: u64 = 100;
+/// A WireGuard cookie reply is always this long.
+const COOKIE_REPLY_SIZE: usize = 64;
 
 pub fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
     // A panic while holding the lock must not take the whole sidecar down with it.
@@ -66,6 +77,9 @@ pub struct PeerSummary {
     pub tunnel_ip: Ipv4Addr,
     pub endpoint: Option<SocketAddr>,
     pub last_handshake_ms: Option<u64>,
+    /// Bytes the phone sent through its tunnel, and bytes sent back to it.
+    pub bytes_up: u64,
+    pub bytes_down: u64,
 }
 
 #[derive(Default)]
@@ -79,15 +93,31 @@ struct Outcome {
 }
 
 /// All peers of the WireGuard front-end. Shared between the packet task and the command side.
-#[derive(Default)]
 pub struct WgPeers {
     by_index: HashMap<u32, WgPeer>,
     by_key: HashMap<PublicKey, u32>,
     by_ip: HashMap<Ipv4Addr, u32>,
     next_index: u32,
+    /// The front door for handshake messages: checks MAC1 and, above `HANDSHAKE_RATE_LIMIT` a
+    /// second, answers with a cookie reply instead of doing any crypto work.
+    limiter: RateLimiter,
+    /// Handed to every peer's `Tunn`, which checks MAC1 again inside `decapsulate`. It can never be
+    /// "under load", so the front door above is the only place that rate limits.
+    verify_only: Arc<RateLimiter>,
 }
 
 impl WgPeers {
+    pub fn new(server_public: &PublicKey) -> Self {
+        Self {
+            by_index: HashMap::new(),
+            by_key: HashMap::new(),
+            by_ip: HashMap::new(),
+            next_index: 0,
+            limiter: RateLimiter::new(server_public, HANDSHAKE_RATE_LIMIT),
+            verify_only: Arc::new(RateLimiter::new(server_public, u64::MAX)),
+        }
+    }
+
     pub fn add(
         &mut self,
         server_private: &StaticSecret,
@@ -99,13 +129,15 @@ impl WgPeers {
         // Indexes are never reused: a late packet for a removed peer can't match a new one.
         self.next_index += 1;
         let index = self.next_index;
+        // No persistent keepalive on the server side: the phone's own keepalive holds its NAT open,
+        // and a server that sent keepalives would also keep dialling phones that never connected.
         let tunn = Tunn::new(
             server_private.clone(),
             public_key,
             None,
-            Some(KEEPALIVE_SECONDS),
-            index,
             None,
+            index,
+            Some(self.verify_only.clone()),
         );
         let (removed_tx, _) = watch::channel(false);
         self.by_key.insert(public_key, index);
@@ -146,12 +178,18 @@ impl WgPeers {
         let mut list: Vec<PeerSummary> = self
             .by_index
             .values()
-            .map(|peer| PeerSummary {
-                peer: peer.id.clone(),
-                name: peer.name.clone(),
-                tunnel_ip: peer.tunnel_ip,
-                endpoint: peer.endpoint,
-                last_handshake_ms: peer.last_handshake_ms,
+            .map(|peer| {
+                // Plaintext bytes through this peer's tunnel: received = from the phone (up).
+                let (_, bytes_down, bytes_up, _, _) = peer.tunn.stats();
+                PeerSummary {
+                    peer: peer.id.clone(),
+                    name: peer.name.clone(),
+                    tunnel_ip: peer.tunnel_ip,
+                    endpoint: peer.endpoint,
+                    last_handshake_ms: peer.last_handshake_ms,
+                    bytes_up: bytes_up as u64,
+                    bytes_down: bytes_down as u64,
+                }
             })
             .collect();
         list.sort_by_key(|p| p.tunnel_ip);
@@ -168,14 +206,27 @@ impl WgPeers {
     ) -> Outcome {
         let mut outcome = Outcome::default();
 
-        let packet = match Tunn::parse_incoming_packet(data) {
+        // The front door: parse, check MAC1 and rate limit handshakes before any key is derived, so
+        // a flood of forged initiations costs a hash each instead of a Diffie-Hellman each. Under
+        // load a phone gets a cookie reply and has to send its initiation again with the cookie.
+        let mut cookie = [0u8; COOKIE_REPLY_SIZE];
+        let packet = match self.limiter.verify_packet(Some(src.ip()), data, &mut cookie) {
             Ok(packet) => packet,
-            Err(error) => {
+            Err(TunnResult::WriteToNetwork(reply)) => {
+                log::debug!("handshake rate limit reached, sending a cookie reply to {src}");
+                outcome.replies.push(reply.to_vec());
+                return outcome;
+            }
+            Err(TunnResult::Err(error)) => {
                 log::debug!("ignoring invalid WireGuard packet from {src}: {error:?}");
                 return outcome;
             }
+            Err(_) => return outcome,
         };
 
+        // A handshake the phone started (initiation) or one the server's timers started and the phone
+        // answered (response): either way a new session now exists.
+        let carries_handshake = matches!(packet, Packet::HandshakeInit(_) | Packet::HandshakeResponse(_));
         let mut is_handshake = false;
         let index = match packet {
             Packet::HandshakeInit(init) => {
@@ -246,7 +297,9 @@ impl WgPeers {
         if authenticated {
             peer.endpoint = Some(src);
         }
-        let handshake_done = is_handshake && !outcome.replies.is_empty();
+        // A valid initiation is answered with a handshake response and a valid response with the
+        // first keepalive, so a reply to either means the handshake went through.
+        let handshake_done = carries_handshake && !outcome.replies.is_empty();
         if handshake_done {
             peer.last_handshake_ms = Some(now_ms());
         }
@@ -259,6 +312,31 @@ impl WgPeers {
             }));
         }
         outcome
+    }
+
+    /// Runs every peer's WireGuard timers once and returns what they want sent: keepalives, and
+    /// handshake retries for a session that went quiet. A peer with no known address is skipped.
+    fn tick(&mut self, buf: &mut [u8]) -> Vec<(Vec<u8>, SocketAddr)> {
+        // The limiter counts handshakes per second; nothing else resets it.
+        self.limiter.reset_count();
+        let mut due = Vec::new();
+        for peer in self.by_index.values_mut() {
+            match peer.tunn.update_timers(buf) {
+                TunnResult::WriteToNetwork(datagram) => {
+                    if let Some(endpoint) = peer.endpoint {
+                        due.push((datagram.to_vec(), endpoint));
+                    }
+                }
+                // A session that stayed silent for nine minutes is wiped; the next handshake of
+                // the phone starts a new one. It repeats on every tick until then, so keep it quiet.
+                TunnResult::Err(WireGuardError::ConnectionExpired) => {
+                    log::trace!("peer {} has no live session", peer.id);
+                }
+                TunnResult::Err(error) => log::debug!("timer error for peer {}: {error:?}", peer.id),
+                _ => {}
+            }
+        }
+        due
     }
 
     fn encapsulate(
@@ -343,6 +421,8 @@ pub struct WireGuardParams {
     pub server_private: StaticSecret,
     pub peers: Arc<Mutex<WgPeers>>,
     pub events: EventSink,
+    /// Packets from the core that go straight to a phone (ICMP errors).
+    pub injected: mpsc::Receiver<InjectedPacket>,
 }
 
 /// Binds the UDP socket and starts the packet task plus mitmproxy's smoltcp network task.
@@ -368,6 +448,7 @@ pub async fn start(
         server_public,
         peers: params.peers,
         events: params.events,
+        injected: params.injected,
         net_tx,
         net_rx,
         network_task,
@@ -387,6 +468,7 @@ struct WgTask {
     server_public: PublicKey,
     peers: Arc<Mutex<WgPeers>>,
     events: EventSink,
+    injected: mpsc::Receiver<InjectedPacket>,
     net_tx: mpsc::Sender<NetworkEvent>,
     net_rx: mpsc::Receiver<NetworkCommand>,
     network_task: JoinHandle<Result<()>>,
@@ -397,9 +479,13 @@ struct WgTask {
 impl WgTask {
     async fn run(mut self) -> Result<()> {
         let mut udp_buf = vec![0u8; MAX_PACKET_SIZE];
+        let mut timer = interval(TIMER_TICK);
+        // After a stall one tick is enough; a burst of catch-up ticks would only repeat itself.
+        timer.set_missed_tick_behavior(MissedTickBehavior::Skip);
         loop {
             tokio::select! {
                 _ = self.shutdown.recv() => return Ok(()),
+                _ = timer.tick() => self.on_tick().await,
                 exit = &mut self.network_task => {
                     return match exit {
                         Ok(Ok(())) => Ok(()),
@@ -419,6 +505,9 @@ impl WgTask {
                         Some(NetworkCommand::SendPacket(packet)) => self.on_outbound(packet).await,
                         None => return Ok(()),
                     }
+                }
+                Some(InjectedPacket { to, packet }) = self.injected.recv() => {
+                    self.send_to_phone(to, &packet).await;
                 }
             }
         }
@@ -461,18 +550,38 @@ impl WgTask {
         }
     }
 
+    /// Runs the WireGuard timers of every peer and sends what they ask for.
+    async fn on_tick(&mut self) {
+        let due = catch_unwind(AssertUnwindSafe(|| {
+            lock(&self.peers).tick(&mut self.wg_buf)
+        }))
+        .unwrap_or_else(|_| {
+            log::error!("panic while running the WireGuard timers");
+            Vec::new()
+        });
+        for (datagram, endpoint) in due {
+            if let Err(error) = self.socket.send_to(&datagram, endpoint).await {
+                log::debug!("cannot send a timer packet to {endpoint}: {error}");
+            }
+        }
+    }
+
     async fn on_outbound(&mut self, packet: SmolPacket) {
         let IpAddr::V4(dst) = packet.dst_ip() else {
             return;
         };
-        let bytes = packet.into_inner();
+        self.send_to_phone(dst, &packet.into_inner()).await;
+    }
+
+    /// Encrypts one IPv4 packet for the peer that owns `dst` and sends it to that peer's address.
+    async fn send_to_phone(&mut self, dst: Ipv4Addr, bytes: &[u8]) {
         // Tunn::encapsulate panics when the packet doesn't fit the buffer.
         if bytes.len() > MAX_PACKET_SIZE - WG_HEADER_SIZE {
             log::error!("dropping a {} byte packet for {dst}: too large", bytes.len());
             return;
         }
         let sealed = catch_unwind(AssertUnwindSafe(|| {
-            lock(&self.peers).encapsulate(dst, &bytes, &mut self.wg_buf)
+            lock(&self.peers).encapsulate(dst, bytes, &mut self.wg_buf)
         }))
         .unwrap_or_else(|_| {
             log::error!("panic while encrypting a packet for {dst}, dropped it");

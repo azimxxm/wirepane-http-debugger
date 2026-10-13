@@ -1,4 +1,5 @@
 use std::net::SocketAddr;
+use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::path::PathBuf;
 
 use anyhow::{Context, Result, anyhow, bail};
@@ -12,7 +13,7 @@ use wirepane_tunnel::{PEER_KIND_WIREGUARD, Tunnel, TunnelConfig};
 const USAGE: &str = "usage: wirepane-tunnel --wireguard <ip:port> --state <file> --socks <host:port>
                        [--endpoint-host <LAN IPv4 the phone dials>] [--tunnel-net 10.73.0.0/24]
                        [--quic block|relay]
-commands (JSON lines on stdin): add-peer, remove-peer, list-peers, set-socks. EOF on stdin exits.";
+commands (JSON lines on stdin): add-peer, remove-peer, list-peers, set-socks, stats. EOF on stdin exits.";
 
 /// Logs go to stderr (stdout is for events). Level comes from WIREPANE_TUNNEL_LOG (default warn).
 struct StderrLogger(log::LevelFilter);
@@ -124,6 +125,7 @@ fn handle_command(tunnel: &Tunnel, events: &EventSink, line: &str) {
             None => events.error("remove-peer needs \"peer\""),
         },
         Some("list-peers") => events.emit(tunnel.list_peers()),
+        Some("stats") => events.emit(tunnel.stats()),
         Some("set-socks") => match text("addr") {
             Some(addr) => match tunnel.set_socks(addr) {
                 Ok(()) => events.emit(serde_json::json!({ "event": "socks-set", "addr": addr })),
@@ -148,7 +150,13 @@ async fn run(events: &EventSink) -> Result<()> {
         tokio::select! {
             line = lines.next_line() => match line {
                 Ok(Some(line)) if line.trim().is_empty() => {}
-                Ok(Some(line)) => handle_command(&tunnel, events, &line),
+                Ok(Some(line)) => {
+                    // One command that panics must not take the whole VPN down with it.
+                    let handled = catch_unwind(AssertUnwindSafe(|| handle_command(&tunnel, events, &line)));
+                    if handled.is_err() {
+                        events.error("a command panicked and was dropped");
+                    }
+                }
                 // The parent closed our stdin (or died): quit, so the sidecar can't outlive it.
                 Ok(None) => break,
                 Err(error) => bail!("cannot read stdin: {error}"),

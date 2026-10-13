@@ -107,6 +107,10 @@ pub struct WgClient {
     started: StdInstant,
     next_port: u16,
     buf: Vec<u8>,
+    /// Empty WireGuard data packets (keepalives) received from the server.
+    pub keepalives_received: u32,
+    /// Every ICMP packet that came through the tunnel, as raw IPv4 bytes.
+    pub icmp_received: Vec<Vec<u8>>,
 }
 
 impl WgClient {
@@ -154,6 +158,8 @@ impl WgClient {
             started: StdInstant::now(),
             next_port: 40000,
             buf: vec![0u8; 65535],
+            keepalives_received: 0,
+            icmp_received: Vec::new(),
         };
         client.handshake()?;
         Ok(client)
@@ -192,6 +198,10 @@ impl WgClient {
     pub fn pump(&mut self) {
         let mut datagram = vec![0u8; 65535];
         if let Ok(len) = self.socket.recv(&mut datagram) {
+            // 16 bytes of header and 16 of tag around an empty payload: a keepalive.
+            if len == 32 && datagram[0] == 4 {
+                self.keepalives_received += 1;
+            }
             let mut result = self.tunn.decapsulate(None, &datagram[..len], &mut self.buf);
             loop {
                 match result {
@@ -201,6 +211,9 @@ impl WgClient {
                         result = self.tunn.decapsulate(None, &[], &mut self.buf);
                     }
                     TunnResult::WriteToTunnelV4(plain, _) => {
+                        if plain.len() > 9 && plain[9] == 1 {
+                            self.icmp_received.push(plain.to_vec());
+                        }
                         self.device.rx.push_back(plain.to_vec());
                         break;
                     }
@@ -222,7 +235,7 @@ impl WgClient {
         }
     }
 
-    fn pump_for(&mut self, duration: Duration) {
+    pub fn pump_for(&mut self, duration: Duration) {
         let end = StdInstant::now() + duration;
         while StdInstant::now() < end {
             self.pump();
@@ -270,14 +283,7 @@ impl WgClient {
     }
 
     pub fn dns_query_raw(&mut self, name: &str, qtype: u16) -> Option<Vec<u8>> {
-        let mut query = vec![0xAB, 0xCD, 0x01, 0x00, 0, 1, 0, 0, 0, 0, 0, 0];
-        for label in name.split('.') {
-            query.push(label.len() as u8);
-            query.extend_from_slice(label.as_bytes());
-        }
-        query.push(0);
-        query.extend_from_slice(&qtype.to_be_bytes());
-        query.extend_from_slice(&1u16.to_be_bytes());
+        let query = dns_query_bytes(name, qtype, 0xABCD);
         let dns = self.config.dns;
         self.udp_exchange(dns, 53, &query, Duration::from_secs(5))
     }
@@ -288,6 +294,121 @@ impl WgClient {
             return Vec::new();
         };
         parse_a_answers(&response)
+    }
+
+    /// Opens a TCP connection and sends each chunk of `writes` with a short pause between them, so
+    /// they travel as separate segments. Then reads until `done` accepts what came back, the server
+    /// closes, or `timeout` passes, and returns the bytes read.
+    pub fn tcp_exchange(
+        &mut self,
+        ip: Ipv4Addr,
+        port: u16,
+        writes: &[Vec<u8>],
+        done: impl Fn(&[u8]) -> bool,
+        timeout: Duration,
+    ) -> Result<Vec<u8>, String> {
+        let local = self.port();
+        let socket = tcp::Socket::new(
+            tcp::SocketBuffer::new(vec![0; 65535]),
+            tcp::SocketBuffer::new(vec![0; 65535]),
+        );
+        let handle = self.sockets.add(socket);
+        {
+            let cx = self.iface.context();
+            self.sockets
+                .get_mut::<tcp::Socket>(handle)
+                .connect(cx, (IpAddress::Ipv4(ip), port), local)
+                .map_err(|e| format!("connect: {e:?}"))?;
+        }
+        let mut next_write = 0;
+        let mut response = Vec::new();
+        let deadline = StdInstant::now() + timeout;
+        let outcome = loop {
+            if StdInstant::now() > deadline {
+                break Err(format!("timeout, got {} bytes", response.len()));
+            }
+            self.pump();
+            let mut wrote = false;
+            let finished = {
+                let socket = self.sockets.get_mut::<tcp::Socket>(handle);
+                if next_write < writes.len() && socket.may_send() {
+                    socket
+                        .send_slice(&writes[next_write])
+                        .map_err(|e| format!("send: {e:?}"))?;
+                    next_write += 1;
+                    wrote = true;
+                }
+                if socket.can_recv() {
+                    let _ = socket.recv(|data| {
+                        response.extend_from_slice(data);
+                        (data.len(), ())
+                    });
+                }
+                let all_sent = next_write == writes.len();
+                all_sent && (done(&response) || (!socket.may_recv() && !socket.can_recv()))
+            };
+            if finished {
+                break Ok(());
+            }
+            if wrote {
+                self.pump_for(Duration::from_millis(80));
+            }
+        };
+        self.sockets.get_mut::<tcp::Socket>(handle).abort();
+        self.pump_for(Duration::from_millis(20));
+        self.sockets.remove(handle);
+        outcome.map(|_| response)
+    }
+
+    /// Plain HTTP/1.1 POST of `body_len` bytes of a repeating pattern, `Connection: close`. Returns
+    /// the raw response. The body is fed to the socket as fast as its buffer drains.
+    pub fn http_post_pattern(&mut self, ip: Ipv4Addr, port: u16, host: &str, path: &str, body_len: usize) -> Result<Vec<u8>, String> {
+        let local = self.port();
+        let socket = tcp::Socket::new(
+            tcp::SocketBuffer::new(vec![0; 65535]),
+            tcp::SocketBuffer::new(vec![0; 65535]),
+        );
+        let handle = self.sockets.add(socket);
+        {
+            let cx = self.iface.context();
+            self.sockets
+                .get_mut::<tcp::Socket>(handle)
+                .connect(cx, (IpAddress::Ipv4(ip), port), local)
+                .map_err(|e| format!("connect: {e:?}"))?;
+        }
+        let head = format!("POST {path} HTTP/1.1\r\nHost: {host}\r\nContent-Length: {body_len}\r\nConnection: close\r\n\r\n");
+        let pattern: Vec<u8> = (0..65536usize).map(|i| (i % 251) as u8).collect();
+        let (mut head_sent, mut body_sent) = (0usize, 0usize);
+        let mut response = Vec::new();
+        let deadline = StdInstant::now() + Duration::from_secs(120);
+        let outcome = loop {
+            if StdInstant::now() > deadline {
+                break Err(format!("timeout after {body_sent} body bytes"));
+            }
+            self.pump();
+            let socket = self.sockets.get_mut::<tcp::Socket>(handle);
+            if socket.may_send() {
+                if head_sent < head.len() {
+                    head_sent += socket.send_slice(&head.as_bytes()[head_sent..]).map_err(|e| format!("send: {e:?}"))?;
+                } else if body_sent < body_len {
+                    let chunk = &pattern[..pattern.len().min(body_len - body_sent)];
+                    body_sent += socket.send_slice(chunk).map_err(|e| format!("send: {e:?}"))?;
+                }
+            }
+            if socket.can_recv() {
+                let _ = socket.recv(|data| {
+                    response.extend_from_slice(data);
+                    (data.len(), ())
+                });
+            }
+            if body_sent == body_len && !socket.may_recv() && !socket.can_recv() {
+                break Ok(());
+            }
+        };
+        self.sockets.get_mut::<tcp::Socket>(handle).abort();
+        self.pump_for(Duration::from_millis(20));
+        self.sockets.remove(handle);
+        outcome.map(|_| response)
     }
 
     /// Plain HTTP/1.1 GET with `Connection: close`; returns the raw response text.
@@ -392,4 +513,40 @@ pub fn parse_a_answers(response: &[u8]) -> Vec<Ipv4Addr> {
         pos += rdlen;
     }
     out
+}
+
+/// A DNS query for `name` (recursion desired), without any TCP length prefix.
+pub fn dns_query_bytes(name: &str, qtype: u16, id: u16) -> Vec<u8> {
+    let mut query = id.to_be_bytes().to_vec();
+    query.extend_from_slice(&[0x01, 0x00, 0, 1, 0, 0, 0, 0, 0, 0]);
+    for label in name.split('.') {
+        query.push(label.len() as u8);
+        query.extend_from_slice(label.as_bytes());
+    }
+    query.push(0);
+    query.extend_from_slice(&qtype.to_be_bytes());
+    query.extend_from_slice(&1u16.to_be_bytes());
+    query
+}
+
+/// DNS over TCP framing: a 2-byte big-endian length, then the message.
+pub fn dns_frame(message: &[u8]) -> Vec<u8> {
+    let mut framed = (message.len() as u16).to_be_bytes().to_vec();
+    framed.extend_from_slice(message);
+    framed
+}
+
+/// The complete DNS messages in a TCP byte stream (a partial one at the end is left out).
+pub fn dns_frames(stream: &[u8]) -> Vec<Vec<u8>> {
+    let mut messages = Vec::new();
+    let mut pos = 0;
+    while pos + 2 <= stream.len() {
+        let len = usize::from(u16::from_be_bytes([stream[pos], stream[pos + 1]]));
+        if pos + 2 + len > stream.len() {
+            break;
+        }
+        messages.push(stream[pos + 2..pos + 2 + len].to_vec());
+        pos += 2 + len;
+    }
+    messages
 }

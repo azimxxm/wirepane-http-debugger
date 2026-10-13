@@ -14,7 +14,7 @@ use std::collections::HashSet;
 use std::net::{Ipv4Addr, SocketAddr};
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use anyhow::{Context, Result, anyhow, bail};
 use boringtun::x25519::{PublicKey, StaticSecret};
@@ -24,6 +24,7 @@ use serde_json::{Value, json};
 use tokio::sync::{mpsc, watch};
 use tokio::task::JoinHandle;
 
+use crate::core::stats::CoreStats;
 use crate::core::{Core, CoreConfig, QuicMode};
 use crate::events::EventSink;
 use crate::frontend::wireguard::{self, WgDirectory, WgPeers, WireGuardParams, lock};
@@ -78,6 +79,8 @@ pub struct Tunnel {
     state: Mutex<StateFile>,
     peers: Arc<Mutex<WgPeers>>,
     socks: Arc<Mutex<String>>,
+    core_stats: Arc<CoreStats>,
+    started: Instant,
     shutdown_tx: watch::Sender<()>,
     frontend_task: Option<JoinHandle<Result<()>>>,
     core_task: JoinHandle<()>,
@@ -142,7 +145,7 @@ impl Tunnel {
         // Written right away: the file exists (mode 0600) and the server key is stable from now on.
         state.save(&config.state_path)?;
 
-        let peers = Arc::new(Mutex::new(WgPeers::default()));
+        let peers = Arc::new(Mutex::new(WgPeers::new(&server_public)));
         for stored in &state.peers {
             let tunnel_ip: Ipv4Addr = stored
                 .tunnel_ip
@@ -154,6 +157,8 @@ impl Tunnel {
 
         let (commands_tx, commands_rx) = mpsc::unbounded_channel();
         let (flows_tx, flows_rx) = mpsc::channel(256);
+        // ICMP errors for blocked QUIC travel from the core to the front-end through this.
+        let (injector_tx, injector_rx) = mpsc::channel(256);
         let (shutdown_tx, shutdown_rx) = shutdown::channel();
 
         let frontend = wireguard::start(
@@ -162,6 +167,7 @@ impl Tunnel {
                 server_private: server_private.clone(),
                 peers: peers.clone(),
                 events: events.clone(),
+                injected: injector_rx,
             },
             flows_tx,
             commands_rx,
@@ -180,7 +186,9 @@ impl Tunnel {
             events.clone(),
             socks.clone(),
             commands_tx,
+            injector_tx,
         ));
+        let core_stats = core.stats.clone();
         let core_task = tokio::spawn(core::run(core, flows_rx));
 
         events.emit(json!({
@@ -198,6 +206,8 @@ impl Tunnel {
             state: Mutex::new(state),
             peers,
             socks,
+            core_stats,
+            started: Instant::now(),
             shutdown_tx,
             frontend_task: Some(frontend.task),
             core_task,
@@ -310,6 +320,36 @@ impl Tunnel {
             })
             .collect();
         json!({ "event": "peers", "peers": peers })
+    }
+
+    /// Counters for the `stats` command: per phone (bytes through its tunnel) and for the flows
+    /// the core served. Everything is a running total since the sidecar started.
+    pub fn stats(&self) -> Value {
+        let live = lock(&self.peers).summaries();
+        let peers: Vec<Value> = live
+            .iter()
+            .map(|peer| {
+                json!({
+                    "peer": peer.peer,
+                    "name": peer.name,
+                    "tunnelIp": peer.tunnel_ip.to_string(),
+                    "endpoint": peer.endpoint.map(|e| e.to_string()),
+                    "lastHandshake": peer.last_handshake_ms,
+                    "bytesUp": peer.bytes_up,
+                    "bytesDown": peer.bytes_down,
+                })
+            })
+            .collect();
+        // "event" comes first, like in every other event line.
+        let mut stats = json!({
+            "event": "stats",
+            "uptimeMs": self.started.elapsed().as_millis() as u64,
+            "peers": peers,
+        });
+        if let (Some(object), Value::Object(counters)) = (stats.as_object_mut(), self.core_stats.to_json()) {
+            object.extend(counters);
+        }
+        stats
     }
 
     pub fn set_socks(&self, addr: &str) -> Result<()> {

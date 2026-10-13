@@ -3,14 +3,17 @@
 //! - TCP: SOCKS5 to Mockttp (custom-metadata tags, then CONNECT to the original IP:port), then
 //!   pipe both ways with half-close.
 //! - DNS on the tunnel's DNS address: answered on the host, names remembered per phone.
-//! - UDP/443 (QUIC): blocked by default so apps fall back to TCP, which Mockttp can decrypt.
+//! - UDP/443 (QUIC): blocked by default so apps fall back to TCP, which Mockttp can decrypt. Every
+//!   blocked datagram is answered with an ICMP port unreachable, so the fallback is immediate.
 //! - Other UDP: relayed from a host socket with an idle timeout.
 
 pub mod dns;
+pub mod icmp;
 pub mod socks;
+pub mod stats;
 
 use std::collections::HashMap;
-use std::net::{IpAddr, Ipv4Addr, SocketAddr};
+use std::net::{IpAddr, Ipv4Addr, SocketAddr, SocketAddrV4};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
@@ -21,13 +24,14 @@ use serde_json::json;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpStream, UdpSocket};
 use tokio::sync::{mpsc, oneshot, watch};
-use tokio::time::sleep;
+use tokio::time::{MissedTickBehavior, interval_at, sleep};
 
 use crate::events::EventSink;
-use crate::frontend::{PeerDirectory, PeerView};
 use crate::frontend::wireguard::lock;
+use crate::frontend::{InjectedPacket, PacketInjector, PeerDirectory, PeerView};
 use crate::net::TunnelNet;
 use socks::Target;
+use stats::{ActiveFlow, CoreStats};
 
 const PIPE_CHUNK: u32 = 32 * 1024;
 const UDP_IDLE_TIMEOUT: Duration = Duration::from_secs(60);
@@ -36,6 +40,11 @@ const NAME_CAP: usize = 20_000;
 /// A flow that fails right after the SYN must not close before the phone's handshake is done: the
 /// SYN would be dropped and the phone would retry for a long time instead of seeing a clean close.
 const FAILED_FLOW_CLOSE_DELAY: Duration = Duration::from_millis(250);
+/// A relayed UDP flow reports its counters at most this often, and only when they changed.
+const UDP_UPDATE_INTERVAL: Duration = Duration::from_secs(1);
+/// A blocked QUIC flow gets at most one ICMP error per this long: a client that retries its Initial
+/// packet every few milliseconds needs one error, not a stream of them.
+const ICMP_MIN_GAP: Duration = Duration::from_millis(100);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum QuicMode {
@@ -64,6 +73,9 @@ pub struct Core {
     names: Mutex<HashMap<(Ipv4Addr, Ipv4Addr), NameEntry>>,
     flow_ids: AtomicU64,
     commands: mpsc::UnboundedSender<TransportCommand>,
+    /// Raw packets for phones (ICMP errors) go to the front-end through this.
+    injector: PacketInjector,
+    pub stats: Arc<CoreStats>,
 }
 
 impl Core {
@@ -73,6 +85,7 @@ impl Core {
         events: EventSink,
         socks: Arc<Mutex<String>>,
         commands: mpsc::UnboundedSender<TransportCommand>,
+        injector: PacketInjector,
     ) -> Self {
         Self {
             cfg,
@@ -82,6 +95,8 @@ impl Core {
             names: Mutex::new(HashMap::new()),
             flow_ids: AtomicU64::new(1),
             commands,
+            injector,
+            stats: Arc::new(CoreStats::default()),
         }
     }
 
@@ -220,6 +235,7 @@ fn v4(addr: SocketAddr) -> Option<Ipv4Addr> {
 }
 
 async fn tcp_flow(core: Arc<Core>, flow: Flow) {
+    let _active = ActiveFlow::start(&core.stats.tcp_opened, &core.stats.tcp_active);
     if let Err(error) = tcp_flow_inner(&core, &flow).await {
         log::debug!("TCP flow {} -> {} ended: {error:#}", flow.src, flow.dst);
         sleep(FAILED_FLOW_CLOSE_DELAY).await;
@@ -255,18 +271,26 @@ async fn tcp_flow_inner(core: &Arc<Core>, flow: &Flow) -> Result<()> {
 
     let proxy = lock(&core.socks).clone();
     let upstream = socks::connect(&proxy, &flow_tags(&peer, name), &target).await?;
-    pipe(flow, upstream, peer.removed.clone()).await
+    pipe(&core.stats, flow, upstream, peer.removed.clone()).await
 }
 
 /// Copies bytes both ways. A FIN from one side is passed on as a half-close, and the other
 /// direction keeps going until it ends too.
-async fn pipe(flow: &Flow, upstream: TcpStream, mut removed: watch::Receiver<bool>) -> Result<()> {
+async fn pipe(
+    stats: &CoreStats,
+    flow: &Flow,
+    upstream: TcpStream,
+    mut removed: watch::Receiver<bool>,
+) -> Result<()> {
     let (mut upstream_read, mut upstream_write) = upstream.into_split();
 
     let to_upstream = async {
         while let Some(read) = flow.read(PIPE_CHUNK) {
             match read.await {
-                Ok(data) if !data.is_empty() => upstream_write.write_all(&data).await?,
+                Ok(data) if !data.is_empty() => {
+                    CoreStats::add(&stats.tcp_bytes_up, data.len());
+                    upstream_write.write_all(&data).await?
+                }
                 _ => break,
             }
         }
@@ -282,6 +306,7 @@ async fn pipe(flow: &Flow, upstream: TcpStream, mut removed: watch::Receiver<boo
             if read == 0 {
                 break;
             }
+            CoreStats::add(&stats.tcp_bytes_down, read);
             if !flow.write(buffer[..read].to_vec()) || !flow.drain().await {
                 return Ok::<(), anyhow::Error>(());
             }
@@ -303,7 +328,7 @@ async fn udp_flow(core: Arc<Core>, flow: Flow) {
         if dst_ip == core.cfg.net.dns_ip() && flow.dst.port() == 53 {
             dns::udp_flow(&core, &flow, &peer, phone).await;
         } else if flow.dst.port() == 443 && core.cfg.quic == QuicMode::Block {
-            quic_blocked(&core, &flow, &peer).await;
+            quic_blocked(&core, &flow, &peer, phone, dst_ip).await;
         } else if core.is_forbidden(dst_ip) {
             discard(&flow, peer.removed.clone()).await;
         } else {
@@ -327,14 +352,41 @@ async fn discard(flow: &Flow, mut removed: watch::Receiver<bool>) {
     }
 }
 
-async fn quic_blocked(core: &Core, flow: &Flow, peer: &PeerView) {
+/// Reports the flow once, then answers every datagram of it (at most one per `ICMP_MIN_GAP`) with
+/// an ICMP port unreachable through the tunnel, like a host with nothing on UDP/443 would.
+async fn quic_blocked(core: &Core, flow: &Flow, peer: &PeerView, phone: Ipv4Addr, dst_ip: Ipv4Addr) {
     core.events.emit(json!({
         "event": "quic",
         "peer": peer.id,
         "dst": flow.dst.to_string(),
         "action": "blocked",
     }));
-    discard(flow, peer.removed.clone()).await;
+    core.stats.quic_blocked.fetch_add(1, Ordering::Relaxed);
+
+    let from = SocketAddrV4::new(phone, flow.src.port());
+    let to = SocketAddrV4::new(dst_ip, flow.dst.port());
+    let mut removed = peer.removed.clone();
+    let mut last_error: Option<Instant> = None;
+    while let Some(read) = flow.read(u32::from(u16::MAX)) {
+        let datagram = tokio::select! {
+            data = read => match data {
+                Ok(data) => data,
+                Err(_) => return,
+            },
+            _ = removed.changed() => return,
+        };
+        if last_error.is_some_and(|sent| sent.elapsed() < ICMP_MIN_GAP) {
+            continue;
+        }
+        last_error = Some(Instant::now());
+        let error = InjectedPacket {
+            to: phone,
+            packet: icmp::port_unreachable(from, to, &datagram),
+        };
+        if core.injector.try_send(error).is_ok() {
+            core.stats.quic_icmp_sent.fetch_add(1, Ordering::Relaxed);
+        }
+    }
 }
 
 /// Forwards a UDP flow through a host socket until it has been idle for a minute.
@@ -351,6 +403,7 @@ async fn relay(core: &Core, flow: &Flow, peer: &PeerView, phone: Ipv4Addr, dst_i
         return;
     }
 
+    let _active = ActiveFlow::start(&core.stats.udp_opened, &core.stats.udp_active);
     let flow_id = core.flow_ids.fetch_add(1, Ordering::Relaxed);
     core.events.emit(json!({
         "event": "udp-open",
@@ -365,6 +418,10 @@ async fn relay(core: &Core, flow: &Flow, peer: &PeerView, phone: Ipv4Addr, dst_i
     let mut idle = Box::pin(sleep(UDP_IDLE_TIMEOUT));
     let mut buffer = vec![0u8; usize::from(u16::MAX)];
     let (mut packets_up, mut packets_down, mut bytes_up, mut bytes_down) = (0u64, 0u64, 0u64, 0u64);
+    // `udp-update` goes out about once a second while data moves, and never for a quiet flow.
+    let mut update = interval_at(tokio::time::Instant::now() + UDP_UPDATE_INTERVAL, UDP_UPDATE_INTERVAL);
+    update.set_missed_tick_behavior(MissedTickBehavior::Delay);
+    let mut reported = (0u64, 0u64);
     let mut pending = flow.read(u32::from(u16::MAX));
     let reason = loop {
         let Some(read) = pending.as_mut() else {
@@ -375,6 +432,8 @@ async fn relay(core: &Core, flow: &Flow, peer: &PeerView, phone: Ipv4Addr, dst_i
                 let Ok(data) = data else { break "closed" };
                 packets_up += 1;
                 bytes_up += data.len() as u64;
+                core.stats.udp_packets_up.fetch_add(1, Ordering::Relaxed);
+                CoreStats::add(&core.stats.udp_bytes_up, data.len());
                 socket.send(&data).await.ok();
                 pending = flow.read(u32::from(u16::MAX));
                 idle.as_mut().reset(tokio::time::Instant::now() + UDP_IDLE_TIMEOUT);
@@ -383,10 +442,26 @@ async fn relay(core: &Core, flow: &Flow, peer: &PeerView, phone: Ipv4Addr, dst_i
                 let Ok(len) = received else { break "error" };
                 packets_down += 1;
                 bytes_down += len as u64;
+                core.stats.udp_packets_down.fetch_add(1, Ordering::Relaxed);
+                CoreStats::add(&core.stats.udp_bytes_down, len);
                 if !flow.write(buffer[..len].to_vec()) {
                     break "closed";
                 }
                 idle.as_mut().reset(tokio::time::Instant::now() + UDP_IDLE_TIMEOUT);
+            }
+            _ = update.tick() => {
+                if reported != (packets_up, packets_down) {
+                    reported = (packets_up, packets_down);
+                    core.events.emit(json!({
+                        "event": "udp-update",
+                        "flow": flow_id,
+                        "peer": peer.id,
+                        "packetsUp": packets_up,
+                        "packetsDown": packets_down,
+                        "bytesUp": bytes_up,
+                        "bytesDown": bytes_down,
+                    }));
+                }
             }
             _ = &mut idle => break "idle",
             _ = removed.changed() => break "peer-removed",

@@ -9,7 +9,7 @@ pub mod wireguard;
 
 use std::net::{IpAddr, Ipv4Addr};
 
-use tokio::sync::watch;
+use tokio::sync::{mpsc, watch};
 
 /// What the core needs to know about the phone behind a flow.
 #[derive(Clone)]
@@ -26,3 +26,15 @@ pub trait PeerDirectory: Send + Sync {
     /// Finds the peer that owns a tunnel address.
     fn lookup(&self, tunnel_ip: Ipv4Addr) -> Option<PeerView>;
 }
+
+/// A raw IPv4 packet the core wants delivered to a phone, for example the ICMP error for a blocked
+/// QUIC datagram. The front-end encrypts it for the peer that owns `to` and drops it when that
+/// peer is gone or has no known address.
+pub struct InjectedPacket {
+    pub to: Ipv4Addr,
+    pub packet: Vec<u8>,
+}
+
+/// How the core hands packets to the front-end. Bounded and sent with `try_send`, so a burst of
+/// errors can never grow a queue.
+pub type PacketInjector = mpsc::Sender<InjectedPacket>;

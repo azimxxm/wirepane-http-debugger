@@ -218,6 +218,7 @@ pub async fn answer(core: &Core, peer: &PeerView, src_ip: Ipv4Addr, query: &[u8]
         }
         Parsed::Ignore => return None,
     };
+    core.stats.dns_queries.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     let resolution = resolve(&question.name, &question, core.cfg.net.cert_ip()).await;
     if question.qtype == TYPE_A && !resolution.answers.is_empty() {
         core.remember_name(src_ip, &question.name, &resolution.answers);

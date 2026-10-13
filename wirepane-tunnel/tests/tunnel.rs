@@ -13,8 +13,11 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, Instant};
 
+use boringtun::noise::{Tunn, TunnResult};
+use boringtun::x25519::{PublicKey, StaticSecret};
 use serde_json::{Value, json};
-use support::wg_client::{WgClient, parse_a_answers};
+use smoltcp::wire::{Icmpv4Message, Icmpv4Packet, IpProtocol, Ipv4Packet};
+use support::wg_client::{WgClient, dns_frame, dns_frames, dns_query_bytes, parse_a_answers, parse_config};
 
 const BODY: &str = "hello from the test server";
 const BIG_BODY_LEN: usize = 1_500_000;
@@ -40,6 +43,48 @@ fn start_http() -> SocketAddr {
                         Ok(n) => seen.extend_from_slice(&chunk[..n]),
                     }
                 }
+                let head_end = seen.windows(4).position(|w| w == b"\r\n\r\n").unwrap() + 4;
+                let head = String::from_utf8_lossy(&seen[..head_end]).to_string();
+                let request_line = head.lines().next().unwrap_or("").to_string();
+
+                // GET /stream/<n>: n bytes of a repeating pattern, for throughput runs.
+                if let Some(rest) = request_line.strip_prefix("GET /stream/") {
+                    let total: usize = rest.split(' ').next().and_then(|n| n.parse().ok()).unwrap_or(0);
+                    let head = format!("HTTP/1.1 200 OK\r\nContent-Length: {total}\r\nConnection: close\r\n\r\n");
+                    let _ = stream.write_all(head.as_bytes());
+                    let pattern: Vec<u8> = (0..65536usize).map(|i| (i % 251) as u8).collect();
+                    let mut sent = 0;
+                    while sent < total {
+                        let part = &pattern[..pattern.len().min(total - sent)];
+                        if stream.write_all(part).is_err() {
+                            return;
+                        }
+                        sent += part.len();
+                    }
+                    let _ = stream.shutdown(std::net::Shutdown::Write);
+                    return;
+                }
+                // POST /sink: reads Content-Length bytes and answers with how many arrived.
+                if request_line.starts_with("POST /sink") {
+                    let wanted: usize = head
+                        .lines()
+                        .find_map(|line| line.to_ascii_lowercase().strip_prefix("content-length:").map(|v| v.trim().parse().unwrap_or(0)))
+                        .unwrap_or(0);
+                    let mut got = seen.len() - head_end;
+                    let mut buffer = vec![0u8; 65536];
+                    while got < wanted {
+                        match stream.read(&mut buffer) {
+                            Ok(0) | Err(_) => break,
+                            Ok(n) => got += n,
+                        }
+                    }
+                    let body = format!("got {got}");
+                    let answer = format!("HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len());
+                    let _ = stream.write_all(answer.as_bytes());
+                    let _ = stream.shutdown(std::net::Shutdown::Write);
+                    return;
+                }
+
                 let (body, kind) = if seen.starts_with(b"GET /big") {
                     (big_body(), "application/octet-stream")
                 } else {
@@ -193,7 +238,11 @@ impl Sidecar {
 
     /// Waits for an event (after `mark` events were seen) that matches.
     fn wait_after(&mut self, mark: usize, matches: impl Fn(&Value) -> bool, what: &str) -> Value {
-        let deadline = Instant::now() + Duration::from_secs(10);
+        self.wait_after_for(mark, matches, what, Duration::from_secs(10))
+    }
+
+    fn wait_after_for(&mut self, mark: usize, matches: impl Fn(&Value) -> bool, what: &str, timeout: Duration) -> Value {
+        let deadline = Instant::now() + timeout;
         let mut index = mark;
         loop {
             while index < self.seen.len() {
@@ -537,4 +586,378 @@ fn a_phone_that_closes_its_side_first_still_gets_the_answer() {
     let text = String::from_utf8_lossy(&raw);
     assert!(text.starts_with("HTTP/1.1 200 OK"), "{text}");
     assert!(text.ends_with(BODY), "{text}");
+}
+
+// ---------------------------------------------------------------- DNS over TCP
+
+#[test]
+fn dns_over_tcp_answers_framed_queries() {
+    let http = start_http();
+    let socks = start_socks(http);
+    let dir = tempfile::tempdir().unwrap();
+    let mut sidecar = Sidecar::spawn(socks.addr, &dir.path().join("state.json"), "127.0.0.1:0", &[]);
+    sidecar.wait_for("ready");
+    let added = add_peer(&mut sidecar, "TCP resolver");
+    let mut client = WgClient::connect(added["config"].as_str().unwrap()).expect("handshake");
+    let dns = client.config.dns;
+
+    // One query in one segment.
+    let query = dns_query_bytes("localhost", 1, 0x1111);
+    let reply = client
+        .tcp_exchange(dns, 53, &[dns_frame(&query)], |bytes| dns_frames(bytes).len() == 1, Duration::from_secs(5))
+        .expect("DNS over TCP");
+    let messages = dns_frames(&reply);
+    assert_eq!(messages.len(), 1, "{reply:02x?}");
+    assert_eq!(u16::from_be_bytes([messages[0][0], messages[0][1]]), 0x1111, "the answer keeps the query id");
+    assert_eq!(parse_a_answers(&messages[0]), vec![Ipv4Addr::LOCALHOST]);
+
+    // Two queries on one connection, the first split in the middle of its length prefix: the
+    // sidecar has to buffer until a whole message is there, then answer both in order.
+    let first = dns_frame(&dns_query_bytes("wirepane.cert", 1, 0x2222));
+    let second = dns_frame(&dns_query_bytes("localhost", 28, 0x3333));
+    let mut rest = first[1..].to_vec();
+    rest.extend_from_slice(&second);
+    let reply = client
+        .tcp_exchange(dns, 53, &[first[..1].to_vec(), rest], |bytes| dns_frames(bytes).len() == 2, Duration::from_secs(5))
+        .expect("pipelined DNS over TCP");
+    let messages = dns_frames(&reply);
+    assert_eq!(messages.len(), 2, "{reply:02x?}");
+    assert_eq!(u16::from_be_bytes([messages[0][0], messages[0][1]]), 0x2222);
+    assert_eq!(parse_a_answers(&messages[0]), vec![Ipv4Addr::new(10, 73, 0, 54)], "wirepane.cert");
+    assert_eq!(u16::from_be_bytes([messages[1][0], messages[1][1]]), 0x3333);
+    assert_eq!(messages[1][3] & 0x0F, 0, "AAAA is NOERROR");
+    assert_eq!(u16::from_be_bytes([messages[1][6], messages[1][7]]), 0, "AAAA has no records");
+
+    // The queries are logged like UDP ones, and none of this went to Mockttp.
+    sidecar.wait_after(0, |v| v["event"] == "dns" && v["name"] == "wirepane.cert" && v["qtype"] == "A", "dns event for the TCP query");
+    assert!(socks.records.lock().unwrap().is_empty(), "DNS over TCP is answered by the sidecar itself");
+}
+
+// ---------------------------------------------------------------- QUIC, UDP events and stats
+
+#[test]
+fn quic_gets_icmp_udp_updates_and_stats() {
+    let http = start_http();
+    let socks = start_socks(http);
+    let dir = tempfile::tempdir().unwrap();
+    let mut sidecar = Sidecar::spawn(socks.addr, &dir.path().join("state.json"), "127.0.0.1:0", &["--unsafe-allow-loopback"]);
+    sidecar.wait_for("ready");
+    let added = add_peer(&mut sidecar, "Stats phone");
+    let mut client = WgClient::connect(added["config"].as_str().unwrap()).expect("handshake");
+    assert_eq!(client.dns_a("localhost"), vec![Ipv4Addr::LOCALHOST]);
+
+    // A QUIC datagram is answered with ICMP port unreachable that quotes it.
+    let quic_server = Ipv4Addr::new(93, 184, 216, 34);
+    assert!(client.udp_exchange(quic_server, 443, b"pretend quic initial", Duration::from_millis(500)).is_none());
+    client.pump_for(Duration::from_millis(200));
+    assert_eq!(client.icmp_received.len(), 1, "one ICMP error for one datagram");
+    let bytes = client.icmp_received[0].clone();
+    let ip = Ipv4Packet::new_checked(&bytes[..]).expect("IPv4");
+    assert!(ip.verify_checksum());
+    assert_eq!(ip.next_header(), IpProtocol::Icmp);
+    assert_eq!(ip.src_addr(), quic_server, "the error comes from the server the phone tried");
+    assert_eq!(ip.dst_addr(), client.config.address);
+    let icmp = Icmpv4Packet::new_checked(ip.payload()).expect("ICMP");
+    assert!(icmp.verify_checksum());
+    assert_eq!(icmp.msg_type(), Icmpv4Message::DstUnreachable);
+    assert_eq!(icmp.msg_code(), 3, "port unreachable");
+    let quote = icmp.data();
+    assert_eq!(quote.len(), 28, "the original IPv4 header and 8 bytes");
+    let original = Ipv4Packet::new_unchecked(quote);
+    assert_eq!(original.src_addr(), client.config.address);
+    assert_eq!(original.dst_addr(), quic_server);
+    assert_eq!(original.next_header(), IpProtocol::Udp);
+    assert_eq!(u16::from_be_bytes([quote[22], quote[23]]), 443, "the quoted destination port");
+    assert!(u16::from_be_bytes([quote[20], quote[21]]) > 40000, "the quoted source port is the phone's socket");
+    let quic = sidecar.wait_after(0, |v| v["event"] == "quic", "quic event");
+    assert_eq!(quic["action"], "blocked");
+    assert_eq!(quic["dst"], "93.184.216.34:443");
+
+    // Relayed UDP: one echo, then a throttled udp-update with the counts.
+    let echo = UdpSocket::bind("127.0.0.1:0").unwrap();
+    echo.set_read_timeout(Some(Duration::from_secs(5))).unwrap();
+    let echo_port = echo.local_addr().unwrap().port();
+    let echo_thread = thread::spawn(move || {
+        let mut buf = [0u8; 512];
+        let (n, from) = echo.recv_from(&mut buf).unwrap();
+        echo.send_to(&buf[..n], from).unwrap();
+    });
+    let payload = b"counted datagram";
+    let echoed = client.udp_exchange(Ipv4Addr::LOCALHOST, echo_port, payload, Duration::from_secs(5));
+    assert_eq!(echoed.as_deref(), Some(&payload[..]));
+    echo_thread.join().unwrap();
+
+    let opened = sidecar.wait_after(0, |v| v["event"] == "udp-open", "udp-open");
+    let update = sidecar.wait_after(0, |v| v["event"] == "udp-update", "udp-update");
+    assert_eq!(update["flow"], opened["flow"]);
+    assert_eq!(update["peer"], "p1");
+    assert_eq!(update["packetsUp"], 1);
+    assert_eq!(update["packetsDown"], 1);
+    assert_eq!(update["bytesUp"], payload.len());
+    assert_eq!(update["bytesDown"], payload.len());
+
+    let stats = sidecar.ask(json!({ "cmd": "stats" }), "stats");
+    assert_eq!(stats["event"], "stats", "{stats}");
+    assert!(stats["uptimeMs"].is_u64());
+    assert_eq!(stats["udp"]["flowsOpened"], 1);
+    assert_eq!(stats["udp"]["flowsActive"], 1, "the relay lives until its idle timeout");
+    assert_eq!(stats["udp"]["packetsUp"], 1);
+    assert_eq!(stats["udp"]["bytesDown"], payload.len());
+    assert!(stats["dns"]["queries"].as_u64().unwrap() >= 1);
+    assert_eq!(stats["quic"]["blocked"], 1);
+    assert_eq!(stats["quic"]["icmpSent"], 1);
+    assert_eq!(stats["tcp"]["flowsActive"], 0);
+    let peer = &stats["peers"][0];
+    assert_eq!(peer["peer"], "p1");
+    assert_eq!(peer["tunnelIp"], "10.73.0.2");
+    assert!(peer["bytesUp"].as_u64().unwrap() > 0 && peer["bytesDown"].as_u64().unwrap() > 0, "{peer}");
+    assert!(peer["endpoint"].as_str().unwrap().starts_with("127.0.0.1:"));
+
+    // An idle flow reports nothing more: the update is sent once per change, not once per second.
+    thread::sleep(Duration::from_millis(2300));
+    sidecar.ask(json!({ "cmd": "stats" }), "stats");
+    let updates = sidecar.seen.iter().filter(|v| v["event"] == "udp-update").count();
+    assert_eq!(updates, 1, "no repeat for an unchanged flow");
+}
+
+// ---------------------------------------------------------------- WireGuard timers and the rate limiter
+
+/// A bare WireGuard initiator for one phone config: just enough to send handshake initiations and
+/// look at what comes back (message type 2 = handshake response, 3 = cookie reply).
+struct RawInitiator {
+    socket: UdpSocket,
+    tunn: Tunn,
+    buf: Vec<u8>,
+}
+
+impl RawInitiator {
+    fn new(config_text: &str) -> RawInitiator {
+        let config = parse_config(config_text);
+        let socket = UdpSocket::bind("127.0.0.1:0").unwrap();
+        socket.connect(config.endpoint).unwrap();
+        socket.set_read_timeout(Some(Duration::from_millis(500))).unwrap();
+        let tunn = Tunn::new(StaticSecret::from(config.private_key), PublicKey::from(config.server_public), None, None, 9, None);
+        RawInitiator { socket, tunn, buf: vec![0u8; 2048] }
+    }
+
+    /// Sends a new handshake initiation (with the cookie, once one has been received).
+    fn initiate(&mut self) {
+        if let TunnResult::WriteToNetwork(init) = self.tunn.format_handshake_initiation(&mut self.buf, true) {
+            self.socket.send(init).unwrap();
+        }
+    }
+
+    /// The next datagram from the server, if one arrives within half a second.
+    fn receive(&mut self) -> Option<Vec<u8>> {
+        let mut datagram = vec![0u8; 2048];
+        let len = self.socket.recv(&mut datagram).ok()?;
+        datagram.truncate(len);
+        Some(datagram)
+    }
+
+    /// Lets the Noise state see a reply (a cookie reply stores the cookie for the next initiation).
+    fn feed(&mut self, datagram: &[u8]) {
+        let _ = self.tunn.decapsulate(None, datagram, &mut self.buf);
+    }
+}
+
+fn message_type(datagram: &[u8]) -> u8 {
+    datagram[0]
+}
+
+#[test]
+fn a_handshake_flood_gets_cookie_replies_and_the_limiter_resets() {
+    let http = start_http();
+    let socks = start_socks(http);
+    let dir = tempfile::tempdir().unwrap();
+    let mut sidecar = Sidecar::spawn(socks.addr, &dir.path().join("state.json"), "127.0.0.1:0", &[]);
+    let ready = sidecar.wait_for("ready");
+    let listen: SocketAddr = ready["listen"].as_str().unwrap().parse().unwrap();
+    let added = add_peer(&mut sidecar, "Flooded phone");
+    let config_text = added["config"].as_str().unwrap().to_string();
+    let config = parse_config(&config_text);
+
+    // Quiet: an initiation gets a handshake response straight away.
+    let mut phone = RawInitiator::new(&config_text);
+    phone.initiate();
+    let reply = phone.receive().expect("a reply to a quiet initiation");
+    assert_eq!(message_type(&reply), 2, "handshake response, got {reply:02x?}");
+
+    // Someone floods the port with initiations (valid MAC1, a key nobody added), more than the limit.
+    let attacker = UdpSocket::bind("127.0.0.1:0").unwrap();
+    attacker.set_read_timeout(Some(Duration::from_millis(300))).unwrap();
+    let mut random_key = [0u8; 32];
+    getrandom::getrandom(&mut random_key).unwrap();
+    let mut flooder = Tunn::new(StaticSecret::from(random_key), PublicKey::from(config.server_public), None, None, 77, None);
+    let mut buf = vec![0u8; 2048];
+
+    // The phone must be turned away with a cookie while the flood lasts, and get in with it. A
+    // second boundary can fall in the middle of an attempt and reset the count, so try a few times.
+    let mut cookie_replies_seen = 0;
+    let mut let_in_with_cookie = false;
+    for _attempt in 0..4 {
+        for _ in 0..1000 {
+            if let TunnResult::WriteToNetwork(init) = flooder.format_handshake_initiation(&mut buf, true) {
+                let _ = attacker.send_to(init, listen);
+            }
+        }
+        phone.initiate();
+        let Some(reply) = phone.receive() else { continue };
+        if message_type(&reply) != 3 {
+            continue; // the count was reset in between: flood again
+        }
+        assert_eq!(reply.len(), 64, "a cookie reply is 64 bytes");
+        cookie_replies_seen += 1;
+        phone.feed(&reply);
+        phone.initiate(); // now carries MAC2 made from the cookie
+        let answer = phone.receive().expect("an answer to the initiation with a cookie");
+        assert_eq!(message_type(&answer), 2, "with its cookie the phone gets through even under load");
+        let_in_with_cookie = true;
+        break;
+    }
+    assert!(cookie_replies_seen > 0 && let_in_with_cookie, "the flood never produced a cookie reply");
+
+    // The attacker itself was answered with cookies, not with handshake responses or silence.
+    let mut attacker_cookies = 0;
+    let mut reply = vec![0u8; 2048];
+    while let Ok(len) = attacker.recv(&mut reply) {
+        if len == 64 && reply[0] == 3 {
+            attacker_cookies += 1;
+        }
+    }
+    assert!(attacker_cookies > 0, "the flooder got no cookie replies");
+
+    // After the flood the 250 ms timer resets the count, so a fresh initiation is served directly.
+    thread::sleep(Duration::from_millis(1600));
+    let mut later = RawInitiator::new(&config_text);
+    later.initiate();
+    let reply = later.receive().expect("a reply after the flood");
+    assert_eq!(message_type(&reply), 2, "the limiter must reset on the timer tick, got {reply:02x?}");
+
+    // And a flood never stops a phone that is already connected.
+    assert!(sidecar.is_alive());
+    let mut client = WgClient::connect(&config_text).expect("a normal handshake after the flood");
+    assert_eq!(client.dns_a("wirepane.cert"), vec![Ipv4Addr::new(10, 73, 0, 54)]);
+}
+
+#[test]
+fn the_server_sends_a_keepalive_when_it_has_heard_from_a_phone_and_said_nothing() {
+    let http = start_http();
+    let socks = start_socks(http);
+    let dir = tempfile::tempdir().unwrap();
+    let mut sidecar = Sidecar::spawn(socks.addr, &dir.path().join("state.json"), "127.0.0.1:0", &["--unsafe-allow-loopback"]);
+    sidecar.wait_for("ready");
+    let added = add_peer(&mut sidecar, "Quiet phone");
+    let mut client = WgClient::connect(added["config"].as_str().unwrap()).expect("handshake");
+
+    // One datagram to a socket that never answers: the server has data from the phone and nothing
+    // to send back. WireGuard's rule is an empty packet after 10 s, and only the timer can send it.
+    // The pause keeps the datagram in a later 250 ms tick than the handshake reply, which is what
+    // boringtun needs to see "heard after we last spoke".
+    let silent = UdpSocket::bind("127.0.0.1:0").unwrap();
+    client.pump_for(Duration::from_millis(700));
+    assert!(client.udp_exchange(Ipv4Addr::LOCALHOST, silent.local_addr().unwrap().port(), b"anyone there?", Duration::from_millis(300)).is_none());
+    assert_eq!(client.keepalives_received, 0, "no keepalive yet");
+
+    let deadline = Instant::now() + Duration::from_secs(14);
+    while client.keepalives_received == 0 && Instant::now() < deadline {
+        client.pump_for(Duration::from_millis(100));
+    }
+    assert!(client.keepalives_received >= 1, "the server never sent a keepalive: its timers do not run");
+    // The tunnel still works afterwards.
+    assert_eq!(client.dns_a("wirepane.cert"), vec![Ipv4Addr::new(10, 73, 0, 54)]);
+}
+
+// ---------------------------------------------------------------- throughput
+
+/// Megabytes moved through the tunnel by the whole pipeline in this process: the test client
+/// (boringtun + smoltcp), the sidecar binary and a local HTTP server behind the stub SOCKS proxy.
+/// For a number worth quoting run it optimised and alone:
+///   cargo test --release --test tunnel throughput -- --nocapture --test-threads=1
+/// WIREPANE_BENCH_MB sets the size of each transfer (default 16).
+#[test]
+fn throughput_through_the_tunnel() {
+    let megabytes: usize = std::env::var("WIREPANE_BENCH_MB").ok().and_then(|v| v.parse().ok()).unwrap_or(16);
+    let total = megabytes * 1024 * 1024;
+    let http = start_http();
+    let socks = start_socks(http);
+    let dir = tempfile::tempdir().unwrap();
+    let mut sidecar = Sidecar::spawn(socks.addr, &dir.path().join("state.json"), "127.0.0.1:0", &["--unsafe-allow-loopback"]);
+    sidecar.wait_for("ready");
+    let added = add_peer(&mut sidecar, "Bench phone");
+    let mut client = WgClient::connect(added["config"].as_str().unwrap()).expect("handshake");
+
+    // Download: the server streams `total` bytes, the phone reads them.
+    let started = Instant::now();
+    let raw = client
+        .http_get_bytes(Ipv4Addr::LOCALHOST, http.port(), "localhost", &format!("/stream/{total}"))
+        .expect("download");
+    let download = started.elapsed();
+    let split = raw.windows(4).position(|w| w == b"\r\n\r\n").expect("response head") + 4;
+    assert_eq!(raw.len() - split, total, "the whole download arrives");
+    let download_rate = megabytes as f64 / download.as_secs_f64();
+
+    // Upload: the phone posts `total` bytes, the server counts them.
+    let started = Instant::now();
+    let answer = client
+        .http_post_pattern(Ipv4Addr::LOCALHOST, http.port(), "localhost", "/sink", total)
+        .expect("upload");
+    let upload = started.elapsed();
+    let text = String::from_utf8_lossy(&answer);
+    assert!(text.ends_with(&format!("got {total}")), "the server must receive every byte: {text}");
+    let upload_rate = megabytes as f64 / upload.as_secs_f64();
+
+    let profile = if cfg!(debug_assertions) { "debug" } else { "release" };
+    eprintln!(
+        "throughput ({profile} build, {megabytes} MB each way, loopback): download {download_rate:.1} MB/s ({download:?}), upload {upload_rate:.1} MB/s ({upload:?})"
+    );
+    // A floor far below anything real, only to catch a stall or a back-pressure bug.
+    assert!(download_rate > 1.0 && upload_rate > 1.0, "the tunnel crawls: {download_rate:.2} / {upload_rate:.2} MB/s");
+}
+
+#[test]
+fn a_session_that_goes_quiet_is_refreshed_by_the_server() {
+    let http = start_http();
+    let socks = start_socks(http);
+    let dir = tempfile::tempdir().unwrap();
+    let mut sidecar = Sidecar::spawn(socks.addr, &dir.path().join("state.json"), "127.0.0.1:0", &["--unsafe-allow-loopback"]);
+    sidecar.wait_for("ready");
+    let added = add_peer(&mut sidecar, "Sleepy phone");
+    let mut client = WgClient::connect(added["config"].as_str().unwrap()).expect("handshake");
+    let first = sidecar.wait_for("peer");
+    let first_handshake = first["lastHandshake"].as_u64().unwrap();
+
+    // The phone sends a datagram and the answer comes back a moment later (in a later 250 ms tick).
+    // Then the phone falls silent: the test client stops running, so it sends no acknowledging
+    // keepalive either. The server has sent data and heard nothing for 15 s, and WireGuard's rule
+    // is to start a new handshake with the phone.
+    client.pump_for(Duration::from_millis(500));
+    let slow_echo = UdpSocket::bind("127.0.0.1:0").unwrap();
+    slow_echo.set_read_timeout(Some(Duration::from_secs(5))).unwrap();
+    let echo_port = slow_echo.local_addr().unwrap().port();
+    let echo_thread = thread::spawn(move || {
+        let mut buf = [0u8; 512];
+        let (n, from) = slow_echo.recv_from(&mut buf).unwrap();
+        thread::sleep(Duration::from_millis(700));
+        slow_echo.send_to(&buf[..n], from).unwrap();
+    });
+    let echoed = client.udp_exchange(Ipv4Addr::LOCALHOST, echo_port, b"slow echo", Duration::from_secs(5));
+    assert_eq!(echoed.as_deref(), Some(&b"slow echo"[..]));
+    echo_thread.join().unwrap();
+    thread::sleep(Duration::from_secs(16));
+
+    // The phone wakes up: the initiation the server sent while it slept is waiting in its socket.
+    // It answers like a real phone would, and the sidecar must report the new handshake as it
+    // reports one the phone started.
+    let mark = sidecar.seen.len();
+    client.pump_for(Duration::from_secs(3));
+    let refreshed = sidecar.wait_after_for(
+        mark,
+        |v| v["event"] == "peer" && v["lastHandshake"].as_u64().unwrap_or(0) > first_handshake,
+        "a peer event for the handshake the server started",
+        Duration::from_secs(5),
+    );
+    assert_eq!(refreshed["peer"], "p1");
+    // The tunnel still carries traffic over the new session.
+    assert_eq!(client.dns_a("wirepane.cert"), vec![Ipv4Addr::new(10, 73, 0, 54)]);
 }
