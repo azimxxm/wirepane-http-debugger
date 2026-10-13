@@ -42,17 +42,26 @@ const HeaderRow = styled(TableHeaderRow)`
     scrollbar-gutter: stable;
 `;
 
-// Sticks to the right edge, so it stays reachable when the columns are wider than the list
-const OptionsButton = styled(UnstyledButton)`
+// Sticks to the right edge, so it stays reachable when the columns are wider than the list. It's a
+// header cell of its own, as a row may only hold cells (a span, so the header's column spacing
+// doesn't apply to it).
+const OptionsCell = styled.span`
     flex: 0 0 auto;
-    width: 28px;
-    height: 28px;
     margin-left: auto;
     margin-right: ${LIST_OPTIONS_SLOT_WIDTH - 28}px;
-    border-radius: 6px;
 
     position: sticky;
     right: 0;
+    background-color: ${p => p.theme.mainLowlightBackground};
+
+    display: inline-flex;
+`;
+
+const OptionsButton = styled(UnstyledButton)`
+    width: 28px;
+    height: 28px;
+    border-radius: 6px;
+
     background-color: ${p => p.theme.mainLowlightBackground};
 
     display: inline-flex;
@@ -335,16 +344,18 @@ const ListOptionsButton = observer((p: { store: ListColumnsStore }) => {
     React.useEffect(() => store.closeOptionsMenu, [store]);
 
     return <>
-        <OptionsButton
-            ref={buttonRef}
-            aria-label='Columns and markers'
-            title='Choose columns, and see what the row markers mean. You can also right-click the header.'
-            aria-haspopup='dialog'
-            aria-expanded={!!menu}
-            onClick={() => menu ? store.closeOptionsMenu() : store.openOptionsMenu()}
-        >
-            <Columns size={16} aria-hidden={true} />
-        </OptionsButton>
+        <OptionsCell role='columnheader'>
+            <OptionsButton
+                ref={buttonRef}
+                aria-label='Columns and markers'
+                title='Choose columns, and see what the row markers mean. You can also right-click the header.'
+                aria-haspopup='dialog'
+                aria-expanded={!!menu}
+                onClick={() => menu ? store.closeOptionsMenu() : store.openOptionsMenu()}
+            >
+                <Columns size={16} aria-hidden={true} />
+            </OptionsButton>
+        </OptionsCell>
         { menu && <ListOptionsPanel store={store} anchor={menu} buttonRef={buttonRef} /> }
     </>;
 });

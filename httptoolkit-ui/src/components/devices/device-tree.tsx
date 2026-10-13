@@ -40,7 +40,7 @@ const TreeRoot = styled.div`
     }
 `;
 
-const Row = styled.div<{ depth: number, isSelected: boolean, isTall: boolean }>`
+const Row = styled.div<{ depth: number, isSelected: boolean, isTall: boolean, isMenuTarget: boolean }>`
     position: relative;
     min-height: ${p => p.isTall ? 40 : 28}px;
     padding-left: ${p => 2 + p.depth * INDENT}px;
@@ -59,6 +59,12 @@ const Row = styled.div<{ depth: number, isSelected: boolean, isTall: boolean }>`
     &:hover {
         background-color: ${p => p.theme.rowHover};
     }
+
+    /* The row whose menu is open: the menu covers its count, and the selection may be on another row */
+    ${p => p.isMenuTarget && css`
+        outline: 2px solid ${p => p.theme.focusRing};
+        outline-offset: -2px;
+    `}
 
     ${p => p.isSelected && css`
         background-color: ${p => p.theme.selectionInactiveBackground};
@@ -82,6 +88,7 @@ const Row = styled.div<{ depth: number, isSelected: boolean, isTall: boolean }>`
         ${TreeRoot}:focus-within & {
             color: ${p => p.theme.selectionColor};
             background-color: ${p => p.theme.selectionBackground};
+            outline: none; /* The focused selection stands out already */
 
             &::before {
                 display: none;
@@ -350,6 +357,10 @@ export const DeviceTree = observer((props: {
     const treeRef = React.useRef<HTMLDivElement>(null);
     const treeId = React.useId();
     const [renamingKey, setRenamingKey] = React.useState<string | undefined>();
+    // The row whose menu is open, marked until the menu closes. Each menu has a number, so a
+    // menu that closes after another one opened leaves that one's mark alone.
+    const [menuRowId, setMenuRowId] = React.useState<string | undefined>();
+    const menuCount = React.useRef(0);
 
     const rows = buildDeviceTreeRows({
         totalCount: store.totalEventCount,
@@ -449,10 +460,20 @@ export const DeviceTree = observer((props: {
         return [];
     };
 
-    const showMenu = (event: React.MouseEvent, row: SelectableRow) => {
+    const showMenu = async (event: React.MouseEvent, row: SelectableRow) => {
         const items = menuFor(row);
-        if (items.length) uiStore.handleContextMenuEvent(event, items);
-        else event.preventDefault();
+        if (!items.length) {
+            event.preventDefault();
+            return;
+        }
+
+        const menuId = ++menuCount.current;
+        setMenuRowId(row.id);
+        try {
+            await uiStore.handleContextMenuEvent(event, items);
+        } finally {
+            if (menuCount.current === menuId) setMenuRowId(undefined);
+        }
     };
 
     const moveTo = (index: number) => {
@@ -536,6 +557,7 @@ export const DeviceTree = observer((props: {
                 depth={row.depth}
                 isSelected={isSelected}
                 isTall={row.kind === 'device'}
+                isMenuTarget={row.id === menuRowId}
                 title={row.kind === 'device' ? deviceTooltip(row.device, isActive, row.isPinned) : undefined}
                 onMouseDown={() => treeRef.current?.focus()}
                 onClick={() => select(row)}
@@ -575,7 +597,11 @@ export const DeviceTree = observer((props: {
                                 onFinish={(newName, byKeyboard) => finishRename(row.device.key, newName, byKeyboard)}
                             />
                             : <RowNameLine>
-                                <RowLabel isMuted={row.device.eventCount === 0}>{ row.device.name }</RowLabel>
+                                { /* row-secondary: in the focused selection the muted colour can't be read, so it's recoloured like the address */ }
+                                <RowLabel
+                                    isMuted={row.device.eventCount === 0}
+                                    className={row.device.eventCount === 0 ? 'row-secondary' : undefined}
+                                >{ row.device.name }</RowLabel>
                                 { row.isPinned && <PinMarker className='row-secondary' size={11} weight='fill' aria-hidden={true} /> }
                                 { row.device.viaVpn && <VpnBadge title={`Connected ${store.describeDeviceVpn(row.device)}`}>VPN</VpnBadge> }
                             </RowNameLine>

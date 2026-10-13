@@ -1,6 +1,6 @@
 import * as _ from 'lodash';
 import * as React from 'react';
-import { observable, action, autorun, computed, observe } from 'mobx';
+import { observable, action, autorun, computed, observe, when } from 'mobx'; // wirepane: when
 
 import { Theme, ThemeName, Themes } from '../../styles';
 import { ViewableEvent } from '../../types';
@@ -564,22 +564,23 @@ export class UiStore {
     @observable.ref // This shouldn't be mutated
     contextMenuState: ContextMenuState<any> | undefined;
 
+    // wirepane: these settle once the menu has closed, so the Devices panel can mark the row it's for until then
     handleContextMenuEvent<T>(
         event: React.MouseEvent,
         items: readonly ContextMenuItem<T>[],
         data: T
-    ): void;
+    ): Promise<void>;
     handleContextMenuEvent(
         event: React.MouseEvent,
         items: readonly ContextMenuItem<void>[]
-    ): void;
+    ): Promise<void>;
     @action.bound
     handleContextMenuEvent<T>(
         event: React.MouseEvent,
         items: readonly ContextMenuItem<T>[],
         data?: T
-    ): void {
-        if (!items.length) return;
+    ): Promise<void> {
+        if (!items.length) return Promise.resolve();
 
         event.preventDefault();
 
@@ -596,7 +597,7 @@ export class UiStore {
             const position = anchorPosition ?? { x: event.pageX, y: event.pageY };
             this.contextMenuState = undefined; // Should be set already, but let's be explicit
 
-            DesktopApi.openContextMenu({
+            return DesktopApi.openContextMenu({ // wirepane: returned
                 position,
                 items: buildNativeContextMenuItems(items)
             }).then((result) => {
@@ -610,12 +611,14 @@ export class UiStore {
             });
         } else {
             event.persist();
-            this.contextMenuState = {
+            const menuState = { // wirepane: kept, to see when it's closed (or another menu replaces it)
                 data,
                 event,
                 position: anchorPosition,
                 items
             };
+            this.contextMenuState = menuState;
+            return when(() => this.contextMenuState !== menuState); // wirepane
         }
     }
 

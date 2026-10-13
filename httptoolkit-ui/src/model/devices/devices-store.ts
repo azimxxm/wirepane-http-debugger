@@ -30,6 +30,7 @@ import {
     getEventDeviceKey,
     getEventVpn,
     getThisMachineName,
+    getTypeRank,
     isDeviceType
 } from './device-model';
 import { DeviceDirectory, EventDevice, THIS_MACHINE_TYPE, setDeviceDirectory } from './device-directory';
@@ -201,7 +202,8 @@ export class DevicesStore implements DeviceDirectory {
     // --- Panel state ---
 
     // The user's own choice, once they've shown or hidden the panel. Until then it stays out of
-    // the way while all the traffic is from this machine, and opens once another device sends some.
+    // the way while all the traffic is from this machine, and opens once another device sends some,
+    // or straight away when a phone or another computer is pinned.
     @persist @observable
     panelChoice: PanelChoice | undefined = undefined;
 
@@ -213,7 +215,7 @@ export class DevicesStore implements DeviceDirectory {
     get panelOpen(): boolean {
         return this.panelChoice !== undefined
             ? this.panelChoice === 'open'
-            : this.hasSeenOtherDevices;
+            : this.hasSeenOtherDevices || this.pins.some((pin) => pin.key !== THIS_MACHINE_KEY);
     }
 
     @persist @observable
@@ -534,17 +536,33 @@ export class DevicesStore implements DeviceDirectory {
         );
     }
 
-    // Saves what a pinned device's placeholder needs again whenever the device itself changes,
-    // like a phone that's known as "Android" until its browser names the model
+    // Saves what a pinned device's placeholder needs again whenever the device says more about
+    // itself, like a phone that's known as "Android" until its browser names the model. A device's
+    // counts start again after Clear, so until it identifies itself it's only "Device" (a tunnel,
+    // a TLS failure) or "Android" (okhttp), and that doesn't replace what the pin knows.
     private watchPins() {
         this.disposers.push(reaction(
             () => this.pins.map((pin) => {
                 const device = this.devicesByKey.get(pin.key);
-                return device ? { key: pin.key, type: device.type, defaultName: device.defaultName } : pin;
+                if (!device) return pin;
+
+                const isMoreSpecific = getTypeRank(device.type) > getTypeRank(pin.type) ||
+                    (device.type === pin.type && device.defaultName !== getDeviceTypeLabel(device.type));
+                return isMoreSpecific ? { key: pin.key, type: device.type, defaultName: device.defaultName } : pin;
             }),
             (pins) => { if (!comparer.structural(pins, this.pins)) this.pins = pins; },
             { equals: comparer.structural, fireImmediately: true }
         ));
+    }
+
+    // How many of the requests Clear deletes (all but the pinned ones) each pinned device sent. Its
+    // question says so, as pinning a device keeps it listed, but not its traffic.
+    pinnedDeviceTraffic(): Array<{ name: string, count: number }> {
+        const counts = _.countBy(
+            this.eventsSource.events.filter((event) => !event.pinned),
+            (event) => this.tracker.getDeviceKey(event)
+        );
+        return this.pinnedDevices.map((device) => ({ name: device.name, count: counts[device.key] ?? 0 }));
     }
 
     // --- Clearing one device's traffic ---

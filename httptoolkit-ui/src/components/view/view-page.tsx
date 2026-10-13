@@ -719,7 +719,11 @@ class ViewPage extends React.Component<ViewPageProps> {
         // in the order they were conceptually added.
         if (targetIndex < anchorIndex) rangeIds.reverse();
 
-        const unionIds = [...this.selectionBaseIds, ...rangeIds];
+        // wirepane: leaving out requests deleted since the snapshot (e.g. a device's traffic, cleared from
+        // the Devices panel), which would otherwise come back into the selection and its count
+        const { eventsList } = this.props.eventsStore;
+        const baseIds = [...this.selectionBaseIds].filter((id) => eventsList.getById(id) !== undefined);
+        const unionIds = [...baseIds, ...rangeIds];
         this.props.uiStore.setSelectedEvents(unionIds);
         this.props.uiStore.activeEventId = targetEvent.id;
         return true;
@@ -924,7 +928,9 @@ class ViewPage extends React.Component<ViewPageProps> {
 
         // wirepane: our own dialog instead of confirm(). It always asks before deleting pinned traffic,
         // and otherwise only from the button, not the keyboard shortcut (which sets confirmRequired=false).
-        if (!await confirmClearTraffic(events, confirmRequired)) return;
+        // It also says how much of it the devices pinned in the Devices panel sent, as their traffic goes too.
+        const pinnedDevices = this.props.devicesStore.pinnedDeviceTraffic();
+        if (!await confirmClearTraffic(events, confirmRequired, pinnedDevices)) return;
 
         this.props.uiStore.clearSelection();
         this.selectionAnchorId = undefined;

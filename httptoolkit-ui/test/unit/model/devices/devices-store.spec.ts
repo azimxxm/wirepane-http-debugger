@@ -439,6 +439,34 @@ describe('Devices store', () => {
             expect(store.panelOpen).to.equal(false);
         });
 
+        it('opens for a pinned phone after a restart, before the phone sends anything', async () => {
+            add(iphone());
+            store.pin('192.168.0.23');
+            store.dispose();
+            runInAction(() => { events.clear(); });
+
+            await createStore();
+            expect(store.panelChoice).to.equal(undefined);
+            expect(store.panelOpen).to.equal(true);
+
+            // Hidden by hand, it stays hidden
+            store.togglePanel();
+            store.dispose();
+            await createStore();
+            expect(store.panelOpen).to.equal(false);
+            localStorage.removeItem(DEVICES_STORE_KEY);
+        });
+
+        it("doesn't open just because this machine is pinned", async () => {
+            store.pin(THIS_MACHINE_KEY);
+            store.dispose();
+
+            await createStore();
+            expect(store.isPinned(THIS_MACHINE_KEY)).to.equal(true);
+            expect(store.panelOpen).to.equal(false);
+            localStorage.removeItem(DEVICES_STORE_KEY);
+        });
+
         it('keeps a panel hidden in an older version hidden, and its width', async () => {
             store.dispose();
             localStorage.setItem(DEVICES_STORE_KEY, JSON.stringify({ panelOpen: false, panelWidth: 250 }));
@@ -574,6 +602,64 @@ describe('Devices store', () => {
             store.dispose();
             await createStore();
             expect(store.pinnedDevices[0]).to.deep.include({ name: 'iPhone', type: 'iphone' });
+        });
+
+        it('keeps what a pinned device said about itself when it comes back saying less', async () => {
+            add(
+                deviceExchange({ ip: IPHONE, ua: UA.iphoneSafari }),
+                deviceExchange({ ip: ANDROID, ua: UA.androidChrome })
+            );
+            store.pin(IPHONE);
+            store.pin(ANDROID);
+            runInAction(() => { events.clear(); });
+
+            // After Clear the counts start again: the iPhone's first event is a failed TLS connection
+            // (so it's a "Device"), and the Pixel's an okhttp request (so it's an "Android" with no model)
+            add(failedTls(IPHONE), deviceExchange({ ip: ANDROID, ua: UA.okhttp }));
+            expect(store.getDevice(IPHONE)).to.deep.include({ name: 'Device', type: 'other' });
+            expect(store.getDevice(ANDROID)).to.deep.include({ name: 'Android', type: 'android' });
+            runInAction(() => { events.clear(); });
+
+            const [iphone, android] = store.pinnedDevices;
+            expect(iphone).to.deep.include({ name: 'iPhone', type: 'iphone' });
+            expect(android).to.deep.include({ name: 'Pixel 8', type: 'android' });
+
+            // That's what's saved too
+            store.dispose();
+            await createStore();
+            expect(store.pinnedDevices[0]).to.deep.include({ name: 'iPhone', type: 'iphone' });
+            expect(store.pinnedDevices[1]).to.deep.include({ name: 'Pixel 8', type: 'android' });
+
+            // Another model at the pinned address still replaces it
+            add(deviceExchange({ ip: ANDROID, ua: UA.androidChrome.replace('Pixel 8', 'Pixel 9') }));
+            runInAction(() => { events.clear(); });
+            expect(store.pinnedDevices[1]).to.deep.include({ name: 'Pixel 9', type: 'android' });
+        });
+
+        it('counts what Clear would delete from each pinned device', () => {
+            const pinnedRequest = deviceExchange({ ip: IPHONE, ua: UA.iphoneSafari });
+            add(
+                pinnedRequest,
+                deviceExchange({ ip: IPHONE, ua: UA.iphoneSafari }),
+                deviceExchange({ ip: IPHONE, ua: UA.iosApp }),
+                deviceExchange({ ip: ANDROID, ua: UA.androidChrome }),
+                deviceExchange({ ip: '127.0.0.1', ua: UA.curl })
+            );
+            runInAction(() => { pinnedRequest.pinned = true; }); // Clear keeps it
+            store.pin(IPHONE);
+            store.pin(THIS_MACHINE_KEY);
+            store.rename(IPHONE, 'Test phone');
+
+            expect(store.pinnedDeviceTraffic()).to.deep.equal([
+                { name: 'Test phone', count: 2 },
+                { name: 'This Mac', count: 1 }
+            ]);
+
+            runInAction(() => { events.clear(); });
+            expect(store.pinnedDeviceTraffic()).to.deep.equal([
+                { name: 'Test phone', count: 0 },
+                { name: 'This Mac', count: 0 }
+            ]);
         });
 
         it("forgets a placeholder's custom name when it's renamed back to its default", () => {

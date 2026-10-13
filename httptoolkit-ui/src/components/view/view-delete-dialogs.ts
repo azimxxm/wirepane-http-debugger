@@ -4,6 +4,24 @@ import { confirmDialog } from '../../model/ui/dialogs';
 
 const countOf = (count: number, noun: string) => `${count} ${noun}${count === 1 ? '' : 's'}`;
 
+// A device pinned in the Devices panel, and how many of the requests Clear deletes it sent
+export interface PinnedDeviceTraffic {
+    name: string;
+    count: number;
+}
+
+// ", 3 of them from your pinned iPhone": pinning a device keeps it listed, not its traffic,
+// unlike a pinned request, so the question says when Clear deletes a pinned device's requests
+function pinnedDevicesPart(deletedCount: number, pinnedDevices: ReadonlyArray<PinnedDeviceTraffic>) {
+    const withTraffic = pinnedDevices.filter((device) => device.count > 0);
+    if (withTraffic.length === 0) return '';
+
+    const count = withTraffic.reduce((total, device) => total + device.count, 0);
+    const source = withTraffic.length === 1 ? `your pinned ${withTraffic[0].name}` : 'your pinned devices';
+    if (count < deletedCount) return `, ${count} of them from ${source}`;
+    return deletedCount === 1 ? ` from ${source}` : `, all from ${source}`;
+}
+
 /**
  * Asks before Clear deletes traffic, like View always has: every time when only pinned traffic
  * is left (Clear then deletes that too), and otherwise only when confirmRequired is truthy (the
@@ -12,7 +30,9 @@ const countOf = (count: number, noun: string) => `${count} ${noun}${count === 1 
  */
 export async function confirmClearTraffic(
     events: ReadonlyArray<{ pinned: boolean }>,
-    confirmRequired: boolean
+    confirmRequired: boolean,
+    // The devices pinned in the Devices panel, with what Clear deletes from each
+    pinnedDevices: ReadonlyArray<PinnedDeviceTraffic> = []
 ): Promise<boolean> {
     if (events.length === 0) return true;
 
@@ -33,17 +53,18 @@ export async function confirmClearTraffic(
     if (!confirmRequired) return true;
 
     const unpinnedCount = events.length - pinnedCount;
+    const deletes = `This deletes ${countOf(unpinnedCount, 'request')}${pinnedDevicesPart(unpinnedCount, pinnedDevices)}.`;
     return confirmDialog(pinnedCount > 0
         ? {
-            title: 'Delete all non-pinned traffic?',
-            message: `This deletes ${countOf(unpinnedCount, 'request')}. ` +
-                `Your ${countOf(pinnedCount, 'pinned request')} ${pinnedCount === 1 ? 'stays' : 'stay'}.`,
+            // Requests, not traffic: a pinned device's traffic doesn't stay
+            title: 'Delete all non-pinned requests?',
+            message: `${deletes} Your ${countOf(pinnedCount, 'pinned request')} ${pinnedCount === 1 ? 'stays' : 'stay'}.`,
             confirmLabel: 'Delete',
             destructive: true
         }
         : {
             title: 'Delete all collected traffic?',
-            message: `This deletes ${countOf(unpinnedCount, 'request')}. You can't undo this.`,
+            message: `${deletes} You can't undo this.`,
             confirmLabel: 'Delete',
             destructive: true
         }

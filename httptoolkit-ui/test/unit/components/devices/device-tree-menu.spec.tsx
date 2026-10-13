@@ -24,11 +24,12 @@ describe("The Devices panel's device menu", () => {
     let events: IObservableArray<CollectedEvent>;
     let store: DevicesStore;
     let menu: readonly ContextMenuItem<void>[];
+    let closeMenu: () => void;
     // View's selection, and the right-click menus, which the tree hands to the UI store
     let uiStore: {
         selectedEventIds: ObservableSet<string>,
         activeEventId: string | undefined,
-        handleContextMenuEvent(event: React.MouseEvent, items: readonly ContextMenuItem<void>[]): void
+        handleContextMenuEvent(event: React.MouseEvent, items: readonly ContextMenuItem<void>[]): Promise<void>
     };
 
     const iphoneSafari = deviceExchange({ ip: IPHONE, ua: UA.iphoneSafari });
@@ -58,6 +59,8 @@ describe("The Devices panel's device menu", () => {
             handleContextMenuEvent(event, items) {
                 event.preventDefault();
                 menu = items;
+                // Settles once the menu has closed, like the UI store's
+                return new Promise<void>((resolve) => { closeMenu = resolve; });
             }
         };
 
@@ -75,6 +78,7 @@ describe("The Devices panel's device menu", () => {
         localStorage.removeItem(DEVICES_STORE_KEY);
     });
 
+    const tree = () => container.querySelector<HTMLElement>('[role="tree"]')!;
     const rows = () => Array.from(container.querySelectorAll<HTMLElement>('[role="treeitem"]'));
     // Device rows show the device's address, or localhost for this machine
     const rowOf = (address: string) => rows().find((row) => row.textContent!.includes(address));
@@ -161,6 +165,41 @@ describe("The Devices panel's device menu", () => {
         expect(uiStore.activeEventId).to.equal(undefined);
         expect(rowOf(IPHONE)).to.equal(undefined);
         expect(rowLabels()).to.deep.equal(['All devices', 'This Mac', 'Pixel 8']);
+    });
+
+    it('marks the row whose menu is open, until the menu closes', async () => {
+        const isMarked = (row: HTMLElement) => getComputedStyle(row).outlineStyle === 'solid';
+
+        openMenu(rowOf(IPHONE)!);
+        expect(rows().filter(isMarked)).to.deep.equal([rowOf(IPHONE)]);
+
+        await act(async () => {
+            closeMenu();
+            await new Promise((resolve) => setTimeout(resolve, 0));
+        });
+        expect(rows().filter(isMarked)).to.deep.equal([]);
+
+        // The focused selection stands out already
+        act(() => { store.select({ deviceKey: ANDROID }); });
+        tree().focus();
+        openMenu(rowOf(ANDROID)!);
+        expect(rows().filter(isMarked)).to.deep.equal([]);
+    });
+
+    it("keeps a placeholder's muted name readable in the focused selection", () => {
+        choose(rowOf(ANDROID)!, 'Pin to top');
+        choose(rowOf(ANDROID)!, CLEAR);
+        // The name itself, not the line it's in
+        const nameColor = () => getComputedStyle(Array.from(rowOf(ANDROID)!.querySelectorAll('span'))
+            .find((span) => span.children.length === 0 && span.textContent === 'Pixel 8')!
+        ).color;
+        const mutedColor = nameColor();
+
+        act(() => { store.select({ deviceKey: ANDROID }); });
+        tree().focus();
+        // The selection's own text colour, like the address next to it
+        expect(nameColor()).to.equal(getComputedStyle(rowOf(ANDROID)!).color);
+        expect(nameColor()).not.to.equal(mutedColor);
     });
 
     it('keeps a pinned device listed after its traffic is cleared, as a muted row with no requests', () => {
