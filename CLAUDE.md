@@ -6,6 +6,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 @README.md
 
+Where the work stands and what comes next: `docs/next-steps.md`. Read it first in every new session (also after /clear or /compact); the full list is `docs/remaining-work.md`.
+
 The README (in Uzbek) is the source of truth for the goal, setup and roadmap: **Wirepane**, a free HTTP debugger for developers, QA and beginners, a Proxyman alternative built on HTTP Toolkit's open-source code and shipped as one app for macOS, Windows and Linux (GitHub `azimxxm/wirepane-http-debugger`, bundle ID `com.wirepane.app`). Its own version is the root `VERSION` file (`1.0.0`). Update it when the plan changes. Markdown files are tracked in this repo (docs will be written as `.md`), which overrides the global "only README.md is tracked" rule.
 
 ## Branding
