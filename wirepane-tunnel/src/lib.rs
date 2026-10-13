@@ -34,11 +34,14 @@ use crate::features::capture::CaptureSummary;
 use crate::features::conditions::Conditions;
 use crate::features::dns_rules::{DnsAction, DnsRule, DnsRules};
 use crate::features::quic::QuicGateway;
+use crate::frontend::ikev2::listener::{Ikev2Peers, Ikev2Side, Ikev2SideParams};
 use crate::frontend::wireguard::{self, WgDirectory, WgPeers, WireGuardParams, lock};
 use crate::net::TunnelNet;
 use crate::state::{StateFile, StoredPeer};
 
 pub const PEER_KIND_WIREGUARD: &str = "wireguard";
+/// iOS's built-in VPN (T1, docs/ikev2.md): no extra app, a profile instead of a WireGuard config.
+pub const PEER_KIND_IKEV2: &str = "ikev2";
 const KEEPALIVE_SECONDS: u16 = 25;
 const MAX_NAME_CHARS: usize = 64;
 /// Limits for what `set-conditions` and `set-dns-rules` accept, so a bad command can't ask for
@@ -62,8 +65,8 @@ pub struct TunnelConfig {
     /// The Wirepane CA (PEM files): the QUIC gateway signs its leaf certificates with it.
     pub ca_cert: Option<PathBuf>,
     pub ca_key: Option<PathBuf>,
-    /// Where the IKEv2 front-end listens. Only stored for now: T1 starts its listener here when
-    /// `frontend::ikev2::supported()`.
+    /// The IKEv2 front-end's IKE address (UDP 500 for real phones, NAT-T is then 4500), used
+    /// when `frontend::ikev2::supported()` (docs/ikev2.md §7).
     pub ikev2: Option<SocketAddr>,
 }
 
@@ -74,18 +77,24 @@ pub struct PeerAdded {
     pub kind: String,
     pub tunnel_ip: Ipv4Addr,
     pub config: String,
+    /// IKEv2 phones only: the identities and the secret for the profile (docs/ikev2.md §7).
+    pub ikev2: Option<Value>,
 }
 
 impl PeerAdded {
     pub fn to_event(&self) -> Value {
-        json!({
+        let mut event = json!({
             "event": "peer-added",
             "peer": self.peer,
             "name": self.name,
             "kind": self.kind,
             "tunnelIp": self.tunnel_ip.to_string(),
             "config": self.config,
-        })
+        });
+        if let (Some(object), Some(ikev2)) = (event.as_object_mut(), &self.ikev2) {
+            object.insert("ikev2".to_string(), ikev2.clone());
+        }
+        event
     }
 }
 
@@ -97,6 +106,9 @@ pub struct Tunnel {
     listen: SocketAddr,
     state: Mutex<StateFile>,
     peers: Arc<Mutex<WgPeers>>,
+    ikev2_peers: Arc<Mutex<Ikev2Peers>>,
+    /// Running when `--ikev2` was given and its ports could be bound.
+    ikev2: Option<Ikev2Side>,
     socks: Arc<Mutex<String>>,
     core_stats: Arc<CoreStats>,
     hooks: Arc<Hooks>,
@@ -166,11 +178,18 @@ impl Tunnel {
         state.save(&config.state_path)?;
 
         let peers = Arc::new(Mutex::new(WgPeers::new(&server_public)));
+        let ikev2_peers = Arc::new(Mutex::new(Ikev2Peers::default()));
         for stored in &state.peers {
             let tunnel_ip: Ipv4Addr = stored
                 .tunnel_ip
                 .parse()
                 .with_context(|| format!("bad tunnel address for peer {}", stored.peer))?;
+            // IKEv2 phones have no WireGuard key; their secret is derived from the server key.
+            if stored.kind == PEER_KIND_IKEV2 {
+                let secret = frontend::ikev2::profile_secret(&server_private.to_bytes(), &stored.peer);
+                lock(&ikev2_peers).add(&stored.peer, &stored.name, tunnel_ip, secret);
+                continue;
+            }
             let public = PublicKey::from(decode_key(&stored.public_key)?);
             lock(&peers).add(&server_private, &stored.peer, &stored.name, tunnel_ip, public);
         }
@@ -185,6 +204,7 @@ impl Tunnel {
         let socks = Arc::new(Mutex::new(config.socks.clone()));
         let quic_driver = start_quic_gateway(&config, socks.clone(), &events, injector_tx.clone());
 
+        let ikev2_shutdown = shutdown_rx.clone();
         let frontend = wireguard::start(
             WireGuardParams {
                 listen: config.wireguard,
@@ -224,11 +244,44 @@ impl Tunnel {
             }
         });
 
+        // IKEv2 phones get their own listener, network layer and core (docs/ikev2.md §7). Port 500
+        // can be taken (the Mac's own VPN client), so a failure only turns IKEv2 off.
+        let ikev2 = match config.ikev2 {
+            // `--ikev2` only counts when the build supports it (README, `capabilities.ikev2`).
+            Some(ike) if frontend::ikev2::supported() => {
+                let params = Ikev2SideParams {
+                    ike,
+                    peers: ikev2_peers.clone(),
+                    core: CoreConfig {
+                        net: config.tunnel_net,
+                        quic: config.quic,
+                        allow_loopback: config.allow_loopback,
+                    },
+                    events: events.clone(),
+                    socks: socks.clone(),
+                    hooks: hooks.clone(),
+                };
+                match frontend::ikev2::listener::start_side(params, ikev2_shutdown).await {
+                    Ok(side) => Some(side),
+                    Err(error) => {
+                        events.error(format!("IKEv2 is off: {error:#}"));
+                        None
+                    }
+                }
+            }
+            _ => None,
+        };
+
         events.emit(json!({
             "event": "ready",
             "listen": frontend.local_addr.to_string(),
             "publicKey": encode_key(server_public.to_bytes()),
             "capabilities": capabilities(),
+            // Where IKEv2 phones connect, or null when IKEv2 is off.
+            "ikev2": ikev2.as_ref().map(|side| json!({
+                "ike": side.ike_addr.to_string(),
+                "natT": side.nat_t_addr.to_string(),
+            })),
         }));
 
         Ok(Tunnel {
@@ -239,6 +292,8 @@ impl Tunnel {
             listen: frontend.local_addr,
             state: Mutex::new(state),
             peers,
+            ikev2_peers,
+            ikev2,
             socks,
             core_stats,
             hooks,
@@ -283,8 +338,11 @@ impl Tunnel {
     }
 
     pub fn add_peer(&self, name: &str, kind: &str) -> Result<PeerAdded> {
+        if kind == PEER_KIND_IKEV2 {
+            return self.add_ikev2_peer(name);
+        }
         if kind != PEER_KIND_WIREGUARD {
-            bail!("unsupported peer kind {kind:?}, only \"wireguard\" works today");
+            bail!("unsupported peer kind {kind:?}, only \"wireguard\" and \"ikev2\" work today");
         }
         let name = clean_name(name);
         let mut state = lock(&self.state);
@@ -315,10 +373,55 @@ impl Tunnel {
 
         lock(&self.peers).add(&self.server_private, &id, &name, tunnel_ip, public);
         Ok(PeerAdded {
+            ikev2: None,
             config: self.client_config(&private, tunnel_ip),
             peer: id,
             name,
             kind: kind.to_string(),
+            tunnel_ip,
+        })
+    }
+
+    /// An IKEv2 phone: the same id and address allocation as WireGuard peers, but no keypair. Its
+    /// secret is derived from the server key, so nothing secret is stored for it.
+    fn add_ikev2_peer(&self, name: &str) -> Result<PeerAdded> {
+        if self.ikev2.is_none() {
+            bail!("IKEv2 is not running (start with --ikev2)");
+        }
+        let name = clean_name(name);
+        let mut state = lock(&self.state);
+        let used: HashSet<Ipv4Addr> = state
+            .peers
+            .iter()
+            .filter_map(|p| p.tunnel_ip.parse().ok())
+            .collect();
+        let tunnel_ip = self.config.tunnel_net.allocate(&used)?;
+        let id = format!("p{}", state.next_peer);
+        // Unused by IKEv2, but older builds read a WireGuard key for every stored peer and would
+        // not start without one; with a fresh key nobody holds they just see an idle peer.
+        let unused = generate_secret()?;
+        let mut next = state.clone();
+        next.next_peer += 1;
+        next.peers.push(StoredPeer {
+            peer: id.clone(),
+            name: name.clone(),
+            kind: PEER_KIND_IKEV2.to_string(),
+            tunnel_ip: tunnel_ip.to_string(),
+            private_key: encode_key(unused.to_bytes()),
+            public_key: encode_key(PublicKey::from(&unused).to_bytes()),
+        });
+        next.save(&self.config.state_path)?;
+        *state = next;
+
+        let server_key = self.server_private.to_bytes();
+        let secret = frontend::ikev2::profile_secret(&server_key, &id);
+        lock(&self.ikev2_peers).add(&id, &name, tunnel_ip, secret);
+        Ok(PeerAdded {
+            ikev2: Some(frontend::ikev2::peer_added_details(&server_key, &id)),
+            config: String::new(),
+            peer: id,
+            name,
+            kind: PEER_KIND_IKEV2.to_string(),
             tunnel_ip,
         })
     }
@@ -333,12 +436,14 @@ impl Tunnel {
         next.save(&self.config.state_path)?;
         *state = next;
         lock(&self.peers).remove(peer);
+        lock(&self.ikev2_peers).remove(peer);
         Ok(())
     }
 
     pub fn list_peers(&self) -> Value {
         let state = lock(&self.state);
-        let live = lock(&self.peers).summaries();
+        let mut live = lock(&self.peers).summaries();
+        live.extend(lock(&self.ikev2_peers).summaries());
         let peers: Vec<Value> = state
             .peers
             .iter()
@@ -360,7 +465,8 @@ impl Tunnel {
     /// Counters for the `stats` command: per phone (bytes through its tunnel) and for the flows
     /// the core served. Everything is a running total since the sidecar started.
     pub fn stats(&self) -> Value {
-        let live = lock(&self.peers).summaries();
+        let mut live = lock(&self.peers).summaries();
+        live.extend(lock(&self.ikev2_peers).summaries());
         let peers: Vec<Value> = live
             .iter()
             .map(|peer| {
@@ -473,6 +579,9 @@ impl Tunnel {
     /// Stops the front-end and the core. Open flows are dropped.
     pub async fn shutdown(self) {
         self.shutdown_tx.send(()).ok();
+        if let Some(ikev2) = &self.ikev2 {
+            ikev2.abort();
+        }
         if let Some(task) = self.frontend_task {
             let _ = tokio::time::timeout(Duration::from_secs(2), task).await;
         }

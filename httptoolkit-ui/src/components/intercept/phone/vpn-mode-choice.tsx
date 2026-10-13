@@ -3,6 +3,8 @@ import { ShieldCheck, WifiHigh } from '@phosphor-icons/react';
 
 import { styled } from '../../../styles';
 import type { IPhoneConnectionMode } from '../../../model/interception/vpn-mode';
+// wirepane: the IKEv2 (no app, beta) option sits under the two main choices
+import { VpnIkev2Option } from './vpn-ikev2-option';
 
 const Group = styled.div`
     display: grid;
@@ -125,7 +127,8 @@ export const VpnModeChoice = (props: {
     // Whether this build has the VPN tunnel (undefined while that's still being checked)
     vpnAvailable: boolean | undefined,
     onChange: (mode: IPhoneConnectionMode) => void
-}) => <Group role='radiogroup' aria-label='How to connect the iPhone'>
+}) => <>
+<Group role='radiogroup' aria-label='How to connect the iPhone'>
     <Option>
         <Radio
             name='iphone-connection-mode'
@@ -169,4 +172,7 @@ export const VpnModeChoice = (props: {
             </OptionText>
         </OptionBody>
     </Option>
-</Group>;
+</Group>
+{ /* wirepane: the IKEv2 option, outside the radio group */ }
+<VpnIkev2Option />
+</>;
