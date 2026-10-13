@@ -6,6 +6,7 @@
 
 pub mod core;
 pub mod events;
+pub mod features;
 pub mod frontend;
 pub mod net;
 pub mod state;

@@ -5,6 +5,7 @@
 //!
 //! Today there is one front-end, WireGuard. The IKEv2 one added later plugs in the same way.
 
+pub mod ikev2;
 pub mod wireguard;
 
 use std::net::{IpAddr, Ipv4Addr};
