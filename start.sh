@@ -74,6 +74,18 @@ wait_until_ready() {
   done
 }
 
+# True when the VPN helper exists. The server looks for it in these places
+# (interceptors/wireguard-vpn-env.ts), and ./setup.sh builds the first one.
+has_vpn_helper() {
+  local helper
+  for helper in "$ROOT/wirepane-tunnel/target/release/wirepane-tunnel" \
+    "$ROOT/wirepane-tunnel/target/debug/wirepane-tunnel" \
+    "${WIREPANE_TUNNEL_BINPATH:-}"; do
+    if [ -n "$helper" ] && [ -f "$helper" ] && [ -x "$helper" ]; then return 0; fi
+  done
+  return 1
+}
+
 NO_WINDOW=false
 ELECTRON_ARGS=()
 for arg in "$@"; do
@@ -86,6 +98,8 @@ done
 for port in "$SERVER_PORT" "$MOCKTTP_PORT" "$UI_PORT"; do
   require_free_port "$port"
 done
+# The app works without the helper, only VPN mode needs it
+has_vpn_helper || echo "VPN mode is off: run ./setup.sh"
 
 # Settings > Status shows Wirepane's version, which the UI build reads from here
 WIREPANE_VERSION="$(tr -d '[:space:]' < "$ROOT/VERSION")"

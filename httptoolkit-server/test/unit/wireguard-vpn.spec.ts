@@ -487,6 +487,88 @@ describe("The WireGuard VPN helpers", () => {
             expect(logEntries().some((entry) => entry.type === 'stdin-eof' && entry.pid === pid)).to.equal(true);
         });
 
+        it("stops the helper when asked through activate, as the UI's Stop button does", async () => {
+            await addPeer('iPhone');
+            const [{ pid }] = startsOf();
+            expect(interceptor.isActive(PROXY_PORT)).to.equal(true);
+
+            const result = await interceptor.activate(PROXY_PORT, { action: 'stop' }) as WireGuardVpnMetadata;
+
+            // The answer is the metadata of a stopped helper, ready for the UI to show
+            expect(result).to.deep.equal({
+                available: true,
+                running: false,
+                listen: '',
+                endpointHost: getLanIPv4() ?? '',
+                peers: []
+            });
+            expect(result).to.deep.equal(await metadata());
+            expect(isAlive(pid)).to.equal(false);
+            expect(interceptor.isActive(PROXY_PORT)).to.equal(false);
+            expect(logEntries().some((entry) => entry.type === 'stdin-eof' && entry.pid === pid)).to.equal(true);
+
+            // Stopping isn't forgetting: the phone's peer is still saved for the next start
+            expect(fs.existsSync(path.join(configPath, 'wirepane-vpn.json'))).to.equal(true);
+            const restarted = await start();
+            expect(restarted.peers.map((peer) => peer.name)).to.deep.equal(['iPhone']);
+            expect(startsOf()).to.have.length(2);
+        });
+
+        it("starts nothing when asked to stop and no helper is running", async () => {
+            const result = await interceptor.activate(PROXY_PORT, { action: 'stop' }) as WireGuardVpnMetadata;
+
+            expect(result.available).to.equal(true);
+            expect(result.running).to.equal(false);
+            expect(result.peers).to.deep.equal([]);
+            expect(result.error).to.equal(undefined);
+            expect(interceptor.isActive(PROXY_PORT)).to.equal(false);
+
+            // The stand-in logs every start, and writes the state file when it starts
+            expect(logEntries()).to.deep.equal([]);
+            expect(fs.existsSync(path.join(configPath, 'wirepane-vpn.json'))).to.equal(false);
+            expect(await readSavedPort(configPath)).to.equal(undefined);
+
+            // Asking again is fine too
+            const again = await interceptor.activate(PROXY_PORT, { action: 'stop' }) as WireGuardVpnMetadata;
+            expect(again.running).to.equal(false);
+            expect(startsOf()).to.have.length(0);
+        });
+
+        it("stops the helper for a stop that comes from another proxy port, like a reloaded UI", async () => {
+            await start(9474);
+            const [{ pid }] = startsOf();
+
+            const result = await interceptor.activate(9500, { action: 'stop' }) as WireGuardVpnMetadata;
+
+            expect(result.running).to.equal(false);
+            expect(isAlive(pid)).to.equal(false);
+            expect(interceptor.isActive(9474)).to.equal(false);
+        });
+
+        it("runs a stop that arrives during a start after it, and leaves nothing running", async () => {
+            const [started, stopped] = await Promise.all([
+                start(),
+                interceptor.activate(PROXY_PORT, { action: 'stop' }) as Promise<WireGuardVpnMetadata>
+            ]);
+
+            expect(started.running).to.equal(true);
+            expect(stopped.running).to.equal(false);
+            expect(startsOf()).to.have.length(1);
+            expect(isAlive(startsOf()[0].pid)).to.equal(false);
+            expect((await metadata()).running).to.equal(false);
+        });
+
+        it("answers a stop with the reason when the helper isn't built", async () => {
+            const noBinary = new WireGuardVpnInterceptor({ configPath } as HtkConfig, () => ({
+                error: 'The VPN helper (wirepane-tunnel) is not built.'
+            }));
+
+            const result = await noBinary.activate(PROXY_PORT, { action: 'stop' }) as WireGuardVpnMetadata;
+            expect(result.available).to.equal(false);
+            expect(result.running).to.equal(false);
+            expect(result.error).to.include('not built');
+        });
+
         it("stops the helper on deactivateAll, when the server shuts down", async () => {
             await start();
             const [{ pid }] = startsOf();
