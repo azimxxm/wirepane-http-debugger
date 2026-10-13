@@ -7,12 +7,13 @@ import { GlobeSimple, MagnifyingGlass } from '@phosphor-icons/react';
 import { styled } from '../../styles';
 import { appHistory } from '../../routing';
 import { VpnDnsQuery, VpnNetworkStore } from '../../model/interception/vpn-network';
-import { UNKNOWN_VPN_PEER_NAME, VpnPeerNames } from '../../model/devices/vpn-peer-names';
+import { VpnMetadataLoader, VpnPeerNames } from '../../model/devices/vpn-peer-names';
 
 import { IPHONE_SETUP_PATH } from '../intercept/phone/phone-setup-routes';
 import { ActionButton } from '../common/action-button';
 import { TextInput } from '../common/inputs';
 import { DnsRulesEditor } from './dns-rules-editor';
+import { peerLabel, useAskedPeers } from './peer-labels';
 import {
     ALL_DEVICES,
     DnsFilter,
@@ -34,8 +35,9 @@ import {
 const ROW_HEIGHT = 32;
 const HEADER_HEIGHT = 30;
 
-// Time, device, name, type, answers, took, rule. The name and answers share what is left.
-const COLUMNS = '68px 104px minmax(0, 1.3fr) 52px minmax(0, 1.5fr) 62px 80px';
+// Time, device, name, type, answers, took, rule. The name and answers share what is left. The
+// device is wide enough for "Removed device (p42)", whose id is what tells removed devices apart.
+const COLUMNS = '68px 148px minmax(0, 1.3fr) 52px minmax(0, 1.5fr) 62px 80px';
 
 const Root = styled.div`
     display: flex;
@@ -352,6 +354,20 @@ const ListInner = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDivE
     }
 );
 
+// The list's own scrolling box. It's a Tab stop with a name, so the list can be scrolled with the
+// keyboard, and it has a focus ring inside the card (which cuts off anything drawn outside it).
+// Its role keeps the rows inside the table, as a named box with no role isn't part of one.
+const ListScroller = styled.div.attrs(() => ({
+    role: 'rowgroup',
+    tabIndex: 0,
+    'aria-label': 'DNS queries, scrollable'
+}))`
+    &:focus-visible {
+        outline: 2px solid ${p => p.theme.focusRing};
+        outline-offset: -2px;
+    }
+`;
+
 const DnsList = (props: { view: DnsView, nameOf: PeerNameLookup }) => {
     const { view, nameOf } = props;
 
@@ -359,6 +375,7 @@ const DnsList = (props: { view: DnsView, nameOf: PeerNameLookup }) => {
         <List
             height={height}
             width={width}
+            outerElementType={ListScroller}
             itemCount={view.rows.length}
             itemSize={ROW_HEIGHT}
             itemData={{ rows: view.rows, nameOf }}
@@ -370,16 +387,14 @@ const DnsList = (props: { view: DnsView, nameOf: PeerNameLookup }) => {
     }</AutoSizer>;
 };
 
-// The name a device has, if the server has told us (UNKNOWN_VPN_PEER_NAME says it hasn't)
-const knownName = (name: string) => name === UNKNOWN_VPN_PEER_NAME ? undefined : name;
-
 /**
  * Every DNS question the phones asked through the VPN, newest first, with the answer, how long
  * the lookup took and a mark when a DNS rule blocked or answered it. The rules editor sits above
- * the list, so a rule can be made right where the names show up.
+ * the list, so a rule can be made right where the names show up. `loadMetadata` is only for
+ * tests: it replaces the call to the server for the device names.
  */
-export const DnsTab = observer((props: { store: VpnNetworkStore }) => {
-    const { store } = props;
+export const DnsTab = observer((props: { store: VpnNetworkStore, loadMetadata?: VpnMetadataLoader }) => {
+    const { store, loadMetadata } = props;
 
     const [search, setSearch] = React.useState('');
     const [device, setDevice] = React.useState(ALL_DEVICES);
@@ -387,17 +402,18 @@ export const DnsTab = observer((props: { store: VpnNetworkStore }) => {
 
     // The stats event names the devices; the server's list of devices covers the time before
     // the first stats arrive
-    const serverNames = React.useMemo(() => new VpnPeerNames(), []);
+    const serverNames = React.useMemo(() => new VpnPeerNames(loadMetadata), [loadMetadata]);
     const statNames = peerNamesFromStats(store.stats);
-    const nameOf: PeerNameLookup = (peer) => statNames.get(peer) ?? knownName(serverNames.nameOf(peer));
+
+    // The devices in the list (and the picked one) that the stats don't name: the server is asked
+    const devicePeers = new Set(store.dnsQueries.map((query) => query.peer));
+    if (device !== ALL_DEVICES) devicePeers.add(device);
+    const unnamedPeers = Array.from(devicePeers).filter((peer) => !statNames.has(peer));
+    const askedPeers = useAskedPeers(serverNames, unnamedPeers);
+
+    const nameOf: PeerNameLookup = (peer) => statNames.get(peer) ?? peerLabel(serverNames, askedPeers, peer);
 
     const view = buildDnsView(store.dnsQueries, filter, nameOf);
-
-    const unnamedPeers = view.devices.map((option) => option.peer).filter((peer) => !statNames.has(peer));
-    const unnamedKey = unnamedPeers.join(',');
-    React.useEffect(() => {
-        if (unnamedKey) serverNames.ensureNamed(unnamedKey.split(','));
-    }, [unnamedKey, serverNames]);
 
     const clearFilters = () => {
         setSearch('');

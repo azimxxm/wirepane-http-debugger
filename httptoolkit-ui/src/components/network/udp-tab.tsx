@@ -26,6 +26,7 @@ import {
     summariseUdpFlows
 } from '../../model/interception/vpn-udp';
 import { UnstyledButton } from '../common/inputs';
+import { peerLabel, useAskedPeers } from './peer-labels';
 
 const CLOCK_TICK_MS = 1000;
 
@@ -222,6 +223,20 @@ const Mono = styled.span`
     white-space: nowrap;
 `;
 
+// The device, destination and name cells are cut with an ellipsis after this many pixels (their
+// full text is the cell's tooltip), so one long name can't stretch the table off the screen
+const DEVICE_LIMIT = 150;
+const DESTINATION_LIMIT = 190;
+const NAME_LIMIT = 240;
+
+const Clip = styled.span<{ limit: number }>`
+    display: block;
+    max-width: ${p => p.limit}px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+`;
+
 const Muted = styled.span`
     color: ${p => p.theme.mainLowlightColor};
 `;
@@ -377,9 +392,18 @@ const FlowRow = (props: { flow: VpnUdpFlow, deviceName: string, now: number }) =
     const hasCounts = state !== 'untracked' || hasUdpCounts(flow);
 
     return <tr>
-        <td title={flow.src || undefined}>{ deviceName }</td>
-        <td><Mono>{ flow.dst }</Mono></td>
-        <td>{ flow.name ?? <Muted>-</Muted> }</td>
+        <td>
+            <Clip limit={DEVICE_LIMIT} title={flow.src ? `${deviceName} (${flow.src})` : deviceName}>
+                { deviceName }
+            </Clip>
+        </td>
+        <td><Clip limit={DESTINATION_LIMIT} title={flow.dst}><Mono>{ flow.dst }</Mono></Clip></td>
+        <td>
+            { flow.name
+                ? <Clip limit={NAME_LIMIT} title={flow.name}>{ flow.name }</Clip>
+                : <Muted>-</Muted>
+            }
+        </td>
         <td className='number'>
             { hasCounts
                 ? <CountCell>
@@ -428,10 +452,7 @@ const FlowsPanel = observer((props: { store: VpnNetworkStore, peerNames: VpnPeer
     const now = useNow(summary.open > 0);
 
     // Ask the server who each device is, once per device
-    const peerIds = Array.from(new Set(flows.map((flow) => flow.peer))).join(',');
-    React.useEffect(() => {
-        if (peerIds) peerNames.ensureNamed(peerIds.split(','));
-    }, [peerNames, peerIds]);
+    const askedPeers = useAskedPeers(peerNames, Array.from(new Set(flows.map((flow) => flow.peer))));
 
     const rows = sortUdpFlows(flows, sortKey).slice(0, MAX_UDP_ROWS);
 
@@ -489,7 +510,7 @@ const FlowsPanel = observer((props: { store: VpnNetworkStore, peerNames: VpnPeer
                                 <FlowRow
                                     key={`${flow.peer}:${flow.flow}`}
                                     flow={flow}
-                                    deviceName={peerNames.nameOf(flow.peer)}
+                                    deviceName={peerLabel(peerNames, askedPeers, flow.peer)}
                                     now={now}
                                 />
                             ) }

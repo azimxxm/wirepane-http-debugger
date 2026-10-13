@@ -65,6 +65,12 @@ interface DesktopApi {
      * (see model/ui/app-actions.ts). Returns a function that stops listening.
      */
     onAppAction?: (callback: (actionId: string, details: DesktopAppActionDetails) => void) => () => void;
+
+    /**
+     * wirepane: shows a saved packet capture in Finder (Explorer, the file manager). The desktop
+     * only does it for files in the captures folder, and answers whether it did.
+     */
+    showItemInFolder?: (path: string) => Promise<boolean>;
 }
 
 export interface DesktopAppActionDetails {
@@ -115,6 +121,13 @@ export const getServerPort = (): number =>
 
 export const getMockttpPort = (): number =>
     DesktopApi.getMockttpPort?.() ?? DEFAULT_MOCKTTP_PORT;
+
+// wirepane: only the desktop app can open a file manager. A browser tab has no such button.
+export const canShowItemInFolder = (): boolean => DesktopApi.showItemInFolder !== undefined;
+
+export async function showItemInFolder(path: string): Promise<boolean> {
+    return await DesktopApi.showItemInFolder?.(path) ?? false;
+}
 
 export function canRestartApp(): boolean {
     return window.desktopApi?.restartApp !== undefined ||

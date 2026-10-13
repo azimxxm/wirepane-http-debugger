@@ -4,6 +4,7 @@ import { CheckCircle, WarningCircle } from '@phosphor-icons/react';
 
 import { styled, css, keyframes } from '../../styles';
 import { copyToClipboard } from '../../util/ui';
+import { canShowItemInFolder, showItemInFolder } from '../../services/desktop-api';
 import { VpnNetworkStore } from '../../model/interception/vpn-network';
 
 import { ActionButton } from '../common/action-button';
@@ -139,6 +140,14 @@ const PathText = styled.code`
     border-radius: 6px;
 `;
 
+const Hint = styled.p`
+    margin: 12px 0 0;
+
+    font-size: ${p => p.theme.textInputFontSize};
+    line-height: 1.45;
+    color: ${p => p.theme.mainLowlightColor};
+`;
+
 const Problem = styled.p`
     margin: 16px 0 0;
     padding: 8px 10px;
@@ -202,6 +211,42 @@ const CopyPathButton = (props: { path: string }) => {
     </ActionButton>;
 };
 
+// What the file manager is called on this computer
+const fileManagerLabel = () => {
+    const platform = navigator.platform ?? '';
+    return platform.startsWith('Mac') ? 'Show in Finder'
+        : platform.startsWith('Win') ? 'Show in Explorer'
+        : 'Show in folder';
+};
+
+// Only in the desktop app: it opens the file manager with the capture's file selected
+const ShowInFolderButton = (props: { path: string }) => {
+    const [failed, setFailed] = React.useState(false);
+    const resetTimer = React.useRef<number | undefined>(undefined);
+
+    React.useEffect(() => () => window.clearTimeout(resetTimer.current), []);
+
+    const show = async () => {
+        let shown = false;
+        try {
+            shown = await showItemInFolder(props.path);
+        } catch {
+            shown = false;
+        }
+        setFailed(!shown);
+        window.clearTimeout(resetTimer.current);
+        resetTimer.current = window.setTimeout(() => setFailed(false), COPY_FEEDBACK_MS);
+    };
+
+    return <ActionButton
+        variant='secondary'
+        title='Show the file in the file manager'
+        onClick={show}
+    >
+        { failed ? "Couldn't show it" : fileManagerLabel() }
+    </ActionButton>;
+};
+
 // Pages come and go while a start or stop request is in flight, and a late answer must not touch
 // a component that is gone.
 const useMountedRef = () => {
@@ -241,7 +286,8 @@ const PhaseText = (props: { view: CaptureView }) => {
 
 /**
  * Start and stop a packet capture of the VPN tunnel. While it runs the packet and byte counts
- * count up; when it ends the page shows where the file is, with a button to copy its path.
+ * count up; when it ends the page shows where the file is, with buttons to show it in the file
+ * manager (desktop app) and to copy its path. A capture can only start while the VPN runs.
  */
 export const CaptureTab = observer((props: { store: VpnNetworkStore }) => {
     const { store } = props;
@@ -268,6 +314,8 @@ export const CaptureTab = observer((props: { store: VpnNetworkStore }) => {
     };
 
     const running = view.phase === 'running';
+    // The server refuses to start one without the VPN, so the button can only fail then
+    const vpnOff = !running && !store.running;
 
     return <Root aria-label='Packet capture'>
         <Header>
@@ -292,7 +340,8 @@ export const CaptureTab = observer((props: { store: VpnNetworkStore }) => {
                 : <ActionButton
                     variant='primary'
                     icon='Play'
-                    disabled={busy !== undefined}
+                    disabled={busy !== undefined || vpnOff}
+                    aria-describedby={vpnOff ? 'capture-needs-vpn' : undefined}
                     onClick={() => run('start')}
                 >
                     { busy === 'start'
@@ -302,6 +351,8 @@ export const CaptureTab = observer((props: { store: VpnNetworkStore }) => {
                 </ActionButton>
             }
         </Header>
+
+        { vpnOff && <Hint id='capture-needs-vpn'>Start the VPN first, on the iPhone or Android page.</Hint> }
 
         { problem && <Problem role='alert'>
             <WarningCircle size={16} weight='fill' aria-hidden={true} />
@@ -323,6 +374,7 @@ export const CaptureTab = observer((props: { store: VpnNetworkStore }) => {
             { view.path && <Location>
                 <LocationLabel>{ running ? 'Saving to' : 'Saved to' }</LocationLabel>
                 <PathText>{ view.path }</PathText>
+                { canShowItemInFolder() && <ShowInFolderButton path={view.path} /> }
                 <CopyPathButton path={view.path} />
             </Location> }
         </> }

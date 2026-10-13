@@ -30,6 +30,7 @@ import { getDeviceDetails } from './device.ts';
 import { createMenuBarIcon } from './menu-bar-icon.ts';
 import { BUNDLED_UI_URL, registerBundledUiScheme, serveBundledUi } from './bundled-ui.ts';
 import { PRODUCT_VERSION } from './product-version.ts'; // wirepane
+import { getCapturesFolder, resolveCapturePath } from './captures-path.ts'; // wirepane
 
 import packageJson from '../package.json' with { type: 'json' };
 
@@ -802,6 +803,17 @@ ipcMain.handle('open-context-menu', ipcHandler((options: ContextMenuDefinition) 
 ));
 
 ipcMain.handle('get-device-info', ipcHandler(() => getDeviceDetails()));
+
+// wirepane: "Show in Finder" for a saved packet capture. Only files inside the captures folder
+// that still exist are shown; the answer says whether anything was.
+ipcMain.handle('show-item-in-folder', ipcHandler(async (requested: unknown) => {
+    const filePath = resolveCapturePath(requested, getCapturesFolder());
+    if (!filePath) return false;
+    if (!await fs.access(filePath).then(() => true, () => false)) return false;
+
+    shell.showItemInFolder(filePath);
+    return true;
+}));
 
 ipcMain.handle('set-component-versions', ipcHandler((versions: Record<string, string>) => {
     Menu.setApplicationMenu(getMenu(windows, openNewWindow, versions));

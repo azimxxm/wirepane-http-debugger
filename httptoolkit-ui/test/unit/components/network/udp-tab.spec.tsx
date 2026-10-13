@@ -242,6 +242,32 @@ describe('UDP tab', () => {
             expect(rowCells().map((row) => row[0])).to.deep.equal(['iPhone', 'iPad', 'iPhone']);
         });
 
+        it('cuts a long device name, destination and DNS name short, with the whole text in a tooltip', async () => {
+            const longName = `${'a'.repeat(60)}.${'b'.repeat(60)}.${'c'.repeat(60)}.example.com`;
+            const longDestination = '[2001:db8:1234:5678:9abc:def0:1234:5678]:443';
+            const longDevice = 'Pixel 8 Pro with a really long device name that keeps going and going';
+            runInAction(() => {
+                store.udpFlows = [flow('9', { peer: 'p9', dst: longDestination, name: longName })];
+            });
+            await render({ available: true, running: true, peers: [{ peer: 'p9', name: longDevice }] });
+
+            const [device, destination, name] = Array.from(rows()[0].querySelectorAll('td'));
+            for (const [cell, fullText] of [[device, longDevice], [destination, longDestination], [name, longName]] as const) {
+                const clipped = cell.firstElementChild as HTMLElement;
+                expect(clipped.title).to.contain(fullText);
+                expect(getComputedStyle(clipped).textOverflow).to.equal('ellipsis');
+                expect(getComputedStyle(clipped).overflow).to.equal('hidden');
+                expect(clipped.scrollWidth, 'it was cut').to.be.greaterThan(clipped.clientWidth);
+                // Not hundreds of pixels wide (the longest limit is 240)
+                expect(clipped.getBoundingClientRect().width).to.be.at.most(240);
+            }
+            // So the row keeps its height instead of wrapping the long names over many lines
+            expect(rows()[0].getBoundingClientRect().height).to.be.lessThan(80);
+
+            // The device cell's tooltip keeps what it said before: where the flow came from
+            expect((device.firstElementChild as HTMLElement).title).to.equal(`${longDevice} (10.73.0.2:40003)`);
+        });
+
         it('shows the DNS name, packets and bytes both ways, and how long it lasted', async () => {
             await render();
 
@@ -321,10 +347,32 @@ describe('UDP tab', () => {
             expect(rowCells()[0][1]).to.equal('9.9.9.9:53000');
         });
 
-        it('falls back to a plain name until the server names the device', async () => {
-            await render({ available: true, running: true, peers: [] });
+        it('falls back to a plain name until the server answers about the device', async () => {
+            const answer = { resolve: (_metadata: unknown) => {} };
+            const loadMetadata = () => new Promise<unknown>((resolve) => { answer.resolve = resolve; });
+            act(() => {
+                ReactDOM.render(<ThemeProvider theme={lightTheme}>
+                    <UdpTab store={store as unknown as VpnNetworkStore} loadMetadata={loadMetadata} />
+                </ThemeProvider>, container);
+            });
+            await settle();
 
+            // Not called removed while the server is still being asked
             expect(rowCells()[0][0]).to.equal('VPN device');
+
+            answer.resolve(METADATA);
+            await settle();
+            expect(rowCells()[0][0]).to.equal('iPhone');
+        });
+
+        it('calls a device the server does not know any more a removed device, with its id', async () => {
+            await render({ available: true, running: true, peers: [{ peer: 'p2', name: 'iPad' }] });
+
+            expect(rowCells().map((row) => row[0])).to.deep.equal([
+                'Removed device (p1)',
+                'iPad',
+                'Removed device (p1)'
+            ]);
         });
 
         it('enables Decrypt when the helper reports it after the tab opened', async () => {

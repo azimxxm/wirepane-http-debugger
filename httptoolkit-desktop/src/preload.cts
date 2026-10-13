@@ -61,6 +61,10 @@ contextBridge.exposeInMainWorld('desktopApi', {
 
     getPathForFile: (file: File) => webUtils.getPathForFile(file) || null,
 
+    // wirepane: "Show in Finder" for a saved packet capture. The main process only accepts files in the captures folder.
+    showItemInFolder: (filePath: string) =>
+        ipcInvoke('show-item-in-folder', filePath),
+
     // wirepane: menu bar clicks (app-action-menus.ts, whose channel name this repeats, as the
     // sandboxed preload can't import it). Returns a function that stops listening.
     onAppAction: (callback: (actionId: string, details: { triggeredByAccelerator: boolean }) => void) => {

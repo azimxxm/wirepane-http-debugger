@@ -109,6 +109,29 @@ describe('VPN in the Devices panel and the list', () => {
         const badge = () => Array.from(phoneRow().querySelectorAll('span'))
             .find((span) => span.textContent === 'VPN') as HTMLElement;
 
+        it('puts the Network link under the name, after the address, so the name keeps its room', () => {
+            // The panel's usual width: the name, the VPN tag and the link didn't fit on one line
+            container.style.cssText = 'position: absolute; left: 0; top: 0; width: 216px;';
+            render(<DeviceTree devicesStore={store} uiStore={{} as UiStore} />);
+
+            const link = phoneRow().querySelector('button[aria-label^="Network tools for"]') as HTMLElement;
+            const nameLine = badge().parentElement!;
+            const label = nameLine.firstElementChild as HTMLElement;
+            const address = Array.from(phoneRow().querySelectorAll('span'))
+                .find((span) => span.textContent === PHONE) as HTMLElement;
+
+            expect(link, 'a Network link on the VPN device').to.not.equal(null);
+            expect(nameLine.contains(link), 'the link is not on the name line').to.equal(false);
+            expect(label.textContent).to.equal('iPhone');
+            expect(label.scrollWidth, 'the name is shown whole').to.be.at.most(label.clientWidth);
+
+            // It follows the address (on its line, or wrapped under it when they don't fit side by side)
+            expect(link.parentElement).to.equal(address.parentElement);
+            expect(link.compareDocumentPosition(address) & Node.DOCUMENT_POSITION_PRECEDING, 'the address comes first')
+                .to.not.equal(0);
+            expect(link.getBoundingClientRect().top).to.be.at.least(label.getBoundingClientRect().bottom - 1);
+        });
+
         it('names the VPN device instead of showing its peer id', async () => {
             render(<DeviceTree devicesStore={store} uiStore={{} as UiStore} />);
 

@@ -155,6 +155,17 @@ const RowNameLine = styled.span`
     gap: 5px;
 `;
 
+// wirepane: a device's second line: its address and, for a VPN device, the link to the Network
+// page. The narrow panel can't always fit both, so the link wraps under the address instead of
+// squeezing the device's name on the line above.
+const RowAddressLine = styled.span`
+    min-width: 0;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    column-gap: 6px;
+`;
+
 const RowAddress = styled.span`
     overflow: hidden;
     text-overflow: ellipsis;
@@ -532,10 +543,12 @@ export const DeviceTree = observer((props: {
                             : <RowNameLine>
                                 <RowLabel isMuted={row.device.eventCount === 0}>{ row.device.name }</RowLabel>
                                 { row.device.viaVpn && <VpnBadge title={`Connected ${store.describeDeviceVpn(row.device)}`}>VPN</VpnBadge> }
-                                { row.device.viaVpn && <VpnNetworkLink deviceName={row.device.name} /> /* wirepane */ }
                             </RowNameLine>
                         }
-                        <RowAddress className='row-secondary'>{ row.device.address ?? 'localhost' }</RowAddress>
+                        <RowAddressLine>
+                            <RowAddress className='row-secondary'>{ row.device.address ?? 'localhost' }</RowAddress>
+                            { row.device.viaVpn && !isRenaming && <VpnNetworkLink deviceName={row.device.name} /> /* wirepane */ }
+                        </RowAddressLine>
                     </> }
                     { row.kind === 'app' && <RowLabel title={row.app.detail ? `${row.app.name}\n${row.app.detail}` : row.app.name}>{ row.app.name }</RowLabel> }
                     { row.kind === 'host' && <RowLabel title={row.host.host}>{ row.host.host }</RowLabel> }

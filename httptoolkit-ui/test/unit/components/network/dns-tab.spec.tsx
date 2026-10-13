@@ -175,6 +175,74 @@ describe('The DNS tab', () => {
         expect(bodyRows().map((cells) => cells[2])).to.deep.equal(['second.test', 'first.test']);
     });
 
+    describe('naming the devices', () => {
+
+        const settle = () => act(async () => {
+            await new Promise<void>((resolve) => setTimeout(resolve, 0));
+            await new Promise<void>((resolve) => setTimeout(resolve, 0));
+        });
+
+        // The tab asks the server about devices that the stats don't name
+        const renderWithServer = (loadMetadata: () => Promise<unknown>) => act(() => {
+            ReactDOM.render(<ThemeProvider theme={lightTheme}>
+                <DnsTab store={store} loadMetadata={loadMetadata} />
+            </ThemeProvider>, container);
+        });
+
+        it('calls a device the server does not know any more a removed device, in the rows and in the list of devices', async () => {
+            setQueries([
+                query({ at: 1, peer: 'p1', name: 'a.test' }),
+                query({ at: 2, peer: 'p9', name: 'b.test' }),
+                query({ at: 3, peer: 'p10', name: 'c.test' })
+            ]);
+            // p1 is named by the stats; p9 and p10 are neither in the stats nor in the server's list
+            renderWithServer(async () => ({ available: true, running: true, peers: [{ peer: 'p1', name: 'iPhone' }] }));
+            await settle();
+
+            expect(bodyRows().map((cells) => cells[1])).to.deep.equal([
+                'Removed device (p10)',
+                'Removed device (p9)',
+                'iPhone'
+            ]);
+            expect(Array.from(deviceSelect().options).map((option) => option.textContent)).to.deep.equal([
+                'All devices',
+                'iPhone (1)',
+                'Removed device (p10) (1)',
+                'Removed device (p9) (1)'
+            ]);
+        });
+
+        it('does not call a device removed while the server is still being asked about it', async () => {
+            setQueries([query({ at: 1, peer: 'p9', name: 'a.test' })]);
+            const answer = { resolve: (_metadata: unknown) => {} };
+            renderWithServer(() => new Promise<unknown>((resolve) => { answer.resolve = resolve; }));
+            await settle();
+
+            expect(bodyRows()[0][1]).to.equal('VPN device');
+
+            answer.resolve({ available: true, running: true, peers: [{ peer: 'p9', name: 'Pixel' }] });
+            await settle();
+            expect(bodyRows()[0][1]).to.equal('Pixel');
+        });
+    });
+
+    it('has a list that is a named stop for the keyboard, so it can be scrolled without a mouse', () => {
+        setQueries(Array.from({ length: 200 }, (_, i) => query({ at: i, name: `host-${i}.example.com` })));
+        render();
+
+        const scroller = container.querySelector('[aria-label="DNS queries, scrollable"]') as HTMLElement;
+        expect(scroller).to.not.equal(null);
+        expect(scroller.tabIndex).to.equal(0);
+        // It is the box that scrolls, and it holds the rows (the role keeps them in the table)
+        expect(getComputedStyle(scroller).overflowY).to.equal('auto');
+        expect(scroller.scrollHeight).to.be.greaterThan(scroller.clientHeight);
+        expect(scroller.getAttribute('role')).to.equal('rowgroup');
+        expect(scroller.querySelector('[role="row"]')).to.not.equal(null);
+
+        scroller.focus();
+        expect(document.activeElement).to.equal(scroller);
+    });
+
     it('only puts the rows in view in the page, however many queries there are', () => {
         setQueries(Array.from({ length: 2000 }, (_, i) => query({ at: i, name: `host-${i}.example.com` })));
         render();

@@ -106,14 +106,27 @@ const NetworkPageContent = observer((props: { store: VpnNetworkStore }) => {
     // Polls the tunnel's events only while this page is open
     React.useEffect(() => store.startPolling(), [store]);
 
+    // The store starts out with "the VPN isn't running" and says so until a read of the server
+    // works, so that's only known after one: every good read of the metadata replaces `capabilities`
+    const capabilitiesAtOpen = React.useRef(store.capabilities);
+    const hasReadMetadata = store.capabilities !== capabilitiesAtOpen.current;
+    const readFailed = store.error !== undefined;
+
     const selected = TABS.find((candidate) => candidate.id === tab) ?? TABS[0];
     const TabContent = selected.component;
 
-    // Arrow keys move between tabs, like a native tab bar
+    // Arrow keys move between tabs, Home and End go to the first and last, like a native tab bar
     const onTabKey = (event: React.KeyboardEvent) => {
-        if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
         const index = TABS.findIndex((candidate) => candidate.id === tab);
-        const next = TABS[(index + (event.key === 'ArrowRight' ? 1 : TABS.length - 1)) % TABS.length];
+        const nextIndex =
+            event.key === 'ArrowRight' ? (index + 1) % TABS.length
+            : event.key === 'ArrowLeft' ? (index + TABS.length - 1) % TABS.length
+            : event.key === 'Home' ? 0
+            : event.key === 'End' ? TABS.length - 1
+            : undefined;
+        if (nextIndex === undefined) return;
+
+        const next = TABS[nextIndex];
         setTab(next.id);
         document.getElementById(`network-tab-${next.id}`)?.focus();
         event.preventDefault();
@@ -132,7 +145,7 @@ const NetworkPageContent = observer((props: { store: VpnNetworkStore }) => {
         />
         <PageScroll>
             <PageContent>
-                { !store.running && <Notice role='status'>
+                { hasReadMetadata && !store.running && !readFailed && <Notice role='status'>
                     <p>
                         The VPN isn't running. These tools work on the traffic of phones connected
                         through Wirepane's VPN: start it on the iPhone page.
@@ -141,8 +154,9 @@ const NetworkPageContent = observer((props: { store: VpnNetworkStore }) => {
                         iPhone setup
                     </ActionButton>
                 </Notice> }
-                { store.error && <Notice role='alert'>
-                    <p>Couldn't read the VPN's network data: { store.error }</p>
+                { readFailed && <Notice role='alert'>
+                    {/* The server's own words are for the tooltip: they read like an API log */}
+                    <p title={store.error}>Couldn't read the VPN's network data. Wirepane keeps trying.</p>
                 </Notice> }
 
                 <TabList role='tablist' aria-label='Network tools' onKeyDown={onTabKey}>
@@ -151,7 +165,8 @@ const NetworkPageContent = observer((props: { store: VpnNetworkStore }) => {
                         id={`network-tab-${candidate.id}`}
                         role='tab'
                         aria-selected={candidate.id === tab}
-                        aria-controls={`network-panel-${candidate.id}`}
+                        // Only the selected tab's panel is on the page
+                        aria-controls={candidate.id === tab ? `network-panel-${candidate.id}` : undefined}
                         tabIndex={candidate.id === tab ? 0 : -1}
                         selected={candidate.id === tab}
                         onClick={() => setTab(candidate.id)}

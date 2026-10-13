@@ -8,7 +8,7 @@ const LinkButton = styled.button`
     appearance: none;
     background: none;
     border: none;
-    padding: 0 2px;
+    padding: 0;
 
     font: inherit;
     font-size: ${p => p.theme.tinyTextSize};
@@ -28,8 +28,9 @@ const LinkButton = styled.button`
 `;
 
 /**
- * "Network" next to a VPN device in the Devices panel: opens the Network page (DNS, UDP, TLS,
- * conditions, captures). It stops the click and keys, so the row itself isn't selected too.
+ * "Network" under a VPN device's name, after its address, in the Devices panel: opens the Network
+ * page (DNS, UDP, TLS, conditions, captures). It stops the click and keys, so the row itself isn't
+ * selected too.
  */
 export const VpnNetworkLink = (props: { deviceName: string }) => <LinkButton
     type='button'

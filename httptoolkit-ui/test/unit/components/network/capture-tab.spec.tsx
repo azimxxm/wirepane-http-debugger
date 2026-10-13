@@ -7,6 +7,7 @@ import { expect } from '../../../test-setup';
 
 import { ThemeProvider, lightTheme } from '../../../../src/styles';
 import type { VpnCaptureState, VpnNetworkStore } from '../../../../src/model/interception/vpn-network';
+import { DesktopApi } from '../../../../src/services/desktop-api';
 import { CaptureTab } from '../../../../src/components/network/capture-tab';
 
 const PATH = '/Users/me/Library/Preferences/httptoolkit/captures/wirepane-20261013-120000.pcapng';
@@ -22,6 +23,8 @@ describe('Capture tab', () => {
 
     let container: HTMLDivElement;
     let capture: IObservableValue<VpnCaptureState>;
+    let vpnRunning: IObservableValue<boolean>;
+    let shown: string[];
     let startCalls: number;
     let stopCalls: number;
     let onStart: () => Promise<VpnCaptureState>;
@@ -31,10 +34,11 @@ describe('Capture tab', () => {
 
     const setCapture = (state: VpnCaptureState) => runInAction(() => capture.set(state));
 
-    // The tab only reads `capture` and calls the two actions, so a small fake stands in for the real
-    // store (which polls a server)
+    // The tab only reads `capture` and `running` and calls the two actions, so a small fake stands
+    // in for the real store (which polls a server)
     const fakeStore = () => ({
         get capture() { return capture.get(); },
+        get running() { return vpnRunning.get(); },
         startCapture: () => { startCalls += 1; return onStart(); },
         stopCapture: () => { stopCalls += 1; return onStop(); }
     }) as unknown as VpnNetworkStore;
@@ -64,6 +68,8 @@ describe('Capture tab', () => {
         document.body.appendChild(container);
 
         capture = observable.box<VpnCaptureState>({ running: false }, { deep: false });
+        vpnRunning = observable.box(true);
+        shown = [];
         startCalls = 0;
         stopCalls = 0;
         onStart = async () => {
@@ -89,6 +95,7 @@ describe('Capture tab', () => {
     afterEach(() => {
         act(() => { ReactDOM.unmountComponentAtNode(container); });
         container.remove();
+        delete DesktopApi.showItemInFolder;
 
         if (clipboardDescriptor) {
             Object.defineProperty(navigator, 'clipboard', clipboardDescriptor);
@@ -230,6 +237,106 @@ describe('Capture tab', () => {
         expect(text()).to.contain('Capturing packets');
         expect(counter('Packets')).to.equal('7');
         expect(button('Stop capture')).to.not.equal(undefined);
+    });
+
+    describe('while the VPN is not running', () => {
+
+        beforeEach(() => runInAction(() => vpnRunning.set(false)));
+
+        it('has a Start capture button that can not be pressed, and says what to do first', async () => {
+            render();
+
+            const start = button('Start capture')!;
+            expect(start.disabled).to.equal(true);
+            expect(text()).to.contain('Start the VPN first, on the iPhone or Android page.');
+            // The hint is the button's description, for screen readers
+            const hint = container.querySelector(`#${start.getAttribute('aria-describedby')}`);
+            expect(hint?.textContent).to.contain('Start the VPN first');
+
+            await act(async () => { start.click(); });
+            expect(startCalls).to.equal(0);
+        });
+
+        it('does not let a finished capture be followed by a new one either', () => {
+            setCapture({ running: false, path: PATH, packets: 2, bytes: 1500 });
+            render();
+
+            expect(button('Start a new capture')!.disabled).to.equal(true);
+            expect(text()).to.contain('Start the VPN first');
+        });
+
+        it('can still stop a capture that was running when the VPN stopped', async () => {
+            setCapture({ running: true, path: PATH, packets: 7, bytes: 700 });
+            render();
+
+            expect(button('Stop capture')!.disabled).to.equal(false);
+            expect(text()).not.to.contain('Start the VPN first');
+
+            await click('Stop capture');
+            expect(stopCalls).to.equal(1);
+        });
+
+        it('lets the person start as soon as the VPN runs', () => {
+            render();
+            expect(button('Start capture')!.disabled).to.equal(true);
+
+            act(() => { runInAction(() => vpnRunning.set(true)); });
+
+            expect(button('Start capture')!.disabled).to.equal(false);
+            expect(text()).not.to.contain('Start the VPN first');
+            expect(button('Start capture')!.hasAttribute('aria-describedby')).to.equal(false);
+        });
+    });
+
+    describe('showing the saved file in the file manager', () => {
+
+        beforeEach(() => {
+            setCapture({ running: false, path: PATH, packets: 2, bytes: 1500 });
+        });
+
+        it('is offered next to Copy path in the desktop app, and asks it to show the file', async () => {
+            DesktopApi.showItemInFolder = async (path) => { shown.push(path); return true; };
+            render();
+
+            // Finder on a Mac, Explorer on Windows, "folder" elsewhere
+            expect(button('Show in'), text()).to.not.equal(undefined);
+            expect(button('Copy path')).to.not.equal(undefined);
+
+            await click('Show in');
+            expect(shown).to.deep.equal([PATH]);
+            expect(text()).not.to.contain("Couldn't show it");
+        });
+
+        it('says when the desktop app could not show the file', async () => {
+            DesktopApi.showItemInFolder = async () => false;
+            render();
+
+            await click('Show in');
+            expect(button("Couldn't show it")).to.not.equal(undefined);
+        });
+
+        it('says so when asking the desktop app failed', async () => {
+            DesktopApi.showItemInFolder = async () => { throw new Error('no handler'); };
+            render();
+
+            await click('Show in');
+            expect(button("Couldn't show it")).to.not.equal(undefined);
+        });
+
+        it('is not offered in a browser, which has no file manager to open', () => {
+            render();
+
+            expect(button('Show in')).to.equal(undefined);
+            expect(button('Copy path')).to.not.equal(undefined);
+        });
+
+        it('is not offered before a capture has a file', () => {
+            DesktopApi.showItemInFolder = async () => true;
+            setCapture({ running: false });
+            render();
+
+            expect(button('Show in')).to.equal(undefined);
+        });
     });
 
     it('survives being closed while a request is still on its way', async () => {

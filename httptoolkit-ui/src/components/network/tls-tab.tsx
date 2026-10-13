@@ -5,6 +5,7 @@ import { observer } from 'mobx-react-lite';
 import { styled } from '../../styles';
 import { VpnNetworkStore } from '../../model/interception/vpn-network';
 import { VpnMetadataLoader, VpnPeerNames } from '../../model/devices/vpn-peer-names';
+import { peerLabel, useAskedPeers } from './peer-labels';
 import {
     Ja4Count,
     Ja4Group,
@@ -187,8 +188,8 @@ const SniList = (p: { group: Ja4Group }) => {
 };
 
 // An observer, because the device names fill in later, when the server has answered
-const Ja4Card = observer((p: { group: Ja4Group, peerNames: VpnPeerNames }) => {
-    const { group, peerNames } = p;
+const Ja4Card = observer((p: { group: Ja4Group, peerNames: VpnPeerNames, askedPeers: ReadonlySet<string> }) => {
+    const { group, peerNames, askedPeers } = p;
     const description = describeJa4(group.ja4);
 
     return <GroupCard>
@@ -204,7 +205,7 @@ const Ja4Card = observer((p: { group: Ja4Group, peerNames: VpnPeerNames }) => {
 
             <dt>Devices</dt>
             <dd>{ group.peers.map((peer) =>
-                <CountedChip key={peer.value} item={peer} label={peerNames.nameOf(peer.value)} />
+                <CountedChip key={peer.value} item={peer} label={peerLabel(peerNames, askedPeers, peer.value)} />
             ) }</dd>
 
             <dt>Last seen</dt>
@@ -226,11 +227,8 @@ export const TlsTab = observer((props: { store: VpnNetworkStore, loadMetadata?: 
     const hellos = store.tlsHellos;
     const groups = groupTlsHellosByJa4(hellos);
 
-    // Ask the server who each device is, once per device
-    const peerIds = Array.from(new Set(hellos.map((hello) => hello.peer))).join(',');
-    React.useEffect(() => {
-        if (peerIds) peerNames.ensureNamed(peerIds.split(','));
-    }, [peerNames, peerIds]);
+    // Ask the server who each device is, once per device; one label for removed devices on every tab
+    const askedPeers = useAskedPeers(peerNames, Array.from(new Set(hellos.map((hello) => hello.peer))));
 
     return <TabLayout>
         <Panel aria-labelledby='tls-fingerprints-heading'>
@@ -243,7 +241,7 @@ export const TlsTab = observer((props: { store: VpnNetworkStore, loadMetadata?: 
                     </Lowlight>
                     <GroupList aria-label='Fingerprints, the most common first'>
                         { groups.map((group) =>
-                            <Ja4Card key={group.ja4} group={group} peerNames={peerNames} />
+                            <Ja4Card key={group.ja4} group={group} peerNames={peerNames} askedPeers={askedPeers} />
                         ) }
                     </GroupList>
                 </>
