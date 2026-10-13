@@ -12,6 +12,12 @@ import { EventsStore } from '../../../model/events/events-store';
 import { InterceptorStore } from '../../../model/interception/interceptor-store';
 import { Interceptor } from '../../../model/interception/interceptors';
 import { CERTIFICATE_PAGE_URL } from '../../../model/interception/phone-setup';
+import {
+    AndroidConnectionMode,
+    getAndroidVpnStore,
+    readAndroidMode,
+    saveAndroidMode
+} from '../../../model/interception/android-vpn';
 
 import { ActionButton } from '../../common/action-button';
 import { AndroidDeviceCustomUi } from '../config/android-device-config';
@@ -31,6 +37,9 @@ import {
     useConnectedPhone,
     useLanAddresses
 } from './phone-setup-parts';
+import { AndroidModeChoice } from './android-vpn-mode-choice';
+import { AndroidVpnSetup, AndroidVpnUnavailableNote } from './android-vpn-setup';
+import { VpnChecking } from './vpn-setup';
 
 const QR_INTERCEPTOR_ID = 'android-device';
 const ADB_INTERCEPTOR_ID = 'android-adb';
@@ -272,8 +281,60 @@ const ManualOption = (props: { addresses: ReturnType<typeof useLanAddresses>, po
 };
 
 /**
- * Connect an Android phone or emulator: the HTTP Toolkit app via QR code, ADB, or a
- * manual proxy, plus what Android's certificate rules mean for HTTPS.
+ * Why some apps show no HTTPS requests, and what to do about it. Over the VPN those apps
+ * still show up (connections, DNS, UDP), just without their requests.
+ */
+const HttpsExplanationCard = (props: { vpn: boolean }) => <Card aria-labelledby='android-https-heading'>
+    <CardTitle id='android-https-heading'>
+        { props.vpn ? 'Why some apps show hosts only' : 'Why some apps show no HTTPS traffic' }
+    </CardTitle>
+    { props.vpn
+        ? <p>
+            Since Android 7, apps only trust certificates you installed yourself if the app
+            allows it. Chrome and most other browsers do, so their HTTPS shows in full over the
+            VPN. Other apps don't by default. You still see their connections, DNS names and UDP
+            traffic, but their HTTPS shows as failed TLS connections with only the host name:
+        </p>
+        : <p>
+            Since Android 7, apps only trust certificates you installed yourself if the app
+            allows it. Chrome and most other browsers do, so they work with the HTTP Toolkit
+            app's VPN or the manual proxy. Other apps don't by default:
+        </p>
+    }
+    <ExplanationList>
+        <li>
+            <p>
+                <strong>Your own app:</strong> let its debug build trust user certificates
+                with a network security config.
+            </p>
+            <CodeHeader>
+                <span>Debug builds only, so release builds keep the default.</span>
+                <CopyButton value={NETWORK_SECURITY_CONFIG} label='the network security config' />
+            </CodeHeader>
+            <CodeBlock>{ NETWORK_SECURITY_CONFIG }</CodeBlock>
+        </li>
+        <li>
+            { props.vpn
+                ? <>
+                    <strong>Other apps:</strong> use an emulator or a rooted phone, and set it up
+                    once with ADB (pick "App, ADB or proxy" above). There the certificate is a
+                    system certificate, which every app trusts, unless the app pins its own
+                    certificates.
+                </>
+                : <>
+                    <strong>Other apps:</strong> use an emulator or a rooted device with ADB. There the
+                    certificate is a system certificate, which every app trusts, unless the app pins
+                    its own certificates.
+                </>
+            }
+        </li>
+    </ExplanationList>
+</Card>;
+
+/**
+ * Connect an Android phone or emulator: a VPN that catches every app (WireGuard), or the
+ * HTTP Toolkit app via QR code, ADB, or a manual proxy, plus what Android's certificate rules
+ * mean for HTTPS.
  */
 export const ConnectAndroidPage = inject('proxyStore', 'eventsStore', 'interceptorStore')(observer((props: {
     proxyStore?: ProxyStore,
@@ -293,66 +354,78 @@ export const ConnectAndroidPage = inject('proxyStore', 'eventsStore', 'intercept
     // The QR code carries the addresses the proxy store knows, so it needs at least one
     const hasNetwork = proxyStore.externalNetworkAddresses.length > 0;
 
+    // VPN mode (WireGuard): one store for the app, polled while this page is open
+    const vpnStore = getAndroidVpnStore(() => proxyStore.httpProxyPort);
+    React.useEffect(() => vpnStore.startPolling(), [vpnStore]);
+
+    // The way picked last time is remembered. Until one is picked, VPN comes first when this
+    // build has it, and the other ways when it doesn't.
+    const [chosenMode, setChosenMode] = React.useState<AndroidConnectionMode | undefined>(readAndroidMode);
+    const chooseMode = (newMode: AndroidConnectionMode) => {
+        setChosenMode(newMode);
+        saveAndroidMode(newMode);
+    };
+
+    const { availability } = vpnStore;
+    const mode = chosenMode ?? (
+        availability === 'available' ? 'vpn' :
+        availability === 'unavailable' ? 'apps' :
+        undefined
+    );
+
     return <PhoneSetupLayout
         title='Android'
         purpose="Send an Android phone's or emulator's traffic through Wirepane."
         onBack={() => navigate('/intercept')}
     >
-        <PhoneStatus
-            phone={phone}
-            waitingTitle='Waiting for your Android device…'
-            waitingHint='Connect it with one of the options below. This updates as soon as its first request comes through.'
-            httpsHint='No HTTPS requests yet. Browsers should work once the certificate is installed. For apps, see below.'
-            onViewRequests={() => navigate('/view')}
+        <AndroidModeChoice
+            mode={mode}
+            vpnAvailable={availability === 'checking' ? undefined : availability === 'available'}
+            onChange={chooseMode}
         />
 
-        <OptionGrid>
-            <QrOption
-                interceptor={interceptorStore.interceptors[QR_INTERCEPTOR_ID]}
-                hasNetwork={hasNetwork}
+        { mode === 'apps' && <>
+            <PhoneStatus
+                phone={phone}
+                waitingTitle='Waiting for your Android device…'
+                waitingHint='Connect it with one of the options below. This updates as soon as its first request comes through.'
+                httpsHint='No HTTPS requests yet. Browsers should work once the certificate is installed. For apps, see below.'
+                onViewRequests={() => navigate('/view')}
             />
-            <AdbOption
-                interceptor={interceptorStore.interceptors[ADB_INTERCEPTOR_ID]}
-                interceptorStore={interceptorStore}
-            />
-            <ManualOption addresses={addresses} port={port} />
-        </OptionGrid>
 
-        <Card aria-labelledby='android-https-heading'>
-            <CardTitle id='android-https-heading'>Why some apps show no HTTPS traffic</CardTitle>
-            <p>
-                Since Android 7, apps only trust certificates you installed yourself if the app
-                allows it. Chrome and most other browsers do, so they work with the HTTP Toolkit
-                app's VPN or the manual proxy. Other apps don't by default:
-            </p>
-            <ExplanationList>
-                <li>
-                    <p>
-                        <strong>Your own app:</strong> let its debug build trust user certificates
-                        with a network security config.
-                    </p>
-                    <CodeHeader>
-                        <span>Debug builds only, so release builds keep the default.</span>
-                        <CopyButton value={NETWORK_SECURITY_CONFIG} label='the network security config' />
-                    </CodeHeader>
-                    <CodeBlock>{ NETWORK_SECURITY_CONFIG }</CodeBlock>
-                </li>
-                <li>
-                    <strong>Other apps:</strong> use an emulator or a rooted device with ADB. There the
-                    certificate is a system certificate, which every app trusts, unless the app pins
-                    its own certificates.
-                </li>
-            </ExplanationList>
-        </Card>
+            <OptionGrid>
+                <QrOption
+                    interceptor={interceptorStore.interceptors[QR_INTERCEPTOR_ID]}
+                    hasNetwork={hasNetwork}
+                />
+                <AdbOption
+                    interceptor={interceptorStore.interceptors[ADB_INTERCEPTOR_ID]}
+                    interceptorStore={interceptorStore}
+                />
+                <ManualOption addresses={addresses} port={port} />
+            </OptionGrid>
 
-        <Note
-            icon={<Power size={18} aria-hidden={true} />}
-            title="When you're done"
-        >
-            <p>
-                Turn the phone's Wi-Fi proxy off, or disconnect in the HTTP Toolkit app. Otherwise
-                the phone has no internet while Wirepane isn't running.
-            </p>
-        </Note>
+            <HttpsExplanationCard vpn={false} />
+
+            <Note
+                icon={<Power size={18} aria-hidden={true} />}
+                title="When you're done"
+            >
+                <p>
+                    Turn the phone's Wi-Fi proxy off, or disconnect in the HTTP Toolkit app. Otherwise
+                    the phone has no internet while Wirepane isn't running.
+                </p>
+            </Note>
+        </> }
+
+        { mode === 'vpn' && availability === 'available' && <AndroidVpnSetup
+            store={vpnStore}
+            httpsNote={<HttpsExplanationCard vpn={true} />}
+            onViewRequests={() => navigate('/view')}
+        /> }
+        { mode === 'vpn' && availability === 'unavailable' &&
+            <AndroidVpnUnavailableNote onUseOtherWays={() => chooseMode('apps')} />
+        }
+        { (mode === undefined || (mode === 'vpn' && availability === 'checking')) && <VpnChecking /> }
     </PhoneSetupLayout>;
 }));
