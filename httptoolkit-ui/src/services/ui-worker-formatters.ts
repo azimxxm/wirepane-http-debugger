@@ -9,9 +9,11 @@ import { Headers } from '../types';
 import { asBuffer, bufferToHex, bufferToString, getReadableSize } from '../util/buffer';
 import { parseRawProtobuf, extractProtobufFromGrpc } from '../util/protobuf';
 import { formatJson, getJsonSyntax } from '../util/json';
+import { MAX_HEX_VIEW_BYTES, decodeWithDeclaredCharset } from '../util/body-text';
 
-const truncationMarker = (size: string) => `\n[-- Truncated to ${size} --]`;
-const FIVE_MB = 1024 * 1024 * 5;
+// wirepane: text in the charset the response declares (e.g. windows-1251), or else UTF-8 as before
+const asText = (content: Buffer, headers?: Headers) =>
+    decodeWithDeclaredCharset(content, headers) ?? content.toString('utf8');
 
 export type WorkerFormatterKey = keyof typeof WorkerFormatters;
 
@@ -88,18 +90,21 @@ const prettyProtobufView = (data: unknown) => {
 const WorkerFormatters = {
     // Poor man's hex editor:
     raw: (content: Buffer) => {
-        // Truncate the content if necessary. Nobody should manually dig
-        // through more than 5MB of content, and the full content is
-        // available by downloading the whole body.
-        const needsTruncation = content.length > FIVE_MB;
+        // wirepane: truncate the content if necessary. Hex of 4MB made the editor freeze for
+        // about 1.5s, nobody reads that much of it, and the full content is available by
+        // downloading the whole body.
+        const needsTruncation = content.length > MAX_HEX_VIEW_BYTES;
+        const totalSize = content.length;
         if (needsTruncation) {
-            content = content.subarray(0, FIVE_MB)
+            content = content.subarray(0, MAX_HEX_VIEW_BYTES)
         }
 
         const formattedContent = bufferToHex(content);
 
         if (needsTruncation) {
-            return formattedContent + truncationMarker("5MB");
+            return formattedContent + `\n[-- Only the first ${getReadableSize(MAX_HEX_VIEW_BYTES)} of ${
+                getReadableSize(totalSize)
+            } is shown. Use the download button to save all of it. --]`;
         } else {
             return formattedContent;
         }
@@ -108,22 +113,22 @@ const WorkerFormatters = {
         const b64 = content.toString('ascii');
         return Buffer.from(b64, 'base64').toString('utf8');
     },
-    markdown: (content: Buffer) => {
-        return content.toString('utf8');
+    markdown: (content: Buffer, headers?: Headers) => {
+        return asText(content, headers);
     },
-    yaml: (content: Buffer) => {
-        return content.toString('utf8');
+    yaml: (content: Buffer, headers?: Headers) => {
+        return asText(content, headers);
     },
-    html: (content: Buffer) => {
-        return beautifyHtml(content.toString('utf8'), {
+    html: (content: Buffer, headers?: Headers) => {
+        return beautifyHtml(asText(content, headers), {
             indent_size: 2
         });
     },
-    xml: (content: Buffer) => {
-        return beautifyXml(content.toString('utf8'), '  ');
+    xml: (content: Buffer, headers?: Headers) => {
+        return beautifyXml(asText(content, headers), '  ');
     },
-    json: (content: Buffer) => {
-        const asString = content.toString('utf8');
+    json: (content: Buffer, headers?: Headers) => {
+        const asString = asText(content, headers);
 
         // Do simplify parse + stringify where possible for speed - it's up to 1000x faster.
         // We fall back to the relaxed formatJson() where that fails, which is slower but
@@ -144,17 +149,17 @@ const WorkerFormatters = {
             }
         }
     },
-    'json-records': (content: Buffer) => {
-        const asString = content.toString('utf8');
+    'json-records': (content: Buffer, headers?: Headers) => {
+        const asString = asText(content, headers);
         return formatJson(asString, { formatRecords: true });
     },
-    javascript: (content: Buffer) => {
-        return beautifyJs(content.toString('utf8'), {
+    javascript: (content: Buffer, headers?: Headers) => {
+        return beautifyJs(asText(content, headers), {
             indent_size: 2
         });
     },
-    css: (content: Buffer) => {
-        return beautifyCss(content.toString('utf8'), {
+    css: (content: Buffer, headers?: Headers) => {
+        return beautifyCss(asText(content, headers), {
             indent_size: 2
         });
     },

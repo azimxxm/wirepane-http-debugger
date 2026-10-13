@@ -4,6 +4,7 @@ import { styled } from '../../styles';
 import { ViewableContentType } from '../events/content-types';
 import { ObservablePromise, observablePromise } from '../../util/observable';
 import { bufferToString, bufferToHex } from '../../util/buffer';
+import { MAX_HEX_VIEW_BYTES, decodeWithDeclaredCharset } from '../../util/body-text';
 
 import type { WorkerFormatterKey } from '../../services/ui-worker-formatters';
 import { formatBufferAsync } from '../../services/ui-worker-api';
@@ -11,6 +12,7 @@ import { ReadOnlyParams } from '../../components/common/editable-params';
 import { ImageViewer } from '../../components/editor/image-viewer';
 import { ExifBanner, ExifTags, parseImageExif } from '../../components/editor/exif-banner';
 import { BinaryBodySummary } from '../../components/editor/binary-body-summary';
+import { HexTruncation, HexTruncationBanner } from '../../components/editor/hex-truncation-banner';
 import { formatJson, getJsonSyntax } from '../../util/json';
 
 export interface EditorFormatter {
@@ -75,14 +77,23 @@ export const Formatters: { [key in ViewableContentType]: Formatter } = {
                     formatBufferAsync(input, 'raw', headers)
                 );
             }
-        }
+        },
+        // wirepane: big bodies are only shown in part (see MAX_HEX_VIEW_BYTES), so say so above the editor
+        metadata: {
+            cacheKey: Symbol('hex-truncation'),
+            extract: async (content: Buffer) => content.byteLength > MAX_HEX_VIEW_BYTES
+                ? { shown: MAX_HEX_VIEW_BYTES, total: content.byteLength }
+                : undefined,
+            Component: HexTruncationBanner
+        } satisfies FormatterMetadata<HexTruncation>
     },
     text: {
         language: 'text',
         cacheKey: Symbol('text'),
         isEditApplicable: false,
-        render: (input: Buffer) => {
-            return bufferToString(input);
+        render: (input: Buffer, headers?: Headers) => {
+            // wirepane: read it in the charset the response declares (e.g. windows-1251), not only UTF-8
+            return decodeWithDeclaredCharset(input, headers) ?? bufferToString(input);
         }
     },
     base64: {
@@ -121,7 +132,7 @@ export const Formatters: { [key in ViewableContentType]: Formatter } = {
         isEditApplicable: true,
         render: (input: Buffer, headers?: Headers) => {
             if (input.byteLength < 10_000) {
-                const inputAsString = bufferToString(input);
+                const inputAsString = decodeWithDeclaredCharset(input, headers) ?? bufferToString(input);
                 // wirepane: reformatting text that isn't JSON changes it, so it's shown as sent
                 return getJsonSyntax(inputAsString) === 'not-json'
                     ? inputAsString
@@ -139,7 +150,7 @@ export const Formatters: { [key in ViewableContentType]: Formatter } = {
         isEditApplicable: false,
         render: (input: Buffer, headers?: Headers) => {
             if (input.byteLength < 10_000) {
-                const inputAsString = bufferToString(input);
+                const inputAsString = decodeWithDeclaredCharset(input, headers) ?? bufferToString(input);
                 return formatJson(inputAsString, { formatRecords: true });
             } else {
                 return observablePromise(

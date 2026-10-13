@@ -74,7 +74,9 @@ export class SentResponseBodyCard extends React.Component<ExpandableCardProps & 
 
     @action.bound
     onChangeContentType(contentType: ViewableContentType | undefined) {
-        if (contentType === this.props.message?.contentType) {
+        // wirepane: compare with the view shown by default, which isn't always the type of the
+        // headers (a big binary body opens as a summary), or picking that type would do nothing.
+        if (contentType === this.contentViewOptions.preferredContentType) {
             this.selectedContentType = undefined;
         } else {
             this.selectedContentType = contentType;

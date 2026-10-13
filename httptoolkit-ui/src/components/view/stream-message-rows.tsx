@@ -225,7 +225,9 @@ export class StreamMessageEditorRow extends React.Component<MessageEditorRowProp
 
     @action.bound
     setContentType(contentType: ViewableContentType | undefined) {
-        if (contentType === this.props.message.contentType) {
+        // wirepane: compare with the view shown by default, which isn't always the message's own
+        // type (a big binary message opens as a summary), or picking that type would do nothing.
+        if (contentType === this.contentViewOptions.preferredContentType) {
             this.selectedContentType = undefined;
         } else {
             this.selectedContentType = contentType;
