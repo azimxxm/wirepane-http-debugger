@@ -8,6 +8,7 @@ import { ViewableEvent } from '../../types';
 import { DevicesStore } from '../../model/devices/devices-store';
 
 import { DeviceIcon } from './device-icon';
+import { VpnShield } from './vpn-badge';
 
 // Sits between Source and Host in View's list, at a fixed width so the header & every
 // row line up. Long names end in "…", and the host & path give way first.
@@ -39,6 +40,13 @@ const DeviceTypeIcon = styled(DeviceIcon)`
     color: ${p => p.theme.mainLowlightColor};
 `;
 
+// Holds the type icon, so a marker can sit on its corner without taking any room from the name
+const IconSlot = styled.span`
+    position: relative;
+    flex-shrink: 0;
+    display: inline-flex;
+`;
+
 /**
  * The list's Device column header. Only shown while rows have device markers: when
  * traffic came from more than one device and the Devices panel shows all of them.
@@ -51,7 +59,8 @@ export const DeviceColumnHeader = inject('devicesStore')(observer((props: {
 }));
 
 /**
- * The device that sent a row's request: its type icon & short name ("iPhone", "Pixel 8").
+ * The device that sent a row's request: its type icon & short name ("iPhone", "Pixel 8"),
+ * and a VPN shield when the request came through the VPN.
  */
 export const DeviceCell = inject('devicesStore')(observer((props: {
     devicesStore?: DevicesStore,
@@ -61,9 +70,15 @@ export const DeviceCell = inject('devicesStore')(observer((props: {
     if (!store.showDeviceMarkers) return null;
 
     const marker = store.getDeviceMarker(props.event);
-    return <DeviceColumn role='gridcell' title={marker ? `From ${marker.title}` : 'From an unknown device'}>
+    // Only a request that came through the VPN says so: a phone can use the proxy as well
+    const vpn = marker && store.describeEventVpn(props.event);
+    const origin = marker ? `From ${marker.title}` : 'From an unknown device';
+    return <DeviceColumn role='gridcell' title={vpn ? `${origin} · ${vpn}` : origin}>
         { marker && <>
-            <DeviceTypeIcon type={marker.type} size={14} />
+            <IconSlot>
+                <DeviceTypeIcon type={marker.type} size={14} />
+                { vpn && <VpnShield size={9} weight='fill' role='img' aria-label='VPN' /> }
+            </IconSlot>
             <DeviceName>{ marker.name }</DeviceName>
         </> }
     </DeviceColumn>;

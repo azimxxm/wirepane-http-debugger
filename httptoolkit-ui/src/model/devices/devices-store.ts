@@ -28,11 +28,13 @@ import {
     getDeviceTypeLabel,
     getEventAppName as getRequestEventAppName,
     getEventDeviceKey,
+    getEventVpn,
     getThisMachineName
 } from './device-model';
 import { DeviceDirectory, EventDevice, THIS_MACHINE_TYPE, setDeviceDirectory } from './device-directory';
 import { NameStorage, cleanDeviceName, loadDeviceNames, saveDeviceNames } from './device-names';
 import { DeviceSelection, DeviceSelectionFilter, isSameSelection } from './device-selection-filter';
+import { VpnPeerNames, describeVpn } from './vpn-peer-names'; // wirepane
 
 export const DEFAULT_DEVICES_PANEL_WIDTH = 216;
 export const MIN_DEVICES_PANEL_WIDTH = 180;
@@ -94,6 +96,8 @@ export interface DeviceMarker {
 interface DevicesStoreOptions {
     nameStorage?: NameStorage;
     thisMachineType?: DeviceType;
+    // wirepane: the VPN devices' names. Tests give their own, so none asks a server.
+    vpnPeerNames?: VpnPeerNames;
 }
 
 // The end of an address, to tell apart devices with the same name: ".23" or ":5a2f"
@@ -115,6 +119,7 @@ export class DevicesStore implements DeviceDirectory {
 
     private readonly tracker = new DeviceTracker();
     private readonly thisMachineType: DeviceType;
+    private readonly vpnPeerNames: VpnPeerNames; // wirepane
     private disposers: Array<Lambda | IReactionDisposer> = [];
 
     constructor(
@@ -122,6 +127,7 @@ export class DevicesStore implements DeviceDirectory {
         private readonly options: DevicesStoreOptions = {}
     ) {
         this.thisMachineType = options.thisMachineType ?? THIS_MACHINE_TYPE;
+        this.vpnPeerNames = options.vpnPeerNames ?? new VpnPeerNames();
         this.customNames = loadDeviceNames(options.nameStorage);
     }
 
@@ -139,6 +145,7 @@ export class DevicesStore implements DeviceDirectory {
 
         this.startTracking();
         this.watchForOtherDevices();
+        this.watchVpnPeers();
         this.watchSelection();
         setDeviceDirectory(this);
 
@@ -456,8 +463,7 @@ export class DevicesStore implements DeviceDirectory {
     private get deviceMarkers(): { [key: string]: DeviceMarker } {
         return _.fromPairs(this.devices.map((device) => [device.key, {
             name: device.shortName,
-            title: (device.address ? `${device.name} (${device.address})` : device.name) +
-                (device.viaVpn ? ' · through the VPN' : ''),
+            title: device.address ? `${device.name} (${device.address})` : device.name,
             type: device.type,
             viaVpn: device.viaVpn
         }]));
@@ -466,6 +472,46 @@ export class DevicesStore implements DeviceDirectory {
     getDeviceMarker(event: ViewableEvent): DeviceMarker | undefined {
         const key = this.getEventDeviceKey(event);
         return key ? this.deviceMarkers[key] : undefined;
+    }
+
+    // --- VPN devices ---
+
+    // wirepane: the ids of the VPN peers in the captured traffic. Just the ids, as the names
+    // come from the server and so don't need the tracker's counts.
+    @computed({ equals: comparer.structural })
+    private get vpnPeerIds(): string[] {
+        this.revision; // Re-derived whenever the tracked traffic changes
+        return _.sortBy(_.uniq(_.flatMap(
+            [...this.tracker.devices.values()],
+            (stats) => [...stats.vpnPeers.keys()]
+        )));
+    }
+
+    // Asks the server for the peers' names when the first VPN traffic arrives, and again only
+    // when a peer shows up that it hasn't named (a second phone), never on a timer.
+    private watchVpnPeers() {
+        this.disposers.push(reaction(
+            () => this.vpnPeerIds,
+            (peerIds) => { this.vpnPeerNames.ensureNamed(peerIds); },
+            { equals: comparer.structural, fireImmediately: true }
+        ));
+    }
+
+    // What the Devices panel says about a device that connected through the VPN: "through the
+    // VPN (iPhone)", with the names the server gave its peers
+    describeDeviceVpn(device: Pick<DeviceSummary, 'vpnPeers'>): string {
+        return describeVpn(this.vpnPeerNames.namesOf(device.vpnPeers));
+    }
+
+    /**
+     * What a request row says about the VPN, if that request itself came through the tunnel.
+     * A phone that used the proxy directly as well has rows of both kinds, so this is
+     * per request, unlike the device's `viaVpn`.
+     */
+    describeEventVpn(event: ViewableEvent): string | undefined {
+        const vpn = getEventVpn(getClientEvent(event));
+        if (!vpn) return undefined;
+        return describeVpn(vpn.peer ? [this.vpnPeerNames.nameOf(vpn.peer)] : []);
     }
 
     // --- Selection ---

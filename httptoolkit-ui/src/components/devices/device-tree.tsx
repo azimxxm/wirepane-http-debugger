@@ -15,6 +15,7 @@ import { DevicesStore, DeviceSummary } from '../../model/devices/devices-store';
 import { MAX_DEVICE_NAME_LENGTH } from '../../model/devices/device-names';
 
 import { DeviceIcon } from './device-icon';
+import { VpnBadge } from './vpn-badge';
 import {
     DeviceTreeRow,
     SelectableRow,
@@ -151,18 +152,6 @@ const RowNameLine = styled.span`
     display: flex;
     align-items: center;
     gap: 5px;
-`;
-
-const VpnBadge = styled.span`
-    flex-shrink: 0;
-    padding: 0 4px;
-    border-radius: 3px;
-    border: 1px solid ${p => p.theme.containerBorder};
-
-    font-size: ${p => p.theme.tinyTextSize};
-    font-weight: 600;
-    line-height: 14px;
-    color: ${p => p.theme.mainLowlightColor};
 `;
 
 const RowAddress = styled.span`
@@ -303,9 +292,6 @@ const AppIcon = (props: { app: AppCount }) => {
         fixedWidth={isFontAwesome}
     />;
 };
-
-const describeVpn = (device: DeviceSummary) =>
-    `Connected through the VPN${device.vpnPeers.length ? ` (${device.vpnPeers.join(', ')})` : ''}`;
 
 function describeRow(row: SelectableRow, isActive: boolean): string {
     switch (row.kind) {
@@ -544,7 +530,7 @@ export const DeviceTree = observer((props: {
                             />
                             : <RowNameLine>
                                 <RowLabel isMuted={row.device.eventCount === 0}>{ row.device.name }</RowLabel>
-                                { row.device.viaVpn && <VpnBadge title={describeVpn(row.device)}>VPN</VpnBadge> }
+                                { row.device.viaVpn && <VpnBadge title={`Connected ${store.describeDeviceVpn(row.device)}`}>VPN</VpnBadge> }
                             </RowNameLine>
                         }
                         <RowAddress className='row-secondary'>{ row.device.address ?? 'localhost' }</RowAddress>

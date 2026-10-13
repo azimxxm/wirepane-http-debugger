@@ -216,7 +216,7 @@ describe('Device and app naming', () => {
             add(event, deviceExchange({ ip: '127.0.0.1', ua: UA.curl }));
 
             expect(store.getDeviceMarker(event)).to.deep.include({ name: 'iPhone', type: 'iphone', viaVpn: true });
-            expect(store.getDeviceMarker(event)!.title).to.contain('through the VPN');
+            expect(store.describeEventVpn(event)).to.contain('through the VPN'); // Per request, not per device
             expect(getDeviceDirectory().getEventDevice(event)).to.deep.equal({ key: PHONE, type: 'iphone' });
         });
 
