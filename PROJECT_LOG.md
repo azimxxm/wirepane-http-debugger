@@ -2,6 +2,12 @@
 
 ## 2026-10-13
 
+### Intel Mac build on the v1.1.0 release
+
+- **Built:** a `darwin-x64` target in `build-server.sh` and `build-tunnel.sh` (`x86_64-apple-darwin`), `mac-x64` in `build-release.sh` (on Apple Silicon it needs Rosetta 2, which runs the server and helper checks), the Mac CPU taken from `WIREPANE_SERVER_TARGET` in the builder config, `minimumSystemVersion` 13.5 (Node.js 24's macOS binary is built for 13.5, so "macOS 12" was wrong for both CPUs), one-line `scripts/build-<platform>.sh` shortcuts, and a `mac-x64` CI job on `macos-14` with Rosetta (linted, not run).
+- **Checks:** all 31 Mach-O files of the pkg's app are x86_64; the ad-hoc signature verifies; the pkg's Distribution says `hostArchitectures="x86_64"` and `os-version min="13.5"`; the server release started under Rosetta (tls-impersonate, `.bru` read, Postman import); a hidden run of the pkg's own app: UI from `wirepane://app`, proxy up, HTTP and HTTPS (Wirepane CA) requests in View, clean quit. Under Rosetta the UI takes ~45 s to start against 6 s for the published arm64 app (one 10 s startup timeout, then it recovers): that's Rosetta. Not tried on a real Intel Mac.
+- **Released:** `Wirepane-1.1.0-mac-x64.pkg` (SHA-256 `bbe15582d12c1b60b07f3dc5a43e9d2980e514c38559f5ec517289342e01e6d6`) added to v1.1.0 with `gh release upload`; the notes got the Intel row, how to tell the Macs apart, and macOS 13.5 for both.
+
 ### VPN mode polish, and the plan for nine network tools
 
 - **Merged into main (local, not pushed):** VPN peer names and a VPN marker on devices; `./setup.sh` builds the helper (start.sh warns when it's missing); a test for stopping VPN mode; the helper's WireGuard timers, handshake limiter, ICMP for blocked QUIC, `stats`/`udp-update`, DNS-over-TCP test and throughput test; View column headers polish (arrow and chevron, multi-pick, `status=4xx`/`type=` in the filter box); body viewer Hex cut for big bodies, legacy charsets, WebSocket/Send checks; iPhone page remembers its mode, lists VPN devices with Remove, Settings › Proxy shows the passthrough hosts; README/release notes/publish checklist for VPN mode.

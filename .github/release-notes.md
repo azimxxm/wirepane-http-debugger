@@ -4,11 +4,14 @@ Wirepane is built on [HTTP Toolkit](https://httptoolkit.com) (AGPL-3.0) and uses
 
 ## Download
 
-| System                                          | File                                                                                                                                                                             |
-| ----------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| macOS 12 or later, Apple Silicon (M1 and newer) | `Wirepane-{{VERSION}}-mac-arm64.pkg` (installer), or `Wirepane-{{VERSION}}-mac-arm64.zip` (the app)                                                                              |
-| Windows 10 and 11, x64                          | `Wirepane-{{VERSION}}-win-x64-setup.exe` (installer), or `Wirepane-{{VERSION}}-win-x64.zip` (no install)                                                                         |
-| Linux, x64                                      | `Wirepane-{{VERSION}}-linux-amd64.deb` (Debian, Ubuntu), `Wirepane-{{VERSION}}-linux-x86_64.rpm` (Fedora, RHEL), `Wirepane-{{VERSION}}-linux-x86_64.AppImage` (any distribution) |
+| System                                            | File                                                                                                                                                                             |
+| ------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| macOS 13.5 or later, Apple Silicon (M1 and newer) | `Wirepane-{{VERSION}}-mac-arm64.pkg` (installer), or `Wirepane-{{VERSION}}-mac-arm64.zip` (the app)                                                                              |
+| macOS 13.5 or later, Intel                        | `Wirepane-{{VERSION}}-mac-x64.pkg` (installer), or `Wirepane-{{VERSION}}-mac-x64.zip` (the app)                                                                                  |
+| Windows 10 and 11, x64                            | `Wirepane-{{VERSION}}-win-x64-setup.exe` (installer), or `Wirepane-{{VERSION}}-win-x64.zip` (no install)                                                                         |
+| Linux, x64                                        | `Wirepane-{{VERSION}}-linux-amd64.deb` (Debian, Ubuntu), `Wirepane-{{VERSION}}-linux-x86_64.rpm` (Fedora, RHEL), `Wirepane-{{VERSION}}-linux-x86_64.AppImage` (any distribution) |
+
+Not sure which Mac you have? Apple menu → **About This Mac**: "Chip: Apple M…" is Apple Silicon, "Processor: … Intel …" is Intel. The Intel build also runs on Apple Silicon through Rosetta, but it starts several times slower there, so take the arm64 one on those Macs.
 
 `SHA256SUMS.txt` has the SHA-256 checksum of every file.
 
@@ -34,7 +37,7 @@ Wirepane — developerlar, QA va boshlovchilar uchun bepul HTTP(S) debugger. U [
 
 Bu build'lar hali imzolanmagan, shuning uchun birinchi ochishda ogohlantirish chiqadi:
 
-- **macOS:** `.pkg`ni oching. macOS to'xtatsa: faylni o'ng tugma bilan bosib **Open** → **Open**, yoki System Settings → Privacy & Security → **Open Anyway**.
+- **macOS:** Apple Silicon (M1 va yangiroq) uchun `mac-arm64`, Intel uchun `mac-x64` fayl; ikkalasiga macOS 13.5 yoki yangiroq kerak. `.pkg`ni oching. macOS to'xtatsa: faylni o'ng tugma bilan bosib **Open** → **Open**, yoki System Settings → Privacy & Security → **Open Anyway**.
 - **Windows:** setup `.exe`ni ishga tushiring. SmartScreen chiqsa: **More info** → **Run anyway**.
 - **Linux:** `.deb` yoki `.rpm`ni o'rnating. AppImage uchun avval `chmod +x Wirepane-{{VERSION}}-linux-x86_64.AppImage`, keyin ishga tushiring.
 

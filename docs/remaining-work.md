@@ -2,7 +2,7 @@
 
 > **Bu fayl keyingi sessiyalar uchun asosiy ish ro'yxati.** Qisqa holat va navbatdagi ishlar: [`docs/next-steps.md`](next-steps.md).
 >
-> **Holat:** `feature/rebrand` `main`ga merge qilingan va push qilingan (2026-10-12). Release **v1.1.0** chiqdi (2026-10-13, faqat macOS arm64 `.pkg`). Windows va Linux egasi aytguncha "tez orada" bo'lib turadi.
+> **Holat:** `feature/rebrand` `main`ga merge qilingan va push qilingan (2026-10-12). Release **v1.1.0** chiqdi (2026-10-13, macOS arm64 `.pkg`; o'sha kuni Intel x64 `.pkg` ham qo'shildi). Windows va Linux egasi aytguncha "tez orada" bo'lib turadi.
 >
 > **Har bir ish uchun tartib:**
 >
@@ -181,13 +181,14 @@ Hisobot: [`docs/design/critique-2026-10-12.md`](design/critique-2026-10-12.md). 
 
 Versiya — repo ildizidagi `VERSION` fayli: **1.0.0**. App va server'ning ichki versiyasi `1.27.2` bo'lib qoladi, chunki UI feature'larni shu versiyaga qarab yoqadi. Shuning uchun Finder, Windows'dagi ilovalar ro'yxati va `apt` hali `1.27.2` ko'rsatadi. `1.0.0` esa fayl nomlarida, release tag'ida, macOS'dagi About oynasida ("1.0.0 (based on HTTP Toolkit 1.27.2)") va Settings → Status'da ko'rinadi.
 
-| Tizim                | Buyruq (o'sha tizimning o'zida)                                  | Fayllar (`httptoolkit-desktop/dist/`)                                                                       |
-| -------------------- | ---------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
-| macOS, Apple Silicon | `./scripts/build-release.sh mac` (yoki `./scripts/build-pkg.sh`) | `Wirepane-1.0.0-mac-arm64.pkg`, `Wirepane-1.0.0-mac-arm64.zip`                                              |
-| Windows x64          | `./scripts/build-release.sh win` (Git Bash'da)                   | `Wirepane-1.0.0-win-x64-setup.exe`, `Wirepane-1.0.0-win-x64.zip`                                            |
-| Linux x64            | `./scripts/build-release.sh linux` (`rpmbuild` kerak)            | `Wirepane-1.0.0-linux-x86_64.AppImage`, `Wirepane-1.0.0-linux-amd64.deb`, `Wirepane-1.0.0-linux-x86_64.rpm` |
+| Tizim                | Buyruq (o'sha tizimning o'zida)                                                            | Fayllar (`httptoolkit-desktop/dist/`)                                                                       |
+| -------------------- | ------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------- |
+| macOS, Apple Silicon | `./scripts/build-release.sh mac` (yoki `./scripts/build-pkg.sh`)                           | `Wirepane-1.0.0-mac-arm64.pkg`, `Wirepane-1.0.0-mac-arm64.zip`                                              |
+| macOS, Intel         | `./scripts/build-release.sh mac-x64` (Intel Mac'da, yoki Rosetta 2 bilan Apple Silicon'da) | `Wirepane-1.0.0-mac-x64.pkg`, `Wirepane-1.0.0-mac-x64.zip`                                                  |
+| Windows x64          | `./scripts/build-release.sh win` (Git Bash'da)                                             | `Wirepane-1.0.0-win-x64-setup.exe`, `Wirepane-1.0.0-win-x64.zip`                                            |
+| Linux x64            | `./scripts/build-release.sh linux` (`rpmbuild` kerak)                                      | `Wirepane-1.0.0-linux-x86_64.AppImage`, `Wirepane-1.0.0-linux-amd64.deb`, `Wirepane-1.0.0-linux-x86_64.rpm` |
 
-GitHub'da `.github/workflows/release.yml` uchala tizimda yig'adi va draft release `v1.0.0` yaratadi: 7 ta fayl, `SHA256SUMS.txt` va `.github/release-notes.md`dagi matn. Hammasi imzosiz, `GITHUB_TOKEN`dan boshqa secret kerak emas.
+GitHub'da `.github/workflows/release.yml` uchala tizimda yig'adi va draft release `v1.0.0` yaratadi: 9 ta fayl (2026-10-13 dan Intel Mac bilan; oldin 7 ta), `SHA256SUMS.txt` va `.github/release-notes.md`dagi matn. Hammasi imzosiz, `GITHUB_TOKEN`dan boshqa secret kerak emas.
 
 macOS natijasi (2026-10-12): `.pkg` 197 MiB (oldin 210), `.zip` 199 MiB, o'rnatilgan app 525 MB (oldin 911 MB).
 
@@ -255,7 +256,7 @@ Tekshirilgan (2026-10-12, 1.0.0, shu Mac'da):
    - **Windows va Linux sidecar build'lari CI'da hali ishlamagan.** `release.yml`dagi Rust qadami (`rustup target add`, keyin `build-release.sh` ichida `scripts/build-tunnel.sh <target>`) `12a5b106a`da qo'shildi. CI'dagi yagona run (`38241881241`, bekor qilingan, `7c24fab`) undan oldin bo'lgan, ya'ni sidecar CI'da hech bir tizimda, macOS'da ham yig'ilmagan. `x86_64-pc-windows-msvc` va `x86_64-unknown-linux-musl` (`musl-tools`) build'lari ham, sidecar'ning Windows va Linux'da ishlashi ham sinalmagan (`wirepane-tunnel/README.md`: faqat macOS arm64 yig'ilgan va sinalgan). Birinchi CI run'dan keyin har bir artifact'da `Resources/wirepane-tunnel/` bor-yo'qligini va helper ishga tushishini tekshirish.
    - **Matnlar.** README ("Telefon trafigi") va `.github/release-notes.md` ("VPN mode" bo'limi va o'zbekcha paragraf) VPN rejimini tasvirlaydi. Release notes shabloni hamma tizimni sanaydi: mac-only draft'ga ham VPN paragrafi ko'chiriladi (u "faqat macOS'da sinalgan" deydi, to'g'ri qoladi).
 
-**Tarqatish (egasining qarori, 2026-10-12):** imzosiz **`.pkg`** installer, ichida ad-hoc imzolangan arm64 `Wirepane.app`. Windows va Linux installer'lari ham imzosiz (2026-10-12). Apple Developer akkaunti yo'q, egasi ariza beradi. Shuning uchun:
+**Tarqatish (egasining qarori, 2026-10-12):** imzosiz **`.pkg`** installer, ichida ad-hoc imzolangan arm64 `Wirepane.app`. 2026-10-13 dan Intel Mac'lar uchun x64 `.pkg` ham bor (`./scripts/build-release.sh mac-x64`), ikkalasi macOS 13.5+ talab qiladi. Windows va Linux installer'lari ham imzosiz (2026-10-12). Apple Developer akkaunti yo'q, egasi ariza beradi. Shuning uchun:
 
 - barcha qoidalar akkauntsiz ishlaydi (CLAUDE.md, "Distribution" bo'limi);
 - notarize va Developer ID imzosi akkaunt kelgach qo'shiladi.

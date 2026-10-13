@@ -10,15 +10,18 @@ Developerlar va QA uchun bepul, ochiq kodli HTTP(S) debugger. U brauzer, iPhone,
 
 Installer [GitHub Releases](https://github.com/azimxxm/wirepane-http-debugger/releases) sahifasida (birinchi release: [v1.1.0](https://github.com/azimxxm/wirepane-http-debugger/releases/tag/v1.1.0), 2026-10-13). Eng oxirgi versiyani oching va faylni yuklab oling:
 
-| Tizim                                                  | Fayl                               |
-| ------------------------------------------------------ | ---------------------------------- |
-| macOS 12 yoki yangiroq, Apple Silicon (M1 va yangiroq) | `Wirepane-<versiya>-mac-arm64.pkg` |
-| Windows 10 va 11, x64                                  | tez orada                          |
-| Linux, x64                                             | tez orada                          |
+| Tizim                                                    | Fayl                               |
+| -------------------------------------------------------- | ---------------------------------- |
+| macOS 13.5 yoki yangiroq, Apple Silicon (M1 va yangiroq) | `Wirepane-<versiya>-mac-arm64.pkg` |
+| macOS 13.5 yoki yangiroq, Intel                          | `Wirepane-<versiya>-mac-x64.pkg`   |
+| Windows 10 va 11, x64                                    | tez orada                          |
+| Linux, x64                                               | tez orada                          |
+
+Qaysi Mac ekanini Apple menyusi → **About This Mac** ko'rsatadi: "Chip: Apple M…" — Apple Silicon, "Processor: … Intel …" — Intel. Intel build Apple Silicon'da ham Rosetta orqali ishlaydi, lekin bir necha baravar sekin ochiladi, shuning uchun u yerda arm64 faylini oling.
 
 Installer hali imzolanmagan: Apple Developer akkaunti ham, kod imzolash sertifikati ham yo'q. Shuning uchun birinchi ochishda macOS ogohlantiradi: `.pkg`ni ikki marta bosing, macOS uni tekshira olmaganini aytsa, `.pkg` ustida o'ng tugma → **Open** → **Open**, yoki System Settings → Privacy & Security → **Open Anyway**. Keyin qadamlardan o'ting: app `/Applications`ga o'rnatiladi ("faqat men uchun" tanlansa, `~/Applications`ga). App ham shunday to'xtatilsa, unda ham o'ng tugma → **Open**.
 
-`.pkg`ning SHA-256'i release sahifasida yozilgan. HTTPS trafikni ko'rish uchun qurilma **Wirepane CA** sertifikatiga ishonishi kerak: buni app'dagi **Intercept** sahifasi har bir qurilma uchun ko'rsatadi.
+Har bir `.pkg`ning SHA-256'i release sahifasida yozilgan. HTTPS trafikni ko'rish uchun qurilma **Wirepane CA** sertifikatiga ishonishi kerak: buni app'dagi **Intercept** sahifasi har bir qurilma uchun ko'rsatadi.
 
 ## Asosiy source'lar
 
@@ -53,17 +56,20 @@ Finder'dan ochish: `Start Wirepane.command` faylini ikki marta bosing. Log'lar `
 
 ### Installer'larni yig'ish
 
-Har bir installer o'z tizimida yig'iladi:
+Har bir installer o'z tizimida yig'iladi (Intel Mac build'i Rosetta 2 o'rnatilgan Apple Silicon Mac'da ham):
 
 ```bash
-./scripts/build-release.sh mac     # Apple Silicon Mac'da: .pkg va .zip (./scripts/build-pkg.sh ham shuni qiladi)
-./scripts/build-release.sh win     # Windows x64'da, Git Bash ichida: setup .exe va .zip
-./scripts/build-release.sh linux   # Linux x64'da: .AppImage, .deb va .rpm (.rpm uchun rpmbuild kerak)
+./scripts/build-release.sh mac       # Apple Silicon Mac'da: .pkg va .zip (./scripts/build-pkg.sh ham shuni qiladi)
+./scripts/build-release.sh mac-x64   # Intel Mac'lar uchun .pkg va .zip: Intel Mac'da yoki Rosetta 2 o'rnatilgan Apple Silicon Mac'da
+./scripts/build-release.sh win       # Windows x64'da, Git Bash ichida: setup .exe va .zip
+./scripts/build-release.sh linux     # Linux x64'da: .AppImage, .deb va .rpm (.rpm uchun rpmbuild kerak)
 ```
+
+Har bir tizim uchun bir qatorli alohida fayl ham bor: `./scripts/build-mac-arm64.sh`, `./scripts/build-mac-x64.sh`, `./scripts/build-win.sh`, `./scripts/build-linux.sh`. Ular shu skriptni chaqiradi, shuning uchun kod bitta joyda qoladi.
 
 Skript Bruno, server, UI va desktop'ni yig'adi va oxirida fayllarni ko'rsatadi: `httptoolkit-desktop/dist/Wirepane-<versiya>-...`. Versiya — repo ildizidagi `VERSION` fayli (hozir `1.1.0`). Server ham, UI ham shu repo'dagi koddan yig'iladi. Internetdan faqat Node.js (har tizim uchun bir marta, `build/cache`da saqlanadi) va npm package'lari yuklanadi. Sertifikat yoki akkaunt kerak emas. Mac'da yig'ish bir necha daqiqa oladi.
 
-**GitHub Actions:** `.github/workflows/release.yml` uchala tizimda yig'adi va hamma fayllarni draft GitHub release'ga (`v<versiya>`) qo'yadi. Ishga tushirish: Actions → Release → **Run workflow** (versiya bo'sh qolsa, `VERSION`dan olinadi) yoki `v1.1.0` kabi tag push qilish. Draft tekshirilgach, qo'lda **Publish** qilinadi.
+**GitHub Actions:** `.github/workflows/release.yml` uchala tizimda (macOS'da Apple Silicon va Intel uchun alohida) yig'adi va hamma fayllarni draft GitHub release'ga (`v<versiya>`) qo'yadi. Ishga tushirish: Actions → Release → **Run workflow** (versiya bo'sh qolsa, `VERSION`dan olinadi) yoki `v1.1.0` kabi tag push qilish. Draft tekshirilgach, qo'lda **Publish** qilinadi.
 
 ## Nimani qayerda o'zgartirish
 
@@ -161,7 +167,7 @@ O'zgartirgan kodingiz saqlanib qoladi. Conflict chiqsa, uni oddiy `git merge`dag
   2. Server o'zini yangilamaydi: `update-requested` e'tiborsiz qoldiriladi, oclif'ning update plugin'i olib tashlandi. Server'ni ishga tushiruvchi skript faqat app ichidagi server'ni ishga tushiradi. Rasmiy app'ning `~/.local/share/httptoolkit-server` papkasiga tegilmaydi.
   3. UI app ichida va `wirepane://app` manzilidan ochiladi. Release server faqat shu origin'ga ruxsat beradi. Sozlamalar va Send tab'lari app qayta ochilganda ham saqlanadi.
   4. App ad-hoc imzolanadi, `.pkg` imzosiz, notarize yo'q. Build sertifikatsiz Mac'da ishlaydi.
-  - [x] Birinchi release **v1.1.0** (2026-10-13): faqat macOS arm64 `.pkg`, VPN rejimi va Phone network tool'lari bilan.
+  - [x] Birinchi release **v1.1.0** (2026-10-13): macOS arm64 `.pkg`, VPN rejimi va Phone network tool'lari bilan. O'sha kuni Intel Mac'lar uchun `x64` `.pkg` ham qo'shildi.
   - [ ] Windows (setup `.exe`, `.zip`) va Linux (`.AppImage`, `.deb`, `.rpm`): **tez orada**, egasi aytganda chiqariladi. Hammasi imzosiz; `./scripts/build-release.sh <mac|win|linux>` va GitHub Actions'dagi `release.yml` tayyor. Birinchi CI run'da mac build o'tdi, Windows va Linux build'lari tugashidan oldin to'xtatildi.
   - Akkaunt kelgach: Developer ID imzosi, hardened runtime va notarize. Ular `ENABLE_SIGNING=true` bilan yoqiladigan yo'lga qo'shiladi, imzosiz yo'l zaxira bo'lib qoladi.
 - [x] Barcha Pro feature'lar hamma uchun bepul. Akkaunt, login va to'lov yo'q. Map Local, Map Remote, mock, rewrite, delay, block, Settings (proxy, connection, API, themes), saqlanadigan rules, HAR import/export va MCP/CLI cheklovsiz ishlaydi.

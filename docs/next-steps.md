@@ -1,8 +1,14 @@
 # Next steps: start here
 
-Last updated 2026-10-13 (afternoon). A new session (or one after /clear or /compact) reads this file first, then `docs/remaining-work.md` (the full list, Uzbek) and the top of `PROJECT_LOG.md`.
+Last updated 2026-10-13 (evening). A new session (or one after /clear or /compact) reads this file first, then `docs/remaining-work.md` (the full list, Uzbek) and the top of `PROJECT_LOG.md`.
 
 **Qisqacha (o'zbekcha):** iPhone sinovidagi UI xatolari tuzatildi, VPN rejimining 1-bosqichi (WireGuard) qurildi va `main`ga push qilindi. Egasining iPhone'i Wirepane'ning o'z VPN'iga ulandi. Endi egasidan ilovalar bo'yicha natija va packaged app sinovi kutilyapti, kod tomonda esa quyidagi ro'yxat qoldi. Release faqat egasi aytganda.
+
+## Done on 2026-10-13 (evening): Intel Mac build on the v1.1.0 release
+
+- `./scripts/build-release.sh mac-x64` (or `scripts/build-mac-x64.sh`) builds `Wirepane-<VERSION>-mac-x64.pkg` and `.zip`; on Apple Silicon it needs Rosetta 2, which runs the server and VPN helper checks. CI has a `mac-x64` job on `macos-14` with Rosetta (not run yet).
+- Both Mac builds now need macOS 13.5 (`minimumSystemVersion`): the bundled Node.js 24 is built for 13.5, so the old "macOS 12" was wrong for both.
+- `Wirepane-1.1.0-mac-x64.pkg` is on the v1.1.0 release (`gh release upload`, SHA-256 `bbe15582…`), with the release notes updated. Checked through Rosetta on this Mac (every binary x86_64, signature, installer rules, hidden run with HTTP and HTTPS in View); never on a real Intel Mac. Under Rosetta the UI starts in ~45 s (arm64: 6 s), one startup timeout, then it recovers.
 
 ## Done on 2026-10-13: nine network tools on VPN mode (merged into main, not pushed)
 
@@ -29,7 +35,7 @@ Plan: `docs/plans/2026-10-13-rust-network-tools.md`. Three workflows (build 10 a
 
 ## State
 
-- `main` holds everything and is pushed. **Release v1.1.0** (2026-10-13) is on GitHub with the macOS arm64 `.pkg` only; Windows and Linux stay "coming soon" until the owner says.
+- `main` holds everything and is pushed. **Release v1.1.0** (2026-10-13) is on GitHub with the macOS arm64 and Intel (x64) `.pkg`s; Windows and Linux stay "coming soon" until the owner says.
 - Nothing is running. Start the dev instance for checks with `./start.sh --no-window` (UI http://localhost:45458, API :45457, Mockttp admin :45456), in the background.
 - Test pkg with VPN mode for the owner: `~/Downloads/Wirepane-1.0.0-vpn-test-mac-arm64.pkg` (built 2026-10-12 from `57ce4b2e1`'s code).
 - The sidecar's dev build lives in `wirepane-tunnel/target/release/wirepane-tunnel` (gitignored; `cd wirepane-tunnel && cargo build --release --locked`). The dev server's `wireguard-vpn` interceptor finds it there.
@@ -39,7 +45,7 @@ Plan: `docs/plans/2026-10-13-rust-network-tools.md`. Three workflows (build 10 a
 
 1. **App-by-app result over Wirepane's own VPN** (dev): Jett, Road24, TelecomTV, OddiyTV. The iPhone completed a WireGuard handshake with the dev sidecar on 2026-10-12 18:03; what showed up in View wasn't reported yet.
 2. **Packaged VPN test:** install the test pkg, Intercept › iPhone or iPad › Capture all apps (VPN) › Start, scan the QR. Check the macOS Local Network prompt (TN3179): it only appears for the packaged app, never for terminal-launched dev runs.
-3. **Release:** only when the owner says. Then `gh release create v1.0.0 <pkg> --target main` with mac-only notes (a mac-only notes draft was used before; the template `.github/release-notes.md` still lists every OS).
+3. **Next release:** only when the owner says. Raise `VERSION`, build `./scripts/build-release.sh mac` and `mac-x64`, check both hidden (the x64 one runs through Rosetta), then `gh release create v<VERSION> <both pkgs> --target main` with notes cut from `.github/release-notes.md` (mac rows only while Windows and Linux are "coming soon").
 
 ## How to rerun the VPN checks without a phone
 
