@@ -24,6 +24,9 @@
 //! still in your queue". For the order to hold, a packet of one direction is only ever `Now` when
 //! no earlier one of that direction was released in the last `QUEUE_GRACE` (50 ms), because your
 //! timer may not have sent that one yet. Release instants of one direction strictly increase.
+//!
+//! Changing the conditions of a running phone (`Shaper::set_conditions`) keeps that order state, so
+//! the first packet after the change still waits behind the ones the old conditions delayed.
 
 use std::time::{Duration, Instant};
 
@@ -133,6 +136,22 @@ impl Shaper {
         self.conditions
     }
 
+    /// Switches to other conditions. The bandwidth buckets start over, but the release instants of
+    /// the packets already delayed are kept: a packet after the change never overtakes one from
+    /// before it, however much faster the new conditions are.
+    pub fn set_conditions(&mut self, conditions: Conditions) {
+        let conditions = conditions.sanitized();
+        self.conditions = conditions;
+        self.from_phone = self.from_phone.reconfigured(conditions.up_kbps);
+        self.to_phone = self.to_phone.reconfigured(conditions.down_kbps);
+    }
+
+    /// True when no packet of this shaper can still be waiting in the caller's queue at `now`
+    /// (the same test as the order rule in the module docs).
+    pub fn is_idle(&self, now: Instant) -> bool {
+        !self.from_phone.is_queued(now) && !self.to_phone.is_queued(now)
+    }
+
     /// Called for every IP packet of the phone, in order. `len` is the packet's size in bytes.
     pub fn admit(&mut self, direction: Direction, len: usize, now: Instant) -> Verdict {
         if self.is_lost() {
@@ -212,6 +231,16 @@ impl Lane {
         }
     }
 
+    /// A lane for another rate that remembers when its last delayed packet is released.
+    fn reconfigured(&self, kbps: u32) -> Lane {
+        Lane { last_release: self.last_release, ..Lane::new(kbps) }
+    }
+
+    /// Does a delayed packet of this lane possibly still sit in the caller's queue?
+    fn is_queued(&self, now: Instant) -> bool {
+        self.last_release.is_some_and(|last| still_in_queue(last, now))
+    }
+
     /// Takes `len` bytes of tokens and says when the packet gets through the bandwidth limit.
     /// `None` means the queue is too long: the packet is dropped and nothing is taken.
     fn pay_for_bandwidth(&mut self, len: usize, now: Instant) -> Option<Instant> {
@@ -246,17 +275,16 @@ impl Lane {
         // Does an earlier packet of this direction wait, or did it only just come due?
         let mut behind_earlier = false;
 
-        if let Some(last) = self.last_release {
-            let still_in_queue = last.checked_add(QUEUE_GRACE).is_none_or(|until| until > now);
-            if still_in_queue {
-                behind_earlier = true;
-                // One nanosecond later keeps the instants strictly increasing, so a queue sorted
-                // by instant keeps the order.
-                let Some(after_last) = last.checked_add(Duration::from_nanos(1)) else {
-                    return Verdict::Drop;
-                };
-                release = release.max(after_last);
-            }
+        if let Some(last) = self.last_release
+            && still_in_queue(last, now)
+        {
+            behind_earlier = true;
+            // One nanosecond later keeps the instants strictly increasing, so a queue sorted
+            // by instant keeps the order.
+            let Some(after_last) = last.checked_add(Duration::from_nanos(1)) else {
+                return Verdict::Drop;
+            };
+            release = release.max(after_last);
         }
 
         if release <= now && !behind_earlier {
@@ -265,6 +293,12 @@ impl Lane {
         self.last_release = Some(release);
         Verdict::At(release)
     }
+}
+
+/// A packet released at `last` may still be in the caller's queue at `now`, up to `QUEUE_GRACE`
+/// after its instant.
+fn still_in_queue(last: Instant, now: Instant) -> bool {
+    last.checked_add(QUEUE_GRACE).is_none_or(|until| until > now)
 }
 
 /// The random numbers for loss and jitter: SplitMix64, tiny and good enough here. Not for secrets.
@@ -491,6 +525,59 @@ mod tests {
 
         // The other direction never had a delayed packet
         assert_eq!(shaper.admit(Direction::ToPhone, 10, clock.now()), Verdict::Now);
+    }
+
+    #[test]
+    fn new_conditions_keep_a_packet_behind_the_ones_the_old_conditions_delayed() {
+        let mut clock = FakeClock::new();
+        let mut shaper = Shaper::with_seed(Conditions { latency_ms: 500, ..conditions() }, SEED);
+        let before = at(shaper.admit(Direction::ToPhone, 100, clock.now()));
+        assert_wait_ms(&clock, Verdict::At(before), 500.0);
+
+        // The phone's conditions change to ones with no delay at all, 10 ms later
+        clock.advance_ms(10);
+        shaper.set_conditions(conditions());
+        assert_eq!(shaper.conditions(), conditions());
+        let after = shaper.admit(Direction::ToPhone, 100, clock.now());
+        assert!(
+            matches!(after, Verdict::At(release) if release > before),
+            "the new packet must wait behind the delayed one, got {after:?}"
+        );
+
+        // The other direction had nothing delayed
+        assert_eq!(shaper.admit(Direction::FromPhone, 100, clock.now()), Verdict::Now);
+    }
+
+    #[test]
+    fn new_conditions_with_a_shorter_delay_do_not_release_a_packet_before_an_earlier_one() {
+        let mut clock = FakeClock::new();
+        let mut shaper = Shaper::with_seed(Conditions { latency_ms: 300, up_kbps: 80, ..conditions() }, SEED);
+        let first = at(shaper.admit(Direction::FromPhone, 100, clock.now()));
+
+        clock.advance_ms(5);
+        shaper.set_conditions(Conditions { latency_ms: 20, up_kbps: 8_000, ..conditions() });
+        let second = at(shaper.admit(Direction::FromPhone, 100, clock.now()));
+        assert!(second > first, "{second:?} is not after {first:?}");
+
+        // The new rate is in force: a 1500-byte packet fits the new bucket at once
+        let third = at(shaper.admit(Direction::FromPhone, 1500, clock.now()));
+        assert!(third > second);
+        assert!(third.duration_since(second) < Duration::from_millis(1), "the new bandwidth applies");
+    }
+
+    #[test]
+    fn a_shaper_is_idle_once_its_last_delayed_packet_is_out_of_the_queue() {
+        let mut clock = FakeClock::new();
+        let mut shaper = Shaper::with_seed(Conditions { latency_ms: 100, ..conditions() }, SEED);
+        assert!(shaper.is_idle(clock.now()), "nothing was admitted");
+
+        let release = at(shaper.admit(Direction::ToPhone, 100, clock.now()));
+        assert!(!shaper.is_idle(clock.now()));
+        // Due, but the caller's timer may not have sent it yet
+        clock.advance(release.duration_since(clock.now()) + QUEUE_GRACE / 2);
+        assert!(!shaper.is_idle(clock.now()));
+        clock.advance(QUEUE_GRACE);
+        assert!(shaper.is_idle(clock.now()));
     }
 
     #[test]

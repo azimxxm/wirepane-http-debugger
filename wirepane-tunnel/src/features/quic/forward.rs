@@ -318,6 +318,7 @@ async fn forward(
         .map(|host| host.trim_start_matches('[').trim_end_matches(']').to_string())
         .unwrap_or_else(|| authority.clone());
     let path = parts.uri.path_and_query().map_or("/", |path| path.as_str());
+    check_request_target(&parts.method, path)?;
 
     // A body with a declared length is sent as it is; one without is sent chunked. A request whose
     // stream ends right after its headers has none.
@@ -389,6 +390,17 @@ async fn forward(
         recv.stop_sending(h3::error::Code::H3_NO_ERROR);
     }
     result
+}
+
+/// The phone's `:path` goes into the HTTP/1.1 request line as it is, so it has to be a path (or `*`
+/// for OPTIONS). Mockttp follows an absolute URL in a request line wherever it points, which would
+/// let a phone send its request anywhere (the Mac's own services included) instead of to the server
+/// it dialled. The `http` crate refuses such a `:path` since 1.5, but 1.4 did not.
+fn check_request_target(method: &Method, path: &str) -> Result<()> {
+    if path.starts_with('/') || (path == "*" && *method == Method::OPTIONS) {
+        return Ok(());
+    }
+    bail!("the request target must be a path, not {path:?}")
 }
 
 fn request_head(
@@ -694,6 +706,29 @@ mod tests {
             Framing::None,
         );
         assert_eq!(text, "GET /a?b=1 HTTP/1.1\r\nhost: example.test\r\nuser-agent: t\r\ncookie: a=1; b=2\r\n\r\n");
+    }
+
+    #[test]
+    fn only_a_path_is_a_request_target() {
+        for path in ["/", "/a?b=1", "/a/b/c?x=y&z", "//double/slash"] {
+            assert!(check_request_target(&Method::GET, path).is_ok(), "{path}");
+        }
+        assert!(check_request_target(&Method::OPTIONS, "*").is_ok(), "OPTIONS * is the one non-path target");
+        let not_paths = [
+            "http://127.0.0.1:45457/version",
+            "https://example.test/",
+            "HTTP://x/",
+            "example.test:443",
+            "a/b",
+            "",
+            "*",
+        ];
+        for path in not_paths {
+            let error = check_request_target(&Method::GET, path).expect_err(path);
+            assert!(error.to_string().contains("must be a path"), "{error}");
+        }
+        assert!(check_request_target(&Method::POST, "*").is_err(), "* is only for OPTIONS");
+        assert!(check_request_target(&Method::OPTIONS, "http://127.0.0.1:9/").is_err());
     }
 
     #[test]

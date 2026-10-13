@@ -474,10 +474,11 @@ pub async fn start(
     })
 }
 
-/// A packet the shaper delayed: from a phone (to the network layer) or to a phone.
+/// A packet the shaper delayed: from a phone (to the network layer) or to a phone. The first field
+/// is the phone's id, for the capture when the packet is released.
 enum Held {
-    FromPhone(Vec<u8>, SocketAddr),
-    ToPhone(Ipv4Addr, Vec<u8>),
+    FromPhone(String, Vec<u8>, SocketAddr),
+    ToPhone(String, Ipv4Addr, Vec<u8>),
 }
 
 struct WgTask {
@@ -561,11 +562,12 @@ impl WgTask {
             self.events.emit(event);
         }
         if let Some((peer, packet)) = outcome.inbound {
-            match self.hooks.on_packet(&peer, Direction::FromPhone, &packet, Instant::now()) {
+            match self.hooks.admit(&peer, Direction::FromPhone, &packet, Instant::now()) {
                 Verdict::Now => self.deliver_inbound(packet, src),
                 Verdict::At(due) => {
-                    if !self.delayed.push(due, Held::FromPhone(packet, src)) {
-                        log::debug!("the delay queue is full, dropping a packet from {peer}");
+                    let size = packet.len();
+                    if !self.delayed.push_bytes(due, Held::FromPhone(peer.clone(), packet, src), size) {
+                        log::debug!("the delay queue is full, dropping a packet from {peer} ({} so far)", self.delayed.dropped());
                     }
                 }
                 Verdict::Drop => {}
@@ -590,13 +592,20 @@ impl WgTask {
         }
     }
 
-    /// Sends on every delayed packet whose time has come.
+    /// Sends on every delayed packet whose time has come. The capture gets each one now, when it
+    /// leaves, and not when it was queued.
     async fn release_due(&mut self) {
         let now = Instant::now();
         while let Some(held) = self.delayed.pop_due(now) {
             match held {
-                Held::FromPhone(packet, src) => self.deliver_inbound(packet, src),
-                Held::ToPhone(dst, packet) => self.seal_and_send(dst, &packet).await,
+                Held::FromPhone(peer, packet, src) => {
+                    self.hooks.released(&peer, Direction::FromPhone, &packet);
+                    self.deliver_inbound(packet, src);
+                }
+                Held::ToPhone(peer, dst, packet) => {
+                    self.hooks.released(&peer, Direction::ToPhone, &packet);
+                    self.seal_and_send(dst, &packet).await;
+                }
             }
         }
     }
@@ -632,11 +641,11 @@ impl WgTask {
         let Some(peer) = lock(&self.peers).peer_id(dst) else {
             return;
         };
-        match self.hooks.on_packet(&peer, Direction::ToPhone, bytes, Instant::now()) {
+        match self.hooks.admit(&peer, Direction::ToPhone, bytes, Instant::now()) {
             Verdict::Now => self.seal_and_send(dst, bytes).await,
             Verdict::At(due) => {
-                if !self.delayed.push(due, Held::ToPhone(dst, bytes.to_vec())) {
-                    log::debug!("the delay queue is full, dropping a packet for {peer}");
+                if !self.delayed.push_bytes(due, Held::ToPhone(peer.clone(), dst, bytes.to_vec()), bytes.len()) {
+                    log::debug!("the delay queue is full, dropping a packet for {peer} ({} so far)", self.delayed.dropped());
                 }
             }
             Verdict::Drop => {}

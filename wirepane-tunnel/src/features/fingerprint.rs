@@ -154,6 +154,10 @@ const EXT_SUPPORTED_VERSIONS: u16 = 0x002b;
 const SNI_HOST_NAME: u8 = 0;
 /// DNS names are at most 253 characters
 const MAX_SNI_LEN: usize = 255;
+/// The `tls-hello` event reports at most this many ALPN values, each cut to `MAX_ALPN_CHARS`. Real
+/// clients offer a handful of short names; a hello can hold thousands of entries.
+const MAX_ALPN_VALUES: usize = 16;
+const MAX_ALPN_CHARS: usize = 64;
 
 struct Reader<'a> {
     data: &'a [u8],
@@ -407,10 +411,20 @@ impl ParsedHello {
     }
 
     fn into_tls_hello(self) -> TlsHello {
+        // The event gets a short list; the fingerprint below still comes from the whole one. Empty
+        // values say nothing, so they don't count towards the limit.
         let alpn = self
             .alpn
             .iter()
-            .map(|protocol| String::from_utf8_lossy(protocol).chars().filter(|c| !c.is_control()).collect())
+            .map(|protocol| {
+                String::from_utf8_lossy(protocol)
+                    .chars()
+                    .filter(|c| !c.is_control())
+                    .take(MAX_ALPN_CHARS)
+                    .collect::<String>()
+            })
+            .filter(|protocol| !protocol.is_empty())
+            .take(MAX_ALPN_VALUES)
             .collect();
 
         TlsHello { sni: self.sni.clone(), alpn, ja4: self.ja4_parts().hashed() }
@@ -637,6 +651,52 @@ mod tests {
         let hello = parse_client_hello(&chrome_like("api.example.org", &CHROME_ECH_ALPS).record()).unwrap();
         assert_eq!(hello.sni.as_deref(), Some("api.example.org"));
         assert_eq!(hello.alpn, vec!["h2".to_string(), "http/1.1".to_string()]);
+    }
+
+    /// A hello with the given ALPN protocols, SNI and TLS 1.3, small enough for one record
+    fn hello_with_alpn(protocols: &[&[u8]]) -> Vec<u8> {
+        HelloSpec {
+            legacy_version: 0x0303,
+            cipher_suites: vec![0x1301, 0xc02f],
+            extensions: vec![
+                sni_extension("a.test"),
+                alpn_extension(protocols),
+                supported_versions_extension(&[0x0304]),
+            ],
+        }
+        .record()
+    }
+
+    #[test]
+    fn the_reported_alpn_list_is_capped_but_the_fingerprint_still_sees_all_of_it() {
+        let long = "x".repeat(200);
+        let numbered: Vec<String> = (0..40).map(|n| format!("proto{n}")).collect();
+        // An empty value and one of only control characters come between real ones.
+        let mut protocols: Vec<&[u8]> = vec![b"h2", b"", long.as_bytes(), b"\x01\x02"];
+        protocols.extend(numbered.iter().map(|name| name.as_bytes()));
+        let hello = parse_client_hello(&hello_with_alpn(&protocols)).unwrap();
+
+        assert_eq!(hello.alpn.len(), MAX_ALPN_VALUES);
+        assert_eq!(hello.alpn[0], "h2");
+        assert_eq!(hello.alpn[1], "x".repeat(MAX_ALPN_CHARS), "a long value is cut");
+        assert_eq!(hello.alpn[2], "proto0", "empty values are left out and don't count");
+        assert_eq!(hello.alpn[MAX_ALPN_VALUES - 1], "proto13");
+        assert!(hello.alpn.iter().all(|protocol| !protocol.is_empty() && protocol.chars().count() <= MAX_ALPN_CHARS));
+
+        let first_only = parse_client_hello(&hello_with_alpn(&[b"h2"])).unwrap();
+        assert_eq!(hello.ja4, first_only.ja4, "the fingerprint doesn't depend on the values after the first");
+    }
+
+    #[test]
+    fn a_hello_full_of_empty_and_tiny_alpn_entries_reports_a_short_list() {
+        // Thousands of entries in one record, half of them empty
+        let tiny: Vec<&[u8]> = (0..6000).map(|n| if n % 2 == 0 { &b""[..] } else { &b"a"[..] }).collect();
+        let hello = parse_client_hello(&hello_with_alpn(&tiny)).unwrap();
+        assert_eq!(hello.alpn, vec!["a".to_string(); MAX_ALPN_VALUES]);
+
+        let empty: Vec<&[u8]> = vec![&b""[..]; 8000];
+        let hello = parse_client_hello(&hello_with_alpn(&empty)).unwrap();
+        assert!(hello.alpn.is_empty(), "only empty values: nothing to report");
     }
 
     #[test]

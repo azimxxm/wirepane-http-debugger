@@ -4,8 +4,9 @@
 //!
 //! - one Section Header Block, with the application name;
 //! - one Interface Description Block per phone, written the first time that phone sends or gets
-//!   a packet, with the peer name in `if_name` and microsecond timestamps in `if_tsresol`, so
-//!   Wireshark can filter by phone (`frame.interface_name == "p1"`);
+//!   a packet, with the phone's name in `if_name`, its peer id in `if_description` and microsecond
+//!   timestamps in `if_tsresol`, so Wireshark can filter by phone (`frame.interface_name ==
+//!   "iPhone"` or `frame.interface_description == "p1"`);
 //! - one Enhanced Packet Block per IP packet, with the direction in `epb_flags`.
 //!
 //! The link type is LINKTYPE_RAW (101): the data of a packet is the IP header and what follows,
@@ -15,14 +16,21 @@
 //! Writes are buffered, so a busy tunnel doesn't make one system call per packet. The buffer is
 //! flushed in `finish()`, when the writer is dropped, right after the file is created (so it is a
 //! valid capture from the first moment) and, while packets keep coming, about once a second. The
-//! sidecar leaves with `process::exit`, which runs no destructors: a capture that is still open
-//! then loses at most the last second, and the file still ends on a whole block.
+//! sidecar leaves with `process::exit`, which runs no destructors, so it finishes a running capture
+//! first (`Tunnel::shutdown`); a process that is killed still loses at most the last second, and
+//! the file still ends on a whole block.
+//!
+//! A capture never replaces an earlier file (`create` takes the next free numbered name) and
+//! stops by itself at `MAX_CAPTURE_BYTES`.
 
 use std::collections::HashMap;
+use std::ffi::OsStr;
 use std::fs::{File, OpenOptions};
 use std::io::{self, BufWriter, Write};
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+
+use serde_json::{Value, json};
 
 use super::Direction;
 
@@ -31,6 +39,24 @@ pub struct CaptureSummary {
     pub path: PathBuf,
     pub packets: u64,
     pub bytes: u64,
+    /// Why the capture ended on its own ("size limit", "helper stopped"); `None` when the owner stopped it.
+    pub reason: Option<&'static str>,
+}
+
+impl CaptureSummary {
+    /// The `capture-stopped` event, with `reason` when the capture ended on its own.
+    pub fn to_event(&self) -> Value {
+        let mut event = json!({
+            "event": "capture-stopped",
+            "path": self.path.to_string_lossy(),
+            "packets": self.packets,
+            "bytes": self.bytes,
+        });
+        if let (Some(object), Some(reason)) = (event.as_object_mut(), self.reason) {
+            object.insert("reason".to_string(), json!(reason));
+        }
+        event
+    }
 }
 
 const BLOCK_SECTION_HEADER: u32 = 0x0A0D_0D0A;
@@ -40,6 +66,7 @@ const BYTE_ORDER_MAGIC: u32 = 0x1A2B_3C4D;
 
 const OPTION_END: u16 = 0;
 const OPTION_IF_NAME: u16 = 2;
+const OPTION_IF_DESCRIPTION: u16 = 3;
 const OPTION_EPB_FLAGS: u16 = 2;
 const OPTION_SHB_USERAPPL: u16 = 4;
 const OPTION_IF_TSRESOL: u16 = 9;
@@ -58,6 +85,10 @@ const SNAP_LENGTH: u32 = 65_535;
 /// An option value is at most 65535 bytes; a peer name never needs more than this.
 const MAX_INTERFACE_NAME_BYTES: usize = 255;
 const WRITE_BUFFER_BYTES: usize = 64 * 1024;
+/// A capture stops at this file size (headers included), so a phone that streams for hours can't fill the disk.
+pub const MAX_CAPTURE_BYTES: u64 = 2 * 1024 * 1024 * 1024;
+/// A taken file name is followed by `-2`, `-3`... up to this number; then `create` gives up.
+const MAX_NAME_NUMBER: u32 = 1000;
 /// How long written packets may wait in the buffer while the capture runs.
 const FLUSH_INTERVAL: Duration = Duration::from_secs(1);
 #[cfg(unix)]
@@ -73,6 +104,12 @@ pub struct PcapWriter {
     block: Vec<u8>,
     packets: u64,
     bytes: u64,
+    /// Bytes of blocks written so far: the size the file will have once the buffer is flushed.
+    file_bytes: u64,
+    max_file_bytes: u64,
+    /// Set when the next block would pass `max_file_bytes`. The file stays a valid capture of
+    /// everything up to there.
+    full: bool,
     /// Set by a failed write. After it no more blocks are added, so the damage stays at the
     /// end of the file instead of a half block sitting in the middle of good ones.
     failed: bool,
@@ -81,18 +118,24 @@ pub struct PcapWriter {
 
 impl PcapWriter {
     /// Creates the file (and its folders) and writes the section header. The file is private to
-    /// the user, because a capture holds everything the phone sent.
+    /// the user, because a capture holds everything the phone sent. It never replaces a file: when
+    /// the name is taken, the capture goes to `name-2`, `name-3`... (before the extension), and
+    /// `path()` says where it really is.
     pub fn create(path: &Path) -> io::Result<Self> {
         if let Some(folder) = path.parent().filter(|folder| !folder.as_os_str().is_empty()) {
             std::fs::create_dir_all(folder)?;
         }
+        let (file, path) = open_new_private(path)?;
         let mut writer = PcapWriter {
-            path: path.to_path_buf(),
-            out: BufWriter::with_capacity(WRITE_BUFFER_BYTES, open_private(path)?),
+            path,
+            out: BufWriter::with_capacity(WRITE_BUFFER_BYTES, file),
             interfaces: HashMap::new(),
             block: Vec::with_capacity(2048),
             packets: 0,
             bytes: 0,
+            file_bytes: 0,
+            max_file_bytes: MAX_CAPTURE_BYTES,
+            full: false,
             failed: false,
             last_flush: Instant::now(),
         };
@@ -101,16 +144,33 @@ impl PcapWriter {
         Ok(writer)
     }
 
-    /// One IP packet of one phone. `peer` is the phone's name in the file; the first packet of
-    /// a phone adds its interface. An empty packet is not a packet, so it is skipped.
+    /// One IP packet of one phone. `peer` is the phone's id; the first packet of a phone adds its
+    /// interface, named after the id. An empty packet is not a packet, so it is skipped.
     pub fn write_packet(&mut self, peer: &str, direction: Direction, ip_packet: &[u8], at: SystemTime) -> io::Result<()> {
+        self.write_packet_named(peer, direction, ip_packet, at, |_| None)
+    }
+
+    /// Like `write_packet`, with the phone's name: when the phone is first seen, `name_of(peer)` gives
+    /// the `if_name` of its interface ("iPhone"), and its id becomes the `if_description` ("p42").
+    /// Without a name the id is used for both.
+    pub fn write_packet_named(
+        &mut self,
+        peer: &str,
+        direction: Direction,
+        ip_packet: &[u8],
+        at: SystemTime,
+        name_of: impl FnOnce(&str) -> Option<String>,
+    ) -> io::Result<()> {
+        if self.full {
+            return Err(size_limit_error());
+        }
         if self.failed {
             return Err(io::Error::other("the capture file can not be written any more"));
         }
         if ip_packet.is_empty() {
             return Ok(());
         }
-        let interface_id = self.interface_id(peer)?;
+        let interface_id = self.interface_id(peer, name_of)?;
 
         let timestamp = micros_since_epoch(at);
         let captured = &ip_packet[..ip_packet.len().min(SNAP_LENGTH as usize)];
@@ -147,11 +207,24 @@ impl PcapWriter {
         if self.failed {
             return Err(io::Error::other("the capture file is incomplete: a write failed"));
         }
-        Ok(CaptureSummary { path: self.path, packets: self.packets, bytes: self.bytes })
+        Ok(CaptureSummary { path: self.path, packets: self.packets, bytes: self.bytes, reason: None })
     }
 
     pub fn path(&self) -> &Path {
         &self.path
+    }
+
+    /// True once the capture has reached `MAX_CAPTURE_BYTES`: no more packets are taken, and
+    /// `finish()` still gives a valid file.
+    pub fn is_full(&self) -> bool {
+        self.full
+    }
+
+    /// A smaller size limit than `MAX_CAPTURE_BYTES`, so tests can reach it.
+    #[cfg(test)]
+    pub(crate) fn with_size_limit(mut self, bytes: u64) -> Self {
+        self.max_file_bytes = bytes;
+        self
     }
 
     /// Packets written so far, for a live counter.
@@ -178,17 +251,20 @@ impl PcapWriter {
     }
 
     /// The id of a phone's interface, adding the interface the first time the phone shows up.
-    fn interface_id(&mut self, peer: &str) -> io::Result<u32> {
+    fn interface_id(&mut self, peer: &str, name_of: impl FnOnce(&str) -> Option<String>) -> io::Result<u32> {
         if let Some(id) = self.interfaces.get(peer) {
             return Ok(*id);
         }
         let id = u32::try_from(self.interfaces.len()).map_err(|_| io::Error::other("too many interfaces in one capture"))?;
+        let name = name_of(peer).filter(|name| !name.is_empty());
+        let name = name.as_deref().unwrap_or(peer);
 
         begin_block(&mut self.block, BLOCK_INTERFACE_DESCRIPTION);
         put_u16(&mut self.block, LINK_TYPE_RAW);
         put_u16(&mut self.block, 0); // reserved
         put_u32(&mut self.block, SNAP_LENGTH);
-        put_option(&mut self.block, OPTION_IF_NAME, cut_on_char_boundary(peer, MAX_INTERFACE_NAME_BYTES).as_bytes());
+        put_option(&mut self.block, OPTION_IF_NAME, cut_on_char_boundary(name, MAX_INTERFACE_NAME_BYTES).as_bytes());
+        put_option(&mut self.block, OPTION_IF_DESCRIPTION, cut_on_char_boundary(peer, MAX_INTERFACE_NAME_BYTES).as_bytes());
         put_option(&mut self.block, OPTION_IF_TSRESOL, &[TIMESTAMP_RESOLUTION_MICROSECONDS]);
         put_option(&mut self.block, OPTION_END, &[]);
         finish_block(&mut self.block);
@@ -201,9 +277,15 @@ impl PcapWriter {
     }
 
     fn write_block(&mut self) -> io::Result<()> {
+        let block_bytes = self.block.len() as u64;
+        if self.file_bytes.saturating_add(block_bytes) > self.max_file_bytes {
+            self.full = true;
+            return Err(size_limit_error());
+        }
         let result = self.out.write_all(&self.block);
-        if result.is_err() {
-            self.failed = true;
+        match result {
+            Ok(()) => self.file_bytes += block_bytes,
+            Err(_) => self.failed = true,
         }
         result
     }
@@ -218,12 +300,50 @@ impl PcapWriter {
     }
 }
 
+/// Opens a file that did not exist before (`create_new`, so no capture can replace an earlier one, or
+/// follow a link someone left there). A taken name is followed by `-2`, `-3`...; the path that
+/// worked comes back with the file. Anything else in the way, such as a folder, is an error.
+fn open_new_private(path: &Path) -> io::Result<(File, PathBuf)> {
+    let mut candidate = path.to_path_buf();
+    let mut number = 1;
+    loop {
+        match open_private(&candidate) {
+            Ok(file) => return Ok((file, candidate)),
+            Err(error) if error.kind() == io::ErrorKind::AlreadyExists && is_taken_by_a_file(&candidate) && number < MAX_NAME_NUMBER => {
+                number += 1;
+                candidate = numbered_name(path, number);
+            }
+            Err(error) => return Err(error),
+        }
+    }
+}
+
+/// A file or a link (a dangling one too), not a folder.
+fn is_taken_by_a_file(path: &Path) -> bool {
+    std::fs::symlink_metadata(path).is_ok_and(|metadata| !metadata.is_dir())
+}
+
+/// `dir/a.pcapng` and 2 give `dir/a-2.pcapng`.
+fn numbered_name(path: &Path, number: u32) -> PathBuf {
+    let mut name = path.file_stem().map(OsStr::to_os_string).unwrap_or_default();
+    name.push(format!("-{number}"));
+    if let Some(extension) = path.extension() {
+        name.push(".");
+        name.push(extension);
+    }
+    path.with_file_name(name)
+}
+
 fn open_private(path: &Path) -> io::Result<File> {
     let mut options = OpenOptions::new();
-    options.write(true).create(true).truncate(true);
+    options.write(true).create_new(true);
     #[cfg(unix)]
     std::os::unix::fs::OpenOptionsExt::mode(&mut options, FILE_MODE_OWNER_ONLY);
     options.open(path)
+}
+
+fn size_limit_error() -> io::Error {
+    io::Error::new(io::ErrorKind::FileTooLarge, "the capture reached its size limit")
 }
 
 /// Microseconds since 1970. A clock set before 1970 gives 0 rather than a panic or an error,
@@ -347,6 +467,7 @@ mod tests {
         link_type: u16,
         snap_length: u32,
         name: String,
+        description: Option<String>,
         timestamp_resolution: Option<u8>,
     }
 
@@ -394,6 +515,7 @@ mod tests {
                         link_type: u16_at(&block.body, 0),
                         snap_length: u32_at(&block.body, 4),
                         name: String::from_utf8(find(2).expect("if_name")).unwrap(),
+                        description: find(3).map(|value| String::from_utf8(value).unwrap()),
                         timestamp_resolution: find(9).map(|value| {
                             assert_eq!(value.len(), 1);
                             value[0]
@@ -453,7 +575,7 @@ mod tests {
         let folder = tempfile::tempdir().unwrap();
         let path = folder.path().join("empty.pcapng");
         let summary = PcapWriter::create(&path).unwrap().finish().unwrap();
-        assert_eq!(summary, CaptureSummary { path: path.clone(), packets: 0, bytes: 0 });
+        assert_eq!(summary, CaptureSummary { path: path.clone(), packets: 0, bytes: 0, reason: None });
 
         let capture = read_capture(&path);
         assert!(capture.application.starts_with("wirepane-tunnel "), "{}", capture.application);
@@ -549,7 +671,7 @@ mod tests {
         assert_eq!((writer.packets(), writer.bytes()), (2, 160));
         assert_eq!(writer.path(), path.as_path());
         let summary = writer.finish().unwrap();
-        assert_eq!(summary, CaptureSummary { path, packets: 2, bytes: 160 });
+        assert_eq!(summary, CaptureSummary { path, packets: 2, bytes: 160, reason: None });
     }
 
     #[test]
@@ -720,6 +842,189 @@ mod tests {
 
         // The file still holds the packet from before and is a valid capture
         assert_eq!(read_capture(&path).packets.len(), 1);
+    }
+
+    #[test]
+    fn a_phone_is_named_by_its_device_and_described_by_its_id() {
+        let folder = tempfile::tempdir().unwrap();
+        let path = folder.path().join("names.pcapng");
+        let mut writer = PcapWriter::create(&path).unwrap();
+        let names = |peer: &str| (peer == "p42").then(|| "iPhone".to_string());
+        writer.write_packet_named("p42", Direction::FromPhone, &[0x45, 1], at_micros(1), names).unwrap();
+        // The name is asked for once, when the phone is first seen
+        writer
+            .write_packet_named("p42", Direction::ToPhone, &[0x45, 2], at_micros(2), |_| panic!("the name is already known"))
+            .unwrap();
+        // A phone without a known name is called by its id, and an empty name counts as none
+        writer.write_packet_named("p43", Direction::FromPhone, &[0x45, 3], at_micros(3), |_| None).unwrap();
+        writer.write_packet_named("p44", Direction::FromPhone, &[0x45, 4], at_micros(4), |_| Some(String::new())).unwrap();
+        // Two devices may share a name; the descriptions tell them apart
+        writer.write_packet_named("p45", Direction::FromPhone, &[0x45, 5], at_micros(5), |_| Some("iPhone".to_string())).unwrap();
+        writer.write_packet("p46", Direction::FromPhone, &[0x45, 6], at_micros(6)).unwrap();
+        writer.finish().unwrap();
+
+        let capture = read_capture(&path);
+        let described: Vec<_> =
+            capture.interfaces.iter().map(|interface| (interface.name.as_str(), interface.description.as_deref())).collect();
+        assert_eq!(
+            described,
+            vec![
+                ("iPhone", Some("p42")),
+                ("p43", Some("p43")),
+                ("p44", Some("p44")),
+                ("iPhone", Some("p45")),
+                ("p46", Some("p46")),
+            ]
+        );
+        assert_eq!(capture.packets.len(), 6);
+    }
+
+    #[test]
+    fn a_long_device_name_is_cut_on_a_character_boundary_and_the_id_stays_whole() {
+        let folder = tempfile::tempdir().unwrap();
+        let path = folder.path().join("long-name.pcapng");
+        let mut writer = PcapWriter::create(&path).unwrap();
+        let name = "é".repeat(300);
+        writer.write_packet_named("p1", Direction::FromPhone, &[0x45], at_micros(1), |_| Some(name)).unwrap();
+        writer.finish().unwrap();
+        let interface = &read_capture(&path).interfaces[0];
+        assert_eq!(interface.name, "é".repeat(127));
+        assert_eq!(interface.description.as_deref(), Some("p1"));
+    }
+
+    #[test]
+    fn a_second_capture_with_the_same_name_does_not_replace_the_first() {
+        let folder = tempfile::tempdir().unwrap();
+        let path = folder.path().join("wirepane-2026-10-13_12-24-27.pcapng");
+        let mut first = PcapWriter::create(&path).unwrap();
+        first.write_packet("p1", Direction::FromPhone, &[0x45; 40], at_micros(1)).unwrap();
+        let first = first.finish().unwrap();
+        assert_eq!(first.path, path);
+        let first_bytes = std::fs::read(&path).unwrap();
+
+        // The same second: the next free name is used, and the writer says where it really is
+        let second = PcapWriter::create(&path).unwrap();
+        let third = PcapWriter::create(&path).unwrap();
+        assert_eq!(second.path(), folder.path().join("wirepane-2026-10-13_12-24-27-2.pcapng"));
+        assert_eq!(third.path(), folder.path().join("wirepane-2026-10-13_12-24-27-3.pcapng"));
+        let summary = second.finish().unwrap();
+        assert_eq!(summary.path, folder.path().join("wirepane-2026-10-13_12-24-27-2.pcapng"));
+        third.finish().unwrap();
+
+        assert_eq!(std::fs::read(&path).unwrap(), first_bytes, "the first capture is untouched");
+        assert!(read_capture(&summary.path).packets.is_empty(), "the second one starts empty");
+    }
+
+    #[test]
+    fn a_name_without_an_extension_is_numbered_too() {
+        let folder = tempfile::tempdir().unwrap();
+        let path = folder.path().join("capture");
+        PcapWriter::create(&path).unwrap().finish().unwrap();
+        let second = PcapWriter::create(&path).unwrap();
+        assert_eq!(second.path(), folder.path().join("capture-2"));
+        // A numbered name that is taken is skipped as well
+        std::fs::write(folder.path().join("capture-3"), "x").unwrap();
+        let next = PcapWriter::create(&path).unwrap();
+        assert_eq!(next.path(), folder.path().join("capture-4"));
+    }
+
+    #[test]
+    fn a_folder_or_a_link_in_the_way_is_never_written_through() {
+        let folder = tempfile::tempdir().unwrap();
+        // A folder with the capture's name is an error, not a reason to pick another name
+        let in_the_way = folder.path().join("taken.pcapng");
+        std::fs::create_dir(&in_the_way).unwrap();
+        assert!(PcapWriter::create(&in_the_way).is_err());
+        assert!(!folder.path().join("taken-2.pcapng").exists());
+
+        // A link is a taken name: the capture goes beside it, and the link's target is not touched
+        #[cfg(unix)]
+        {
+            let target = folder.path().join("precious.txt");
+            std::fs::write(&target, "keep me").unwrap();
+            let link = folder.path().join("linked.pcapng");
+            std::os::unix::fs::symlink(&target, &link).unwrap();
+            let writer = PcapWriter::create(&link).unwrap();
+            assert_eq!(writer.path(), folder.path().join("linked-2.pcapng"));
+            writer.finish().unwrap();
+            assert_eq!(std::fs::read_to_string(&target).unwrap(), "keep me");
+        }
+    }
+
+    #[test]
+    fn a_capture_gives_up_when_every_numbered_name_is_taken() {
+        let folder = tempfile::tempdir().unwrap();
+        let path = folder.path().join("full.pcapng");
+        std::fs::write(&path, "x").unwrap();
+        for number in 2..=MAX_NAME_NUMBER {
+            std::fs::write(numbered_name(&path, number), "x").unwrap();
+        }
+        let error = PcapWriter::create(&path).unwrap_err();
+        assert_eq!(error.kind(), io::ErrorKind::AlreadyExists);
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), "x", "nothing was replaced");
+    }
+
+    #[test]
+    fn the_size_limit_is_two_gibibytes() {
+        assert_eq!(MAX_CAPTURE_BYTES, 2_147_483_648);
+        let folder = tempfile::tempdir().unwrap();
+        let writer = PcapWriter::create(&folder.path().join("limit.pcapng")).unwrap();
+        assert_eq!(writer.max_file_bytes, MAX_CAPTURE_BYTES);
+    }
+
+    #[test]
+    fn a_capture_stops_taking_packets_at_the_size_limit_and_stays_a_valid_file() {
+        let folder = tempfile::tempdir().unwrap();
+        let path = folder.path().join("small.pcapng");
+        let limit = 2_000;
+        let mut writer = PcapWriter::create(&path).unwrap().with_size_limit(limit);
+        assert!(!writer.is_full());
+
+        let mut taken = 0;
+        let refused = loop {
+            match writer.write_packet("p1", Direction::FromPhone, &[0x45; 100], at_micros(taken)) {
+                Ok(()) => taken += 1,
+                Err(error) => break error,
+            }
+            assert!(taken < 1000, "the limit never came");
+        };
+        assert_eq!(refused.kind(), io::ErrorKind::FileTooLarge);
+        assert!(writer.is_full());
+        assert!(taken > 5, "a 2 kB limit takes several packets, took {taken}");
+        // It stays full: later packets are refused too, and are not counted
+        assert!(writer.write_packet("p1", Direction::ToPhone, &[0x45; 20], at_micros(9_999)).is_err());
+        assert_eq!(writer.packets(), taken);
+
+        // finish() works: the file ends on a whole block under the limit and holds what was taken
+        let summary = writer.finish().unwrap();
+        assert_eq!((summary.packets, summary.bytes), (taken, taken * 100));
+        let size = std::fs::metadata(&path).unwrap().len();
+        assert!(size <= limit, "{size} bytes is over the {limit} byte limit");
+        assert!(size + 200 > limit, "the file stops where the next packet would not fit, not long before: {size}");
+        assert_eq!(read_capture(&path).packets.len() as u64, taken);
+    }
+
+    #[test]
+    fn a_failed_write_is_not_taken_for_the_size_limit() {
+        let folder = tempfile::tempdir().unwrap();
+        let mut writer = PcapWriter::create(&folder.path().join("failed.pcapng")).unwrap();
+        writer.failed = true;
+        assert!(writer.write_packet("p1", Direction::FromPhone, &[0x45], at_micros(1)).is_err());
+        assert!(!writer.is_full());
+    }
+
+    #[test]
+    fn the_stopped_event_names_the_reason_only_when_the_capture_ended_on_its_own() {
+        let mut summary = CaptureSummary { path: PathBuf::from("/tmp/a.pcapng"), packets: 3, bytes: 300, reason: None };
+        assert_eq!(
+            summary.to_event(),
+            json!({"event": "capture-stopped", "path": "/tmp/a.pcapng", "packets": 3, "bytes": 300})
+        );
+        summary.reason = Some("size limit");
+        assert_eq!(
+            summary.to_event(),
+            json!({"event": "capture-stopped", "path": "/tmp/a.pcapng", "packets": 3, "bytes": 300, "reason": "size limit"})
+        );
     }
 
     /// Runs `tool` when it is installed; `None` when it is not.

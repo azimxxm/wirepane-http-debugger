@@ -1,4 +1,6 @@
-//! The DNS server on the tunnel's DNS address (UDP and TCP port 53).
+//! The DNS server for port 53 (UDP and TCP) on the tunnel's DNS address, and on every other address
+//! a phone may reach (`Core::is_dns_flow`): an app with a resolver of its own is answered here too,
+//! from the flow's own destination address, so the DNS rules and the DNS view cover it.
 //!
 //! Names are resolved on the host (the system resolver), so the phone gets the answers the Mac
 //! would get. Only A records carry answers: AAAA and every other type get an empty NOERROR answer
@@ -263,7 +265,7 @@ fn resolve_by_rule(action: &DnsAction, q: &Question) -> Resolution {
     }
 }
 
-/// UDP flow to the DNS address: one datagram in, one datagram out.
+/// UDP flow to port 53: one datagram in, one datagram out.
 pub async fn udp_flow(core: &Arc<Core>, flow: &Flow, peer: &PeerView, src_ip: Ipv4Addr) {
     let mut removed = peer.removed.clone();
     loop {
@@ -290,7 +292,7 @@ pub async fn udp_flow(core: &Arc<Core>, flow: &Flow, peer: &PeerView, src_ip: Ip
     }
 }
 
-/// TCP flow to the DNS address: messages are prefixed with their 2-byte length.
+/// TCP flow to port 53: messages are prefixed with their 2-byte length.
 pub async fn tcp_flow(core: &Arc<Core>, flow: &Flow, peer: &PeerView, src_ip: Ipv4Addr) -> Result<()> {
     let mut removed = peer.removed.clone();
     let mut buffer: Vec<u8> = Vec::new();

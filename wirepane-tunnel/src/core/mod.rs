@@ -2,9 +2,11 @@
 //!
 //! - TCP: SOCKS5 to Mockttp (custom-metadata tags, then CONNECT to the original IP:port), then
 //!   pipe both ways with half-close.
-//! - DNS on the tunnel's DNS address: answered on the host, names remembered per phone.
+//! - DNS (port 53, UDP and TCP) on the tunnel's DNS address or on any other address a phone may
+//!   reach: answered on the host, rules applied, names remembered per phone.
 //! - UDP/443 (QUIC): blocked by default so apps fall back to TCP, which Mockttp can decrypt. Every
 //!   blocked datagram is answered with an ICMP port unreachable, so the fallback is immediate.
+//!   A flow follows the QUIC mode for as long as it lives, not just at its start.
 //! - Other UDP: relayed from a host socket with an idle timeout.
 
 pub mod dns;
@@ -183,6 +185,76 @@ impl Core {
             || ip.is_broadcast()
             || self.cfg.net.contains(ip)
     }
+
+    /// Port 53 on the tunnel's own resolver, or on any address a phone may reach: an app with a
+    /// resolver of its own (8.8.8.8, say) still gets the DNS rules and shows up in the DNS view.
+    /// The DNS code answers on the same flow, so the reply comes from the address the app asked.
+    fn is_dns_flow(&self, dst_ip: Ipv4Addr, port: u16) -> bool {
+        port == 53 && (dst_ip == self.cfg.net.dns_ip() || !self.is_forbidden(dst_ip))
+    }
+
+    /// What happens to UDP/443 to `dst_ip` under the QUIC mode set right now.
+    fn quic_handling(&self, dst_ip: Ipv4Addr) -> QuicHandling {
+        let mode = self.hooks.quic_mode();
+        // Decrypt needs the gateway; a build or setup without one keeps blocking QUIC.
+        if mode == QuicMode::Block || (mode == QuicMode::Decrypt && self.quic.is_none()) {
+            QuicHandling::Block
+        } else if self.is_forbidden(dst_ip) {
+            QuicHandling::Discard
+        } else if mode == QuicMode::Decrypt {
+            QuicHandling::Decrypt
+        } else {
+            QuicHandling::Relay
+        }
+    }
+}
+
+/// How a UDP/443 flow is handled.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum QuicHandling {
+    /// Refused with an ICMP port unreachable, so the app falls back to TCP.
+    Block,
+    /// A destination phones can't reach: read and dropped.
+    Discard,
+    /// Terminated by the HTTP/3 gateway.
+    Decrypt,
+    /// Forwarded from a host socket, like other UDP.
+    Relay,
+}
+
+/// One stretch of a UDP/443 flow under one handling: the handler's view of the flow.
+struct QuicRun {
+    handling: QuicHandling,
+    dst_ip: Ipv4Addr,
+    /// A datagram the handler before this one had already read when the mode changed. The network
+    /// stack hands every datagram out once, so the new handler starts with it.
+    first: Option<Vec<u8>>,
+}
+
+impl QuicRun {
+    /// True once `set-quic` has changed how this flow is handled. A handler checks it for every
+    /// datagram and returns `QuicEnd::ModeChanged` with that datagram.
+    fn superseded(&self, core: &Core) -> bool {
+        core.quic_handling(self.dst_ip) != self.handling
+    }
+
+    /// The next read of the flow's datagrams: the carried one first, then the stack's.
+    fn read(&mut self, flow: &Flow) -> Option<oneshot::Receiver<Vec<u8>>> {
+        let Some(datagram) = self.first.take() else {
+            return flow.read(u32::from(u16::MAX));
+        };
+        let (tx, rx) = oneshot::channel();
+        tx.send(datagram).ok();
+        Some(rx)
+    }
+}
+
+/// Why a UDP/443 handler stopped.
+enum QuicEnd {
+    /// The flow is finished: the phone's side closed, the phone was removed, or it idled out.
+    Over,
+    /// The QUIC mode changed. The flow goes on under the new one, starting with this datagram.
+    ModeChanged(Vec<u8>),
 }
 
 /// One flow of a phone, with the channel to push data and commands into the network task.
@@ -295,7 +367,7 @@ async fn tcp_flow_inner(core: &Arc<Core>, flow: &Flow) -> Result<()> {
         .lookup(phone)
         .ok_or_else(|| anyhow!("no peer owns {phone}"))?;
 
-    if dst_ip == core.cfg.net.dns_ip() && flow.dst.port() == 53 {
+    if core.is_dns_flow(dst_ip, flow.dst.port()) {
         return dns::tcp_flow(core, flow, &peer, phone).await;
     }
 
@@ -458,27 +530,14 @@ async fn udp_flow(core: Arc<Core>, flow: Flow) {
     if let (Some(phone), Some(dst_ip)) = (v4(flow.src), v4(flow.dst))
         && let Some(peer) = core.dir.lookup(phone)
     {
-        let quic_mode = if flow.dst.port() == 443 { Some(core.hooks.quic_mode()) } else { None };
-        // Decrypt needs the gateway; a build or setup without one keeps blocking QUIC.
-        let gateway = core.quic.clone().filter(|_| quic_mode == Some(QuicMode::Decrypt));
-        if dst_ip == core.cfg.net.dns_ip() && flow.dst.port() == 53 {
+        if core.is_dns_flow(dst_ip, flow.dst.port()) {
             dns::udp_flow(&core, &flow, &peer, phone).await;
-        } else if quic_mode.is_some() && quic_mode != Some(QuicMode::Relay) && gateway.is_none() {
-            quic_blocked(&core, &flow, &peer, phone, dst_ip).await;
+        } else if flow.dst.port() == 443 {
+            quic_flow(&core, &flow, &peer, phone, dst_ip).await;
         } else if core.is_forbidden(dst_ip) {
             discard(&flow, peer.removed.clone()).await;
-        } else if let Some(gateway) = gateway {
-            quic::decrypted_flow(&core, &gateway, &flow, &peer).await;
         } else {
-            if quic_mode == Some(QuicMode::Relay) {
-                core.events.emit(json!({
-                    "event": "quic",
-                    "peer": peer.id,
-                    "dst": flow.dst.to_string(),
-                    "action": "relayed",
-                }));
-            }
-            relay(&core, &flow, &peer, phone, dst_ip).await;
+            relay(&core, &flow, &peer, phone, dst_ip, None).await;
         }
     } else {
         // An unknown peer or IPv6: still read the datagrams so the queue can't grow.
@@ -486,6 +545,33 @@ async fn udp_flow(core: Arc<Core>, flow: Flow) {
         discard(&flow, never_removed).await;
     }
     flow.close(false);
+}
+
+/// A UDP/443 flow. It follows the QUIC mode for as long as it lives: when `set-quic` changes the
+/// mode, the flow's next datagram goes to the handler of the new mode, so a QUIC connection that
+/// is running when the user picks Block is refused at once. Ending the flow instead would not do:
+/// the network stack keeps a closed flow and drops its datagrams without a word until the phone
+/// has been quiet for a minute.
+async fn quic_flow(core: &Core, flow: &Flow, peer: &PeerView, phone: Ipv4Addr, dst_ip: Ipv4Addr) {
+    let mut carried = None;
+    loop {
+        let handling = core.quic_handling(dst_ip);
+        let run = QuicRun { handling, dst_ip, first: carried.take() };
+        let end = match handling {
+            QuicHandling::Block => quic_blocked(core, flow, peer, phone, run).await,
+            QuicHandling::Discard => discard_quic(core, flow, peer.removed.clone(), run).await,
+            QuicHandling::Decrypt => match &core.quic {
+                Some(driver) => quic::decrypted_flow(core, driver, flow, peer, run).await,
+                // Not reachable: Decrypt is only chosen when there is a gateway.
+                None => QuicEnd::Over,
+            },
+            QuicHandling::Relay => relay(core, flow, peer, phone, dst_ip, Some(run)).await,
+        };
+        match end {
+            QuicEnd::Over => return,
+            QuicEnd::ModeChanged(datagram) => carried = Some(datagram),
+        }
+    }
 }
 
 /// Reads and drops everything until the flow ends.
@@ -498,29 +584,51 @@ async fn discard(flow: &Flow, mut removed: watch::Receiver<bool>) {
     }
 }
 
+/// `discard` for a UDP/443 flow, which also moves on when the QUIC mode changes.
+async fn discard_quic(core: &Core, flow: &Flow, mut removed: watch::Receiver<bool>, mut run: QuicRun) -> QuicEnd {
+    while let Some(read) = run.read(flow) {
+        let datagram = tokio::select! {
+            data = read => match data {
+                Ok(data) => data,
+                Err(_) => return QuicEnd::Over,
+            },
+            _ = removed.changed() => return QuicEnd::Over,
+        };
+        if run.superseded(core) {
+            return QuicEnd::ModeChanged(datagram);
+        }
+    }
+    QuicEnd::Over
+}
+
 /// Reports the flow once, then answers every datagram of it (at most one per `ICMP_MIN_GAP`) with
-/// an ICMP port unreachable through the tunnel, like a host with nothing on UDP/443 would.
-async fn quic_blocked(core: &Core, flow: &Flow, peer: &PeerView, phone: Ipv4Addr, dst_ip: Ipv4Addr) {
+/// an ICMP port unreachable through the tunnel, like a host with nothing on UDP/443 would. It
+/// hands the flow on when the QUIC mode changes, and reports it again if the mode comes back.
+async fn quic_blocked(core: &Core, flow: &Flow, peer: &PeerView, phone: Ipv4Addr, mut run: QuicRun) -> QuicEnd {
     core.events.emit(json!({
         "event": "quic",
         "peer": peer.id,
+        "src": flow.src.to_string(),
         "dst": flow.dst.to_string(),
         "action": "blocked",
     }));
     core.stats.quic_blocked.fetch_add(1, Ordering::Relaxed);
 
     let from = SocketAddrV4::new(phone, flow.src.port());
-    let to = SocketAddrV4::new(dst_ip, flow.dst.port());
+    let to = SocketAddrV4::new(run.dst_ip, flow.dst.port());
     let mut removed = peer.removed.clone();
     let mut last_error: Option<Instant> = None;
-    while let Some(read) = flow.read(u32::from(u16::MAX)) {
+    while let Some(read) = run.read(flow) {
         let datagram = tokio::select! {
             data = read => match data {
                 Ok(data) => data,
-                Err(_) => return,
+                Err(_) => return QuicEnd::Over,
             },
-            _ = removed.changed() => return,
+            _ = removed.changed() => return QuicEnd::Over,
         };
+        if run.superseded(core) {
+            return QuicEnd::ModeChanged(datagram);
+        }
         if last_error.is_some_and(|sent| sent.elapsed() < ICMP_MIN_GAP) {
             continue;
         }
@@ -533,24 +641,44 @@ async fn quic_blocked(core: &Core, flow: &Flow, peer: &PeerView, phone: Ipv4Addr
             core.stats.quic_icmp_sent.fetch_add(1, Ordering::Relaxed);
         }
     }
+    QuicEnd::Over
 }
 
-/// Forwards a UDP flow through a host socket until it has been idle for a minute.
-async fn relay(core: &Core, flow: &Flow, peer: &PeerView, phone: Ipv4Addr, dst_ip: Ipv4Addr) {
+/// Forwards a UDP flow through a host socket until it has been idle for a minute. `quic` is the
+/// run of a UDP/443 flow that the QUIC mode `relay` put here: it ends when the mode changes.
+async fn relay(
+    core: &Core,
+    flow: &Flow,
+    peer: &PeerView,
+    phone: Ipv4Addr,
+    dst_ip: Ipv4Addr,
+    mut quic: Option<QuicRun>,
+) -> QuicEnd {
     let socket = match UdpSocket::bind("0.0.0.0:0").await {
         Ok(socket) => socket,
         Err(error) => {
             log::debug!("cannot open a UDP relay socket: {error}");
-            return;
+            return QuicEnd::Over;
         }
     };
     if let Err(error) = socket.connect(flow.dst).await {
         log::debug!("cannot connect the UDP relay to {}: {error}", flow.dst);
-        return;
+        return QuicEnd::Over;
     }
 
     let _active = ActiveFlow::start(&core.stats.udp_opened, &core.stats.udp_active);
     let flow_id = core.flow_ids.fetch_add(1, Ordering::Relaxed);
+    if quic.is_some() {
+        // Same `flow` as the udp-open right after it, so the two can be paired.
+        core.events.emit(json!({
+            "event": "quic",
+            "flow": flow_id,
+            "peer": peer.id,
+            "src": flow.src.to_string(),
+            "dst": flow.dst.to_string(),
+            "action": "relayed",
+        }));
+    }
     core.events.emit(json!({
         "event": "udp-open",
         "flow": flow_id,
@@ -568,7 +696,12 @@ async fn relay(core: &Core, flow: &Flow, peer: &PeerView, phone: Ipv4Addr, dst_i
     let mut update = interval_at(tokio::time::Instant::now() + UDP_UPDATE_INTERVAL, UDP_UPDATE_INTERVAL);
     update.set_missed_tick_behavior(MissedTickBehavior::Delay);
     let mut reported = (0u64, 0u64);
-    let mut pending = flow.read(u32::from(u16::MAX));
+    let mut pending = match quic.as_mut() {
+        Some(run) => run.read(flow),
+        None => flow.read(u32::from(u16::MAX)),
+    };
+    // The datagram that showed the QUIC mode had changed; the next handler starts with it.
+    let mut switched = None;
     let reason = loop {
         let Some(read) = pending.as_mut() else {
             break "closed";
@@ -576,6 +709,10 @@ async fn relay(core: &Core, flow: &Flow, peer: &PeerView, phone: Ipv4Addr, dst_i
         tokio::select! {
             data = read => {
                 let Ok(data) = data else { break "closed" };
+                if quic.as_ref().is_some_and(|run| run.superseded(core)) {
+                    switched = Some(data);
+                    break "quic-mode";
+                }
                 packets_up += 1;
                 bytes_up += data.len() as u64;
                 core.stats.udp_packets_up.fetch_add(1, Ordering::Relaxed);
@@ -624,17 +761,21 @@ async fn relay(core: &Core, flow: &Flow, peer: &PeerView, phone: Ipv4Addr, dst_i
         "bytesUp": bytes_up,
         "bytesDown": bytes_down,
     }));
+    switched.map_or(QuicEnd::Over, QuicEnd::ModeChanged)
 }
 
 #[cfg(test)]
 mod tests {
+    use std::collections::VecDeque;
     use std::net::Ipv4Addr;
+    use std::sync::atomic::AtomicBool;
 
-    use mitmproxy::messages::ConnectionIdGenerator;
+    use mitmproxy::messages::{ConnectionId, ConnectionIdGenerator};
     use serde_json::Value;
 
     use super::*;
     use crate::features::dns_rules::DnsAction;
+    use crate::features::quic::QuicGateway;
 
     /// A flow whose phone side is played by `chunks`: each read gets the next one, after its
     /// delay. A read past the end never answers.
@@ -787,5 +928,433 @@ mod tests {
             assert_eq!(QuicMode::parse(mode.as_str()), Some(mode));
         }
         assert_eq!(QuicMode::parse("BLOCK"), None);
+    }
+
+    // ---- UDP and DNS flows against a stand-in for the network stack --------------------------
+
+    /// The network stack's side of one flow, the way mitmproxy's handlers play it: what the phone
+    /// sends waits until a read takes it, a second read while one is waiting is a bug (the real
+    /// stack panics on it), and what the core writes or closes is recorded.
+    struct FakeStack {
+        phone: mpsc::UnboundedSender<Vec<u8>>,
+        written: Arc<Mutex<Vec<Vec<u8>>>>,
+        closed: Arc<AtomicBool>,
+        double_read: Arc<AtomicBool>,
+    }
+
+    impl FakeStack {
+        fn send(&self, data: &[u8]) {
+            self.phone.send(data.to_vec()).unwrap();
+        }
+
+        fn written(&self) -> Vec<Vec<u8>> {
+            lock(&self.written).clone()
+        }
+
+        fn closed(&self) -> bool {
+            self.closed.load(Ordering::SeqCst)
+        }
+
+        fn double_read(&self) -> bool {
+            self.double_read.load(Ordering::SeqCst)
+        }
+
+        /// The phone is gone: pending and later reads end.
+        fn hang_up(self) {
+            drop(self.phone);
+        }
+    }
+
+    fn fake_flow(id: ConnectionId, src: &str, dst: &str) -> (Flow, FakeStack) {
+        let (commands, mut command_rx) = mpsc::unbounded_channel::<TransportCommand>();
+        let (phone, mut phone_rx) = mpsc::unbounded_channel::<Vec<u8>>();
+        let stack = FakeStack {
+            phone,
+            written: Arc::new(Mutex::new(Vec::new())),
+            closed: Arc::new(AtomicBool::new(false)),
+            double_read: Arc::new(AtomicBool::new(false)),
+        };
+        let (written, closed, double_read) = (stack.written.clone(), stack.closed.clone(), stack.double_read.clone());
+        tokio::spawn(async move {
+            let mut queued: VecDeque<Vec<u8>> = VecDeque::new();
+            let mut waiting: Option<oneshot::Sender<Vec<u8>>> = None;
+            let mut phone_open = true;
+            loop {
+                tokio::select! {
+                    command = command_rx.recv() => match command {
+                        None => return,
+                        Some(TransportCommand::ReadData(_, _, reply)) => {
+                            if waiting.is_some() {
+                                double_read.store(true, Ordering::SeqCst);
+                            }
+                            match queued.pop_front() {
+                                Some(data) => { reply.send(data).ok(); }
+                                // A phone that is gone ends the read (the sender is dropped).
+                                None if phone_open => waiting = Some(reply),
+                                None => {}
+                            }
+                        }
+                        Some(TransportCommand::WriteData(_, data)) => lock(&written).push(data),
+                        Some(TransportCommand::DrainWriter(_, done)) => { done.send(()).ok(); }
+                        Some(TransportCommand::CloseConnection(..)) => {
+                            closed.store(true, Ordering::SeqCst);
+                            waiting = None;
+                        }
+                    },
+                    data = phone_rx.recv(), if phone_open => match data {
+                        Some(data) => match waiting.take() {
+                            Some(reply) => { reply.send(data).ok(); }
+                            None => queued.push_back(data),
+                        },
+                        None => {
+                            phone_open = false;
+                            waiting = None;
+                        }
+                    },
+                }
+            }
+        });
+        let flow = Flow { id, src: src.parse().unwrap(), dst: dst.parse().unwrap(), commands };
+        (flow, stack)
+    }
+
+    fn udp_flow_of(src: &str, dst: &str) -> (Flow, FakeStack) {
+        fake_flow(ConnectionIdGenerator::udp().next_id(), src, dst)
+    }
+
+    fn tcp_flow_of(src: &str, dst: &str) -> (Flow, FakeStack) {
+        fake_flow(ConnectionIdGenerator::tcp().next_id(), src, dst)
+    }
+
+    /// A peer whose removal never fires, unlike `OnePeer`, whose sender is gone already.
+    struct LivePeer {
+        removed: watch::Sender<bool>,
+    }
+
+    impl PeerDirectory for LivePeer {
+        fn lookup(&self, _tunnel_ip: Ipv4Addr) -> Option<PeerView> {
+            Some(PeerView {
+                id: "p1".into(),
+                name: "Test".into(),
+                endpoint_ip: None,
+                removed: self.removed.subscribe(),
+            })
+        }
+    }
+
+    struct Rig {
+        core: Arc<Core>,
+        events: Arc<Mutex<Vec<Value>>>,
+        /// What the core hands to the front-end: the ICMP errors for blocked QUIC.
+        injected: mpsc::Receiver<InjectedPacket>,
+    }
+
+    /// A core for flow tests. `gateway` gives it the HTTP/3 gateway that QUIC mode `decrypt` needs.
+    fn rig(mode: QuicMode, allow_loopback: bool, gateway: bool) -> Rig {
+        let events = Arc::new(Mutex::new(Vec::new()));
+        let sink = {
+            let events = events.clone();
+            EventSink::from_fn(move |event| lock(&events).push(event))
+        };
+        let (commands, _) = mpsc::unbounded_channel();
+        let (injector, injected) = mpsc::channel(64);
+        let socks = Arc::new(Mutex::new("127.0.0.1:1".to_string()));
+        let driver = gateway.then(|| {
+            let (ca_cert, ca_key) = test_ca();
+            let gateway = QuicGateway::new(&ca_cert, &ca_key, socks.clone(), sink.clone()).unwrap();
+            QuicDriver::new(gateway, injector.clone())
+        });
+        let core = Core::new(
+            CoreConfig { net: TunnelNet::parse("10.73.0.0/24").unwrap(), quic: mode, allow_loopback },
+            Arc::new(LivePeer { removed: watch::channel(false).0 }),
+            sink,
+            socks,
+            commands,
+            injector,
+            Arc::new(Hooks::new(mode)),
+            driver,
+        );
+        Rig { core: Arc::new(core), events, injected }
+    }
+
+    /// A throwaway CA as PEM texts: certificate, then key.
+    fn test_ca() -> (String, String) {
+        use rcgen::{BasicConstraints, CertificateParams, IsCa, KeyPair, KeyUsagePurpose};
+        let key = KeyPair::generate().unwrap();
+        let mut params = CertificateParams::default();
+        params.is_ca = IsCa::Ca(BasicConstraints::Unconstrained);
+        params.key_usages =
+            vec![KeyUsagePurpose::KeyCertSign, KeyUsagePurpose::CrlSign, KeyUsagePurpose::DigitalSignature];
+        let cert = params.self_signed(&key).unwrap();
+        (cert.pem(), key.serialize_pem())
+    }
+
+    impl Rig {
+        fn events(&self) -> Vec<Value> {
+            lock(&self.events).clone()
+        }
+
+        /// The first event after `after` that `matches`, within five seconds.
+        async fn event_after(&self, after: usize, what: &str, matches: impl Fn(&Value) -> bool) -> Value {
+            for _ in 0..250 {
+                if let Some(found) = self.events().iter().skip(after).find(|event| matches(event)) {
+                    return found.clone();
+                }
+                sleep(Duration::from_millis(20)).await;
+            }
+            panic!("no {what} event; saw {:#?}", self.events());
+        }
+
+        async fn event(&self, what: &str, matches: impl Fn(&Value) -> bool) -> Value {
+            self.event_after(0, what, matches).await
+        }
+
+        /// The next ICMP error the core handed over, within five seconds.
+        async fn icmp(&mut self) -> InjectedPacket {
+            timeout_at(tokio::time::Instant::now() + Duration::from_secs(5), self.injected.recv())
+                .await
+                .expect("no ICMP error within 5 s")
+                .expect("the injector closed")
+        }
+
+        /// True when no more ICMP errors are waiting after a short pause.
+        async fn no_more_icmp(&mut self) -> bool {
+            sleep(Duration::from_millis(150)).await;
+            self.injected.try_recv().is_err()
+        }
+    }
+
+    async fn written_count(stack: &FakeStack, count: usize) -> Vec<Vec<u8>> {
+        for _ in 0..250 {
+            if stack.written().len() >= count {
+                return stack.written();
+            }
+            sleep(Duration::from_millis(20)).await;
+        }
+        panic!("the core wrote {} messages, expected {count}", stack.written().len());
+    }
+
+    fn is_port_unreachable(packet: &[u8]) -> bool {
+        // 20 bytes of IPv4 header, then ICMP type 3 (destination unreachable) code 3 (port)
+        packet.len() > 21 && packet[9] == 1 && packet[20] == 3 && packet[21] == 3
+    }
+
+    fn quic_event(action: &'static str) -> impl Fn(&Value) -> bool {
+        move |event| event["event"] == "quic" && event["action"] == action
+    }
+
+    const PHONE_SRC: &str = "10.73.0.2:40001";
+
+    #[tokio::test]
+    async fn dns_flows_cover_every_resolver_a_phone_may_reach() {
+        let rig = rig(QuicMode::Block, false, false);
+        let core = &rig.core;
+        let ip = |text: &str| text.parse::<Ipv4Addr>().unwrap();
+
+        assert!(core.is_dns_flow(ip("10.73.0.53"), 53), "the tunnel's own resolver");
+        assert!(core.is_dns_flow(ip("8.8.8.8"), 53), "a resolver an app has hard-coded");
+        assert!(core.is_dns_flow(ip("192.168.0.1"), 53), "the router");
+        assert!(!core.is_dns_flow(ip("8.8.8.8"), 5353), "only port 53");
+        assert!(!core.is_dns_flow(ip("8.8.8.8"), 853), "DoT is not DNS over port 53");
+        assert!(!core.is_dns_flow(ip("10.73.0.53"), 5353));
+        // The destinations a phone can't reach stay refused, DNS or not.
+        let forbidden = [
+            "127.0.0.1",
+            "0.0.0.0",
+            "224.0.0.251",
+            "255.255.255.255",
+            "10.73.0.1",
+            "10.73.0.54",
+            "10.73.0.2",
+        ];
+        for forbidden in forbidden {
+            assert!(!core.is_dns_flow(ip(forbidden), 53), "{forbidden}");
+        }
+        // Tests may lift the loopback ban, and DNS follows it.
+        assert!(rig_with_loopback().core.is_dns_flow(ip("127.0.0.1"), 53));
+    }
+
+    fn rig_with_loopback() -> Rig {
+        rig(QuicMode::Block, true, false)
+    }
+
+    #[tokio::test]
+    async fn a_udp_query_to_another_resolver_gets_the_rules_and_shows_up_in_the_events() {
+        let rig = rig(QuicMode::Block, false, false);
+        rig.core.hooks.force_dns(Some(DnsAction::Block));
+        let (flow, stack) = udp_flow_of(PHONE_SRC, "8.8.8.8:53");
+        tokio::spawn(udp_flow(rig.core.clone(), flow));
+
+        stack.send(&a_query("ads.example.com"));
+        let written = written_count(&stack, 1).await;
+        assert_eq!(&written[0][..2], &[0x12, 0x34], "the answer to that question");
+        assert_eq!(written[0][3] & 0x0F, 3, "NXDOMAIN: the block rule applies to 8.8.8.8 too");
+        let dns = rig.event("dns", |event| event["event"] == "dns").await;
+        assert_eq!(dns["peer"], "p1");
+        assert_eq!(dns["name"], "ads.example.com");
+        assert_eq!(dns["rule"], "blocked");
+
+        // The same flow goes on: an answer rule, and the name map for the address it gives.
+        let fake = Ipv4Addr::new(192, 168, 0, 10);
+        rig.core.hooks.force_dns(Some(DnsAction::Answer(fake)));
+        stack.send(&a_query("api.test"));
+        let written = written_count(&stack, 2).await;
+        assert_eq!(&written[1][written[1].len() - 4..], &fake.octets());
+        assert_eq!(rig.core.name_for(Ipv4Addr::new(10, 73, 0, 2), fake).as_deref(), Some("api.test"));
+        assert!(!stack.double_read());
+        assert!(rig.events().iter().all(|event| event["event"] == "dns"), "nothing was relayed or blocked as QUIC");
+    }
+
+    #[tokio::test]
+    async fn a_tcp_query_to_another_resolver_is_answered_here_too() {
+        let rig = rig(QuicMode::Block, false, false);
+        rig.core.hooks.force_dns(Some(DnsAction::Block));
+        let (flow, stack) = tcp_flow_of(PHONE_SRC, "1.1.1.1:53");
+        let core = rig.core.clone();
+        let flow_task = tokio::spawn(async move { tcp_flow_inner(&core, &flow).await });
+
+        let query = a_query("ads.example.com");
+        let mut framed = (query.len() as u16).to_be_bytes().to_vec();
+        framed.extend_from_slice(&query);
+        stack.send(&framed);
+        let written = written_count(&stack, 1).await;
+        let length = usize::from(u16::from_be_bytes([written[0][0], written[0][1]]));
+        assert_eq!(length, written[0].len() - 2, "a length-prefixed message");
+        assert_eq!(written[0][2 + 3] & 0x0F, 3, "NXDOMAIN");
+        rig.event("dns", |event| event["event"] == "dns" && event["rule"] == "blocked").await;
+
+        stack.hang_up();
+        let ended = timeout_at(tokio::time::Instant::now() + Duration::from_secs(5), flow_task).await;
+        assert!(matches!(ended, Ok(Ok(Ok(())))), "the flow ends cleanly when the phone closes: {ended:?}");
+    }
+
+    #[tokio::test]
+    async fn dns_to_a_destination_a_phone_cant_reach_is_still_refused() {
+        let rig = rig(QuicMode::Block, false, false);
+        rig.core.hooks.force_dns(Some(DnsAction::Block));
+
+        for dst in ["127.0.0.1:53", "10.73.0.1:53", "224.0.0.251:53"] {
+            let (flow, stack) = udp_flow_of(PHONE_SRC, dst);
+            tokio::spawn(udp_flow(rig.core.clone(), flow));
+            stack.send(&a_query("ads.example.com"));
+            sleep(Duration::from_millis(100)).await;
+            assert!(stack.written().is_empty(), "{dst}: UDP is dropped, not answered");
+
+            let (flow, _stack) = tcp_flow_of(PHONE_SRC, dst);
+            let refused = tcp_flow_inner(&rig.core, &flow).await.expect_err(dst);
+            assert!(refused.to_string().contains("not allowed"), "{dst}: {refused}");
+        }
+        assert!(rig.events().is_empty(), "no DNS answer, so no dns event");
+    }
+
+    #[tokio::test]
+    async fn a_running_quic_flow_is_refused_at_once_when_the_mode_becomes_block() {
+        let mut rig = rig(QuicMode::Relay, true, false);
+        let (flow, stack) = udp_flow_of(PHONE_SRC, "127.0.0.1:443");
+        tokio::spawn(udp_flow(rig.core.clone(), flow));
+
+        // The relayed event says which flow it is, so the UI can pair it with its udp-open.
+        let relayed = rig.event("relayed", quic_event("relayed")).await;
+        let open = rig.event("udp-open", |event| event["event"] == "udp-open").await;
+        assert_eq!(relayed["flow"], open["flow"]);
+        assert_eq!((relayed["src"].as_str(), relayed["dst"].as_str()), (Some(PHONE_SRC), Some("127.0.0.1:443")));
+        assert_eq!(relayed["peer"], "p1");
+
+        rig.core.hooks.set_quic_mode(QuicMode::Block);
+        stack.send(b"the phone's QUIC packet");
+        let close = rig.event("udp-close", |event| event["event"] == "udp-close").await;
+        assert_eq!((&close["flow"], close["reason"].as_str()), (&open["flow"], Some("quic-mode")));
+        let blocked = rig.event("blocked", quic_event("blocked")).await;
+        assert_eq!((blocked["src"].as_str(), blocked["dst"].as_str()), (Some(PHONE_SRC), Some("127.0.0.1:443")));
+        let error = rig.icmp().await;
+        assert_eq!(error.to, Ipv4Addr::new(10, 73, 0, 2));
+        assert!(is_port_unreachable(&error.packet), "the datagram that showed the change is refused too");
+
+        // The flow was not closed (a closed flow is silently dropped by the stack), and it keeps
+        // refusing what the phone sends next.
+        sleep(ICMP_MIN_GAP + Duration::from_millis(50)).await;
+        stack.send(b"and another");
+        assert!(is_port_unreachable(&rig.icmp().await.packet));
+        assert!(!stack.closed());
+        assert!(!stack.double_read());
+        assert_eq!(rig.core.stats.quic_blocked.load(Ordering::Relaxed), 1, "one blocked flow, not one per datagram");
+    }
+
+    #[tokio::test]
+    async fn a_blocked_quic_flow_is_relayed_when_the_mode_becomes_relay() {
+        let mut rig = rig(QuicMode::Block, true, false);
+        let (flow, stack) = udp_flow_of(PHONE_SRC, "127.0.0.1:443");
+        tokio::spawn(udp_flow(rig.core.clone(), flow));
+        stack.send(b"first");
+        rig.event("blocked", quic_event("blocked")).await;
+        assert!(is_port_unreachable(&rig.icmp().await.packet));
+
+        rig.core.hooks.set_quic_mode(QuicMode::Relay);
+        stack.send(b"second");
+        let relayed = rig.event("relayed", quic_event("relayed")).await;
+        let open = rig.event("udp-open", |event| event["event"] == "udp-open").await;
+        assert_eq!(relayed["flow"], open["flow"]);
+        assert_eq!(relayed["src"], PHONE_SRC);
+        assert!(rig.no_more_icmp().await, "the second datagram is relayed, not refused");
+        assert!(!stack.double_read());
+    }
+
+    #[tokio::test]
+    async fn a_quic_flow_moves_between_decrypt_and_block_with_the_mode() {
+        let mut rig = rig(QuicMode::Decrypt, false, true);
+        let (flow, stack) = udp_flow_of(PHONE_SRC, "93.184.216.34:443");
+        tokio::spawn(udp_flow(rig.core.clone(), flow));
+        let decrypted = rig.event("decrypted", quic_event("decrypted")).await;
+        assert_eq!((&decrypted["src"], &decrypted["dst"]), (&json!(PHONE_SRC), &json!("93.184.216.34:443")));
+
+        rig.core.hooks.set_quic_mode(QuicMode::Block);
+        stack.send(b"the phone's QUIC packet");
+        let blocked = rig.event("blocked", quic_event("blocked")).await;
+        assert_eq!(blocked["src"], PHONE_SRC);
+        assert!(is_port_unreachable(&rig.icmp().await.packet));
+
+        let before = rig.events().len();
+        rig.core.hooks.set_quic_mode(QuicMode::Decrypt);
+        sleep(ICMP_MIN_GAP + Duration::from_millis(50)).await;
+        stack.send(b"back to the gateway");
+        rig.event_after(before, "decrypted", quic_event("decrypted")).await;
+        assert!(rig.no_more_icmp().await, "the gateway got that datagram, not an ICMP error");
+        assert!(!stack.closed() && !stack.double_read());
+    }
+
+    #[tokio::test]
+    async fn a_mode_change_that_changes_nothing_for_a_flow_leaves_it_alone() {
+        // No gateway: decrypt behaves like block, so choosing it is no change for a blocked flow.
+        let mut rig = rig(QuicMode::Block, false, false);
+        let (flow, stack) = udp_flow_of(PHONE_SRC, "93.184.216.34:443");
+        tokio::spawn(udp_flow(rig.core.clone(), flow));
+        stack.send(b"one");
+        rig.event("blocked", quic_event("blocked")).await;
+        rig.icmp().await;
+
+        rig.core.hooks.set_quic_mode(QuicMode::Decrypt);
+        sleep(ICMP_MIN_GAP + Duration::from_millis(50)).await;
+        stack.send(b"two");
+        assert!(is_port_unreachable(&rig.icmp().await.packet));
+        let blocked = rig.events().iter().filter(|event| quic_event("blocked")(event)).count();
+        assert_eq!(blocked, 1, "no second report for the same flow");
+        assert!(!stack.double_read());
+    }
+
+    #[tokio::test]
+    async fn a_dropped_quic_flow_gets_refused_too_when_the_mode_becomes_block() {
+        // The tunnel's own address is no place for a phone to send QUIC: silently dropped in relay mode.
+        let mut rig = rig(QuicMode::Relay, false, false);
+        let (flow, stack) = udp_flow_of(PHONE_SRC, "10.73.0.1:443");
+        tokio::spawn(udp_flow(rig.core.clone(), flow));
+        stack.send(b"one");
+        assert!(rig.no_more_icmp().await);
+        assert!(rig.events().is_empty());
+
+        rig.core.hooks.set_quic_mode(QuicMode::Block);
+        stack.send(b"two");
+        rig.event("blocked", quic_event("blocked")).await;
+        assert!(is_port_unreachable(&rig.icmp().await.packet));
+        assert!(!stack.double_read());
     }
 }

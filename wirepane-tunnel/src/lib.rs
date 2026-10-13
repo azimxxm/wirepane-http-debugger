@@ -200,7 +200,11 @@ impl Tunnel {
         let (injector_tx, injector_rx) = mpsc::channel(256);
         let (shutdown_tx, shutdown_rx) = shutdown::channel();
 
-        let hooks = Arc::new(Hooks::new(config.quic));
+        let hooks = Arc::new(Hooks::new(config.quic).with_events(events.clone()));
+        // The capture names each phone's interface after its device.
+        for stored in &state.peers {
+            hooks.set_peer_name(&stored.peer, &stored.name);
+        }
         let socks = Arc::new(Mutex::new(config.socks.clone()));
         let quic_driver = start_quic_gateway(&config, socks.clone(), &events, injector_tx.clone());
 
@@ -372,6 +376,7 @@ impl Tunnel {
         *state = next;
 
         lock(&self.peers).add(&self.server_private, &id, &name, tunnel_ip, public);
+        self.hooks.set_peer_name(&id, &name);
         Ok(PeerAdded {
             ikev2: None,
             config: self.client_config(&private, tunnel_ip),
@@ -416,6 +421,7 @@ impl Tunnel {
         let server_key = self.server_private.to_bytes();
         let secret = frontend::ikev2::profile_secret(&server_key, &id);
         lock(&self.ikev2_peers).add(&id, &name, tunnel_ip, secret);
+        self.hooks.set_peer_name(&id, &name);
         Ok(PeerAdded {
             ikev2: Some(frontend::ikev2::peer_added_details(&server_key, &id)),
             config: String::new(),
@@ -437,6 +443,7 @@ impl Tunnel {
         *state = next;
         lock(&self.peers).remove(peer);
         lock(&self.ikev2_peers).remove(peer);
+        self.hooks.forget_peer_name(peer);
         Ok(())
     }
 
@@ -519,7 +526,8 @@ impl Tunnel {
         self.hooks.set_quic_mode(mode);
     }
 
-    pub fn capture_start(&self, path: &std::path::Path) -> Result<()> {
+    /// Starts a capture and returns the path it really writes to: a taken name gets a number.
+    pub fn capture_start(&self, path: &std::path::Path) -> Result<PathBuf> {
         self.hooks
             .capture_start(path)
             .with_context(|| format!("cannot capture to {}", path.display()))
@@ -560,24 +568,20 @@ impl Tunnel {
                     .and_then(Value::as_str)
                     .filter(|path| !path.is_empty())
                     .ok_or_else(|| anyhow!("capture-start needs \"path\""))?;
-                self.capture_start(std::path::Path::new(path))?;
-                Ok(json!({ "event": "capture-started", "path": path }))
+                let real_path = self.capture_start(std::path::Path::new(path))?;
+                Ok(json!({ "event": "capture-started", "path": real_path.to_string_lossy() }))
             })(),
-            "capture-stop" => self.capture_stop().map(|summary| {
-                json!({
-                    "event": "capture-stopped",
-                    "path": summary.path.to_string_lossy(),
-                    "packets": summary.packets,
-                    "bytes": summary.bytes,
-                })
-            }),
+            "capture-stop" => self.capture_stop().map(|summary| summary.to_event()),
             _ => return None,
         };
         Some(result)
     }
 
-    /// Stops the front-end and the core. Open flows are dropped.
+    /// Stops the front-end and the core. Open flows are dropped. A running capture is finished
+    /// first, because the process leaves with `process::exit` and the packets still in the capture's
+    /// write buffer would be lost; the parent hears about it as a `capture-stopped` event.
     pub async fn shutdown(self) {
+        self.hooks.end_capture("helper stopped");
         self.shutdown_tx.send(()).ok();
         if let Some(ikev2) = &self.ikev2 {
             ikev2.abort();

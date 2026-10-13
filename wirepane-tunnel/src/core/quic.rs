@@ -12,7 +12,7 @@ use serde_json::json;
 use tokio::sync::Notify;
 use tokio::time::sleep_until;
 
-use super::{Core, Flow, icmp};
+use super::{Core, Flow, QuicEnd, QuicRun, icmp};
 use crate::features::quic::{OutDatagram, QuicGateway};
 use crate::frontend::wireguard::lock;
 use crate::frontend::{InjectedPacket, PacketInjector, PeerView};
@@ -69,23 +69,35 @@ impl QuicDriver {
     }
 }
 
-/// A UDP/443 flow in decrypt mode: every datagram goes to the gateway until the flow ends.
-pub async fn decrypted_flow(core: &Core, driver: &QuicDriver, flow: &Flow, peer: &PeerView) {
+/// A UDP/443 flow in decrypt mode: every datagram goes to the gateway until the flow ends, or the
+/// QUIC mode changes and the next datagram belongs to another handler.
+pub(super) async fn decrypted_flow(
+    core: &Core,
+    driver: &QuicDriver,
+    flow: &Flow,
+    peer: &PeerView,
+    mut run: QuicRun,
+) -> QuicEnd {
     core.events.emit(json!({
         "event": "quic",
         "peer": peer.id,
+        "src": flow.src.to_string(),
         "dst": flow.dst.to_string(),
         "action": "decrypted",
     }));
     let mut removed = peer.removed.clone();
-    while let Some(read) = flow.read(u32::from(u16::MAX)) {
+    while let Some(read) = run.read(flow) {
         let datagram = tokio::select! {
             data = read => match data {
                 Ok(data) => data,
-                Err(_) => return,
+                Err(_) => return QuicEnd::Over,
             },
-            _ = removed.changed() => return,
+            _ = removed.changed() => return QuicEnd::Over,
         };
+        if run.superseded(core) {
+            return QuicEnd::ModeChanged(datagram);
+        }
         driver.on_datagram(&peer.id, flow.src, flow.dst, &datagram).await;
     }
+    QuicEnd::Over
 }

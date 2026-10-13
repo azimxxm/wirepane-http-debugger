@@ -11,7 +11,7 @@ use std::path::Path;
 use std::process::{Child, ChildStdin, Command, Stdio};
 use std::sync::mpsc::{Receiver, RecvTimeoutError, channel};
 use std::thread;
-use std::time::{Duration, Instant};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use serde_json::{Value, json};
 use support::wg_client::WgClient;
@@ -86,6 +86,22 @@ impl Sidecar {
 
     fn is_alive(&mut self) -> bool {
         self.child.try_wait().unwrap().is_none()
+    }
+
+    /// Closes the helper's stdin like a parent that is leaving, waits for it to exit and returns
+    /// everything it printed.
+    fn close_and_wait(&mut self) -> Vec<Value> {
+        self.stdin.take();
+        let deadline = Instant::now() + Duration::from_secs(10);
+        while self.is_alive() {
+            assert!(Instant::now() < deadline, "the sidecar did not exit after its stdin closed");
+            thread::sleep(Duration::from_millis(20));
+        }
+        // The reader thread ends with the process; take what it still has
+        while let Ok(value) = self.events.recv_timeout(Duration::from_millis(500)) {
+            self.seen.push(value);
+        }
+        self.seen.clone()
     }
 }
 
@@ -234,4 +250,116 @@ fn a_capture_counts_the_tunnels_packets_and_dns_goes_on() {
     expect_event(&stopped, "capture-stopped");
     assert!(stopped["packets"].as_u64().unwrap() >= 2, "the query in and the answer out: {stopped}");
     assert!(stopped["bytes"].as_u64().unwrap() >= 2 * 28, "{stopped}");
+}
+
+/// The Enhanced Packet Blocks of a pcapng file as (interface, microseconds since 1970), after
+/// checking that the blocks fill the file exactly.
+fn pcapng_packets(path: &Path) -> Vec<(u32, u64)> {
+    let bytes = std::fs::read(path).unwrap();
+    let word = |at: usize| u32::from_le_bytes(bytes[at..at + 4].try_into().unwrap());
+    let mut at = 0;
+    let mut packets = Vec::new();
+    while at < bytes.len() {
+        assert!(bytes.len() - at >= 12, "a block is cut off at byte {at}");
+        let total = word(at + 4) as usize;
+        assert!(total >= 12 && total.is_multiple_of(4) && at + total <= bytes.len(), "bad block length {total} at byte {at}");
+        assert_eq!(word(at + total - 4) as usize, total, "the closing length of the block at byte {at}");
+        if word(at) == 6 {
+            packets.push((word(at + 8), (u64::from(word(at + 12)) << 32) | u64::from(word(at + 16))));
+        }
+        at += total;
+    }
+    packets
+}
+
+fn contains(bytes: &[u8], needle: &[u8]) -> bool {
+    bytes.windows(needle.len()).any(|window| window == needle)
+}
+
+/// A sidecar with one phone that has said hello, ready for traffic.
+fn sidecar_with_phone(dir: &Path, name: &str) -> (Sidecar, WgClient, Value) {
+    let mut sidecar = Sidecar::spawn(&dir.join("state.json"), &[]);
+    sidecar.wait_for("ready");
+    let added = sidecar.ask(json!({"cmd": "add-peer", "name": name, "kind": "wireguard"}), "peer-added");
+    expect_event(&added, "peer-added");
+    let client = WgClient::connect(added["config"].as_str().unwrap()).expect("handshake");
+    (sidecar, client, added)
+}
+
+#[test]
+fn a_running_capture_is_finished_and_reported_when_the_helper_stops() {
+    let dir = tempfile::tempdir().unwrap();
+    let (mut sidecar, mut client, added) = sidecar_with_phone(dir.path(), "Capture test");
+
+    // Started after the handshake, so the exchange below happens within the capture's first flush
+    // interval: if the helper did not finish the capture, its packets would still be in the write
+    // buffer when it leaves.
+    let path = dir.path().join("leaving.pcapng");
+    expect_event(&sidecar.ask(json!({"cmd": "capture-start", "path": path}), "capture-started"), "capture-started");
+    assert!(!client.dns_a("localhost").is_empty(), "the DNS answer came back");
+
+    // The parent goes away without a capture-stop
+    let events = sidecar.close_and_wait();
+    let stopped = events
+        .iter()
+        .find(|event| event["event"] == "capture-stopped")
+        .unwrap_or_else(|| panic!("the helper did not report the capture: {events:#?}"));
+    assert_eq!(stopped["reason"], "helper stopped");
+    assert_eq!(stopped["path"], path.to_str().unwrap());
+    let packets = stopped["packets"].as_u64().unwrap();
+    assert!(packets >= 2, "the query in and the answer out: {stopped}");
+
+    assert_eq!(pcapng_packets(&path).len() as u64, packets, "the file holds every packet the event counts");
+    let bytes = std::fs::read(&path).unwrap();
+    assert!(contains(&bytes, b"Capture test"), "the phone's interface is named after its device");
+    assert!(contains(&bytes, added["peer"].as_str().unwrap().as_bytes()), "and described by its id");
+}
+
+#[test]
+fn a_delayed_packet_is_captured_when_it_leaves_and_not_when_it_is_queued() {
+    let dir = tempfile::tempdir().unwrap();
+    let (mut sidecar, mut client, added) = sidecar_with_phone(dir.path(), "Slow phone");
+    let peer = added["peer"].as_str().unwrap().to_string();
+    expect_event(
+        &sidecar.ask(json!({"cmd": "set-conditions", "peer": peer, "conditions": {"latencyMs": 300}}), "conditions-set"),
+        "conditions-set",
+    );
+
+    let path = dir.path().join("slow.pcapng");
+    expect_event(&sidecar.ask(json!({"cmd": "capture-start", "path": path}), "capture-started"), "capture-started");
+    let before = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_micros() as u64;
+    assert!(!client.dns_a("localhost").is_empty(), "the DNS answer came back through 300 ms of latency each way");
+    expect_event(&sidecar.ask(json!({"cmd": "capture-stop"}), "capture-stopped"), "capture-stopped");
+
+    let packets = pcapng_packets(&path);
+    assert!(packets.len() >= 2, "the query in and the answer out: {packets:?}");
+    // The query sat 300 ms in the shaper's queue, and is in the capture from the moment it left
+    let (query, answer) = (packets[0].1, packets[1].1);
+    assert!(query >= before + 250_000, "the query is stamped {} ms after it came in", (query - before) / 1000);
+    // And the answer waited another 300 ms
+    assert!(answer >= query + 250_000, "the answer is stamped {} ms after the query", (answer - query) / 1000);
+}
+
+#[test]
+fn a_second_capture_with_the_same_path_goes_to_a_numbered_file() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut sidecar = Sidecar::spawn(&dir.path().join("state.json"), &[]);
+    sidecar.wait_for("ready");
+    let path = dir.path().join("wirepane-same-second.pcapng");
+
+    let first = sidecar.ask(json!({"cmd": "capture-start", "path": path}), "capture-started");
+    assert_eq!(first["path"], path.to_str().unwrap());
+    let stopped = sidecar.ask(json!({"cmd": "capture-stop"}), "capture-stopped");
+    assert_eq!(stopped["path"], path.to_str().unwrap());
+    let first_file = std::fs::read(&path).unwrap();
+
+    // The same name again: the reply says where the capture really is, and the first file is left alone
+    let numbered = dir.path().join("wirepane-same-second-2.pcapng");
+    let second = sidecar.ask(json!({"cmd": "capture-start", "path": path}), "capture-started");
+    expect_event(&second, "capture-started");
+    assert_eq!(second["path"], numbered.to_str().unwrap());
+    let stopped = sidecar.ask(json!({"cmd": "capture-stop"}), "capture-stopped");
+    assert_eq!(stopped["path"], numbered.to_str().unwrap());
+    assert!(numbered.is_file());
+    assert_eq!(std::fs::read(&path).unwrap(), first_file, "the first capture is untouched");
 }

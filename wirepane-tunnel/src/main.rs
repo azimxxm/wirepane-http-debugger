@@ -160,7 +160,7 @@ async fn run(events: &EventSink) -> Result<()> {
         .ok_or_else(|| anyhow!("the front-end task is missing"))?;
 
     let mut lines = BufReader::new(tokio::io::stdin()).lines();
-    loop {
+    let outcome = loop {
         tokio::select! {
             line = lines.next_line() => match line {
                 Ok(Some(line)) if line.trim().is_empty() => {}
@@ -172,20 +172,22 @@ async fn run(events: &EventSink) -> Result<()> {
                     }
                 }
                 // The parent closed our stdin (or died): quit, so the sidecar can't outlive it.
-                Ok(None) => break,
-                Err(error) => bail!("cannot read stdin: {error}"),
+                Ok(None) => break Ok(()),
+                Err(error) => break Err(anyhow!("cannot read stdin: {error}")),
             },
             ended = &mut frontend => {
-                return match ended {
-                    Ok(Ok(())) => Err(anyhow!("the tunnel stopped")),
-                    Ok(Err(error)) => Err(error.context("the tunnel stopped")),
-                    Err(error) => Err(anyhow!("the tunnel task failed: {error}")),
-                };
+                break Err(match ended {
+                    Ok(Ok(())) => anyhow!("the tunnel stopped"),
+                    Ok(Err(error)) => error.context("the tunnel stopped"),
+                    Err(error) => anyhow!("the tunnel task failed: {error}"),
+                });
             }
         }
-    }
+    };
+    // Every way out goes through here: main() ends with process::exit, which runs no destructors, so
+    // a running capture is finished (and reported) first or its last packets are lost.
     tunnel.shutdown().await;
-    Ok(())
+    outcome
 }
 
 #[tokio::main]
