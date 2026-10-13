@@ -67,9 +67,9 @@ Har bir installer o'z tizimida yig'iladi (Intel Mac build'i Rosetta 2 o'rnatilga
 
 Har bir tizim uchun bir qatorli alohida fayl ham bor: `./scripts/build-mac-arm64.sh`, `./scripts/build-mac-x64.sh`, `./scripts/build-win.sh`, `./scripts/build-linux.sh`. Ular shu skriptni chaqiradi, shuning uchun kod bitta joyda qoladi.
 
-Skript Bruno, server, UI va desktop'ni yig'adi va oxirida fayllarni ko'rsatadi: `httptoolkit-desktop/dist/Wirepane-<versiya>-...`. Versiya — repo ildizidagi `VERSION` fayli (hozir `1.1.0`). Server ham, UI ham shu repo'dagi koddan yig'iladi. Internetdan faqat Node.js (har tizim uchun bir marta, `build/cache`da saqlanadi) va npm package'lari yuklanadi. Sertifikat yoki akkaunt kerak emas. Mac'da yig'ish bir necha daqiqa oladi.
+Skript Bruno, server, UI va desktop'ni yig'adi va oxirida fayllarni ko'rsatadi: `httptoolkit-desktop/dist/Wirepane-<versiya>-...`. Versiya — repo ildizidagi `VERSION` fayli (hozir `1.2.0`). Server ham, UI ham shu repo'dagi koddan yig'iladi. Internetdan faqat Node.js (har tizim uchun bir marta, `build/cache`da saqlanadi) va npm package'lari yuklanadi. Sertifikat yoki akkaunt kerak emas. Mac'da yig'ish bir necha daqiqa oladi.
 
-**GitHub Actions:** `.github/workflows/release.yml` uchala tizimda (macOS'da Apple Silicon va Intel uchun alohida) yig'adi va hamma fayllarni draft GitHub release'ga (`v<versiya>`) qo'yadi. Ishga tushirish: Actions → Release → **Run workflow** (versiya bo'sh qolsa, `VERSION`dan olinadi) yoki `v1.1.0` kabi tag push qilish. Draft tekshirilgach, qo'lda **Publish** qilinadi.
+**GitHub Actions:** `.github/workflows/release.yml` uchala tizimda (macOS'da Apple Silicon va Intel uchun alohida) yig'adi va hamma fayllarni draft GitHub release'ga (`v<versiya>`) qo'yadi. Ishga tushirish: Actions → Release → **Run workflow** (versiya bo'sh qolsa, `VERSION`dan olinadi) yoki `v1.2.0` kabi tag push qilish. Draft tekshirilgach, qo'lda **Publish** qilinadi.
 
 ## Nimani qayerda o'zgartirish
 
