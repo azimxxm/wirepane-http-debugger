@@ -2,7 +2,7 @@
 
 > **Bu fayl keyingi sessiyalar uchun asosiy ish ro'yxati.** Qisqa holat va navbatdagi ishlar: [`docs/next-steps.md`](next-steps.md).
 >
-> **Holat:** `feature/rebrand` `main`ga merge qilingan va push qilingan (2026-10-12). Release hali yo'q: egasi aytganda **v1.0.0** faqat macOS arm64 `.pkg` bilan chiqadi, avval iPhone'dagi ba'zi ilovalar ko'rinmasligi hal qilinadi (5-bo'lim). Windows va Linux egasi aytguncha "tez orada" bo'lib turadi. Nima tugagani `PROJECT_LOG.md`da.
+> **Holat:** `feature/rebrand` `main`ga merge qilingan va push qilingan (2026-10-12). Release **v1.1.0** chiqdi (2026-10-13, faqat macOS arm64 `.pkg`). Windows va Linux egasi aytguncha "tez orada" bo'lib turadi.
 >
 > **Har bir ish uchun tartib:**
 >

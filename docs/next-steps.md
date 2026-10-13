@@ -29,7 +29,7 @@ Plan: `docs/plans/2026-10-13-rust-network-tools.md`. Three workflows (build 10 a
 
 ## State
 
-- `main` holds everything (2026-10-13), not pushed: `origin/main` is behind. **No GitHub release exists**; the owner decides when (v1.0.0, macOS arm64 `.pkg` only; Windows and Linux "coming soon").
+- `main` holds everything and is pushed. **Release v1.1.0** (2026-10-13) is on GitHub with the macOS arm64 `.pkg` only; Windows and Linux stay "coming soon" until the owner says.
 - Nothing is running. Start the dev instance for checks with `./start.sh --no-window` (UI http://localhost:45458, API :45457, Mockttp admin :45456), in the background.
 - Test pkg with VPN mode for the owner: `~/Downloads/Wirepane-1.0.0-vpn-test-mac-arm64.pkg` (built 2026-10-12 from `57ce4b2e1`'s code).
 - The sidecar's dev build lives in `wirepane-tunnel/target/release/wirepane-tunnel` (gitignored; `cd wirepane-tunnel && cargo build --release --locked`). The dev server's `wireguard-vpn` interceptor finds it there.
