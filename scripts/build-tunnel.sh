@@ -5,10 +5,11 @@
 # and starts the server with WIREPANE_TUNNEL_BINPATH pointing at it (httptoolkit-desktop/src/index.ts).
 #
 # Usage: scripts/build-tunnel.sh [<target>]
-#   target: darwin-arm64, win32-x64 or linux-x64, this machine's by default.
+#   target: darwin-arm64, darwin-x64 (Intel Macs), win32-x64 or linux-x64, this machine's by default.
 #
 #   target        Rust target                built here with
-#   darwin-arm64  aarch64-apple-darwin       cargo, on an Apple Silicon Mac only
+#   darwin-arm64  aarch64-apple-darwin       cargo, on a Mac (Apple's SDK builds for both CPUs)
+#   darwin-x64    x86_64-apple-darwin        cargo, on a Mac
 #   win32-x64     x86_64-pc-windows-msvc     cargo on Windows x64, cargo-xwin anywhere else
 #   linux-x64     x86_64-unknown-linux-musl  cargo on Linux x64, cargo-zigbuild anywhere else
 #
@@ -16,7 +17,8 @@
 # on any distribution, whatever its glibc. The Windows build links the C runtime in, so it starts on
 # a PC without the Visual C++ Redistributable. A cross build is built and checked but not started,
 # like scripts/build-server.sh does: scripts/build-tunnel.sh win32-x64 works on a Mac as a dry check
-# (cargo-xwin also needs LLVM there for the dependencies' C code: brew install llvm).
+# (cargo-xwin also needs LLVM there for the dependencies' C code: brew install llvm). The Intel Mac
+# helper is started on an Apple Silicon Mac too when Rosetta 2 is installed.
 #
 # WIREPANE_TUNNEL_CRATE=<folder> builds another crate than wirepane-tunnel/ (its binary has to be
 # called wirepane-tunnel too), to try this script without the real one. Needs Rust (rustup.rs) with
@@ -28,7 +30,7 @@ CRATE=${WIREPANE_TUNNEL_CRATE:-$ROOT/wirepane-tunnel}
 # One cargo output folder for all targets (cargo keeps each target's files apart), so a release
 # build never touches the crate's own target/ that development builds use
 CARGO_OUT="$ROOT/build/tunnel-cargo"
-SUPPORTED_TARGETS="darwin-arm64 win32-x64 linux-x64"
+SUPPORTED_TARGETS="darwin-arm64 darwin-x64 win32-x64 linux-x64"
 BINARY_NAME=wirepane-tunnel
 RUN_CHECK_SECONDS=10
 
@@ -63,8 +65,16 @@ esac
 TARGET_OS=${TARGET%-*}
 TARGET_ARCH=${TARGET#*-}
 
+# Whether this machine runs the target's programs: its own target, or an Intel Mac's on an Apple
+# Silicon Mac with Rosetta 2 (arch -x86_64 fails when Rosetta isn't installed)
+can_run_target() {
+  [ "$HOST" = "$TARGET" ] ||
+    { [ "$HOST" = darwin-arm64 ] && [ "$TARGET" = darwin-x64 ] && arch -x86_64 /usr/bin/true 2>/dev/null; }
+}
+
 case "$TARGET" in
   darwin-arm64) TRIPLE=aarch64-apple-darwin ;;
+  darwin-x64) TRIPLE=x86_64-apple-darwin ;;
   win32-x64) TRIPLE=x86_64-pc-windows-msvc ;;
   linux-x64) TRIPLE=x86_64-unknown-linux-musl ;;
 esac
@@ -111,8 +121,11 @@ else
         fail "building for $TARGET on $HOST needs zig (cargo-zigbuild links with it): brew install zig"
       BUILD=(cargo zigbuild)
       ;;
-    *)
-      fail "the $TARGET helper has to be built on an Apple Silicon Mac (this is $HOST): macOS programs need Apple's SDK"
+    darwin)
+      # The other Mac CPU: Apple's toolchain builds for both
+      [ "${HOST%-*}" = darwin ] ||
+        fail "the $TARGET helper has to be built on a Mac (this is $HOST): macOS programs need Apple's SDK"
+      BUILD=(cargo build)
       ;;
   esac
 fi
@@ -178,11 +191,11 @@ node -e '
   }
 ' "$OUT" "$TARGET_OS" "$TARGET_ARCH" || fail "the built helper is not a $TARGET program (see above)"
 
-# On this machine's own target (not Windows, where a background program is hard to stop from Git
+# On a target this machine runs (not Windows, where a background program is hard to stop from Git
 # Bash) the helper is started once: macOS kills a program with a broken signature straight away, and
 # a missing library shows as exit code 127. --help is only a way to start it: a program that keeps
 # running past the time limit has started too, and is stopped.
-if [ "$HOST" = "$TARGET" ] && [ "$TARGET_OS" != win32 ]; then
+if can_run_target && [ "$TARGET_OS" != win32 ]; then
   echo "==> Checking that the helper starts"
   check_dir=$(mktemp -d)
   "$OUT" --help < /dev/null > "$check_dir/output" 2>&1 &

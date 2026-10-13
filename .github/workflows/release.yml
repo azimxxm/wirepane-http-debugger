@@ -67,6 +67,9 @@ jobs:
           - platform: mac # Apple Silicon: .pkg and .zip
             os: macos-14
             rust-target: aarch64-apple-darwin
+          - platform: mac-x64 # Intel: .pkg and .zip, built on Apple Silicon and checked with Rosetta 2
+            os: macos-14
+            rust-target: x86_64-apple-darwin
           - platform: win # x64: NSIS installer .exe and .zip
             os: windows-2022
             rust-target: x86_64-pc-windows-msvc
@@ -116,6 +119,11 @@ jobs:
           rustc --version
           cargo --version
 
+      # The Intel build starts its server and VPN helper once to check them, through Rosetta 2
+      - name: Install Rosetta 2
+        if: matrix.platform == 'mac-x64'
+        run: arch -x86_64 /usr/bin/true 2>/dev/null || sudo softwareupdate --install-rosetta --agree-to-license
+
       - name: Install dependencies
         run: ./setup.sh
 
@@ -155,8 +163,8 @@ jobs:
         working-directory: release
         run: |
           installers=(Wirepane-*)
-          if [ "${#installers[@]}" -ne 7 ]; then
-            echo "::error::Expected 7 installers, got ${#installers[@]}: ${installers[*]}"
+          if [ "${#installers[@]}" -ne 9 ]; then
+            echo "::error::Expected 9 installers, got ${#installers[@]}: ${installers[*]}"
             exit 1
           fi
           sha256sum "${installers[@]}" > SHA256SUMS.txt

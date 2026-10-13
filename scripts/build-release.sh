@@ -1,9 +1,11 @@
 #!/usr/bin/env bash
 # Builds Wirepane's installers for one OS from this repo, on that OS. Nothing is signed (CLAUDE.md,
 # "Distribution"), so no certificates or accounts are needed.
-#   scripts/build-release.sh mac     on an Apple Silicon Mac: .pkg and .zip (arm64)
-#   scripts/build-release.sh win     on Windows x64, in Git Bash: NSIS installer .exe and .zip
-#   scripts/build-release.sh linux   on Linux x64: .AppImage, .deb and .rpm (the .rpm needs rpmbuild)
+#   scripts/build-release.sh mac       on an Apple Silicon Mac: .pkg and .zip (arm64)
+#   scripts/build-release.sh mac-x64   on an Intel Mac, or an Apple Silicon Mac with Rosetta 2:
+#                                      .pkg and .zip for Intel Macs (x64)
+#   scripts/build-release.sh win       on Windows x64, in Git Bash: NSIS installer .exe and .zip
+#   scripts/build-release.sh linux     on Linux x64: .AppImage, .deb and .rpm (the .rpm needs rpmbuild)
 # Steps:
 #   1. Bruno's packages (scripts/build-bruno.sh, skips what is up to date)
 #   2. the server release for this OS (scripts/build-server.sh)
@@ -26,7 +28,7 @@ fail() {
 }
 
 usage() {
-  echo "Usage: $0 <mac|win|linux>" >&2
+  echo "Usage: $0 <mac|mac-x64|win|linux>" >&2
   exit 2
 }
 
@@ -37,6 +39,18 @@ case "$platform" in
   mac)
     target=darwin-arm64
     [ "$os" = "Darwin-arm64" ] || fail "the mac build is for Apple Silicon, build it on an Apple Silicon Mac (this is $os)"
+    ;;
+  mac-x64)
+    target=darwin-x64
+    case "$os" in
+      Darwin-x86_64) ;;
+      # The server and VPN helper checks start the Intel programs, which Rosetta 2 runs here
+      Darwin-arm64)
+        arch -x86_64 /usr/bin/true 2>/dev/null ||
+          fail "the Intel build starts Intel programs to check them, which needs Rosetta 2 on this Mac: softwareupdate --install-rosetta --agree-to-license"
+        ;;
+      *) fail "the Intel Mac build has to run on a Mac (this is $os)" ;;
+    esac
     ;;
   win)
     target=win32-x64
@@ -88,6 +102,7 @@ rm -rf "$DESKTOP/dist"
 
 case "$platform" in
   mac) artifacts=("mac-arm64.pkg" "mac-arm64.zip") ;;
+  mac-x64) artifacts=("mac-x64.pkg" "mac-x64.zip") ;;
   win) artifacts=("win-x64-setup.exe" "win-x64.zip") ;;
   linux) artifacts=("linux-x86_64.AppImage" "linux-amd64.deb" "linux-x86_64.rpm") ;;
 esac
@@ -100,7 +115,7 @@ for artifact in "${artifacts[@]}"; do
   echo "  $file ($(du -h "$file" | cut -f1))"
 done
 case "$platform" in
-  mac) echo "Install the .pkg with a double-click. Downloaded copies are blocked on the first open: right-click > Open, or System Settings > Privacy & Security > Open Anyway." ;;
+  mac | mac-x64) echo "Install the .pkg with a double-click. Downloaded copies are blocked on the first open: right-click > Open, or System Settings > Privacy & Security > Open Anyway." ;;
   win) echo "Run the setup .exe. SmartScreen warns about unsigned apps: More info > Run anyway." ;;
   linux) echo "Install the .deb or .rpm, or chmod +x the .AppImage and run it." ;;
 esac

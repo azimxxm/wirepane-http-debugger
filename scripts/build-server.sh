@@ -12,18 +12,20 @@
 #      then each native module's prebuilt binary for the target. The system Node.js isn't used, so
 #      tls-impersonate (needs Node.js 24.19+) is always there.
 #   4. scripts/assemble-server.cjs lays out the release folder and checks every native binary.
-#   5. When the target is this machine, the release is started once in a throwaway folder, has to
-#      read and import a collection, and is stopped, so a broken release fails here, not in the app.
+#   5. When this machine can run the target (its own, or darwin-x64 on an Apple Silicon Mac with
+#      Rosetta 2), the release is started once in a throwaway folder, has to read and import a
+#      collection, and is stopped, so a broken release fails here, not in the app.
 # Usage: scripts/build-server.sh [<target>]
-#   target: darwin-arm64, win32-x64 or linux-x64, this machine's by default. Another target is
-#   assembled and checked but not started. Runs in macOS, Linux and Git Bash on Windows.
+#   target: darwin-arm64, darwin-x64 (Intel Macs), win32-x64 or linux-x64, this machine's by
+#   default. Another target is assembled and checked but not started. Runs in macOS, Linux and Git
+#   Bash on Windows.
 # ./scripts/build-release.sh runs it.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 SERVER="$ROOT/httptoolkit-server"
 CACHE="$ROOT/build/cache"
-SUPPORTED_TARGETS="darwin-arm64 win32-x64 linux-x64"
+SUPPORTED_TARGETS="darwin-arm64 darwin-x64 win32-x64 linux-x64"
 START_TIMEOUT_SECONDS=60
 
 fail() {
@@ -57,6 +59,13 @@ esac
 TARGET_OS=${TARGET%-*}
 TARGET_ARCH=${TARGET#*-}
 OUT="$ROOT/build/server/$TARGET/httptoolkit-server"
+
+# Whether this machine runs the target's programs: its own target, or an Intel Mac's on an Apple
+# Silicon Mac with Rosetta 2 (arch -x86_64 fails when Rosetta isn't installed)
+can_run_target() {
+  [ "$HOST" = "$TARGET" ] ||
+    { [ "$HOST" = darwin-arm64 ] && [ "$TARGET" = darwin-x64 ] && arch -x86_64 /usr/bin/true 2>/dev/null; }
+}
 DEPS="$ROOT/build/server-deps/$TARGET"
 
 [ -d "$SERVER/node_modules" ] || fail "httptoolkit-server is not installed yet. Run ./setup.sh first."
@@ -319,7 +328,7 @@ check_release() {
   rm -rf "$tmp"
 }
 
-if [ "$HOST" = "$TARGET" ]; then
+if can_run_target; then
   echo "==> Checking that the release starts"
   check_release
 else

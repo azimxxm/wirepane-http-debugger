@@ -9,8 +9,9 @@
 // ./scripts/build-release.sh <mac|win|linux> builds all three and then runs this, on that OS.
 //
 // Nothing is signed: there's no Apple Developer account or code signing certificate yet
-// (CLAUDE.md, "Distribution"). macOS gets an unsigned .pkg holding an ad-hoc signed arm64
-// Wirepane.app (and the same app as a .zip), Windows an NSIS installer and a .zip, Linux an
+// (CLAUDE.md, "Distribution"). macOS gets an unsigned .pkg holding an ad-hoc signed Wirepane.app
+// (and the same app as a .zip), for Apple Silicon, or for Intel Macs with the darwin-x64 server
+// target (scripts/build-release.sh mac-x64), Windows an NSIS installer and a .zip, Linux an
 // AppImage, a .deb and an .rpm (both x64). ENABLE_SIGNING=true uses upstream's signed setup instead
 // (electron-builder.config.cjs and the `build` field in package.json: Developer ID signing,
 // notarization), for when the account arrives.
@@ -38,6 +39,8 @@ const SERVER_RELEASE = `../build/server/${SERVER_TARGET}/httptoolkit-server`;
 const UI_BUILD = '../build/ui';
 const TUNNEL_BUILD = `../build/tunnel/${SERVER_TARGET}`;
 const TUNNEL_BINARY = SERVER_TARGET.startsWith('win32-') ? 'wirepane-tunnel.exe' : 'wirepane-tunnel';
+// The Mac's CPU: Intel (x64) for the darwin-x64 server, Apple Silicon (arm64) otherwise
+const MAC_ARCH = SERVER_TARGET === 'darwin-x64' ? 'x64' : 'arm64';
 
 const signed = process.env.ENABLE_SIGNING === 'true';
 const config = signed
@@ -85,6 +88,10 @@ config.mac = {
     // files anyway, while signing each "binary-looking" one gave all 2500 specs a signature of
     // their own and slowed the build down.
     signIgnore: ['/Contents/Resources/httptoolkit-ui/'],
+    // The server's Node.js 24 is built for macOS 13.5 or later. Older versions can't install the
+    // .pkg or open the app (allowed-os-versions, LSMinimumSystemVersion), instead of getting an
+    // app whose server never starts.
+    minimumSystemVersion: '13.5',
     extendInfo: {
         ...config.mac?.extendInfo,
         // VPN mode: a phone sends its traffic to the helper over the local network, and macOS asks
@@ -142,8 +149,8 @@ if (!signed) {
     config.mac = {
         ...config.mac,
         target: [
-            { target: 'pkg', arch: ['arm64'] },
-            { target: 'zip', arch: ['arm64'] } // The same app as a zip, e.g. for a curl | sh install
+            { target: 'pkg', arch: [MAC_ARCH] },
+            { target: 'zip', arch: [MAC_ARCH] } // The same app as a zip, e.g. for a curl | sh install
         ],
         identity: '-', // Ad-hoc signing: Apple Silicon only runs signed code, and this needs no certificate
         hardenedRuntime: false, // Only notarization needs it, and with an ad-hoc signature its library validation stops the app from starting
