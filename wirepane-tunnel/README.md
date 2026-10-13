@@ -48,7 +48,7 @@ wirepane-tunnel --wireguard <ip:port> --state <file> --socks <host:port>
 | `--endpoint-host` | Written into the client config as `Endpoint = <host>:<port>`. Default: the bind address, or `127.0.0.1` when it is `0.0.0.0`.                                                 |
 | `--tunnel-net`    | Virtual network, `/16` to `/24`. Default `10.73.0.0/24`: server `.1`, DNS `.53`, `wirepane.cert` `.54`, peers from `.2` (skipping `.53` and `.54`).                           |
 | `--quic`          | `block` (default) answers UDP/443 with an ICMP port unreachable and reports it; `relay` forwards it like other UDP; `decrypt` terminates HTTP/3 and hands each request to Mockttp (needs `--ca-cert`/`--ca-key`; see `docs/http3.md`). Can be changed while running with `set-quic`. |
-| `--ca-cert`, `--ca-key` | The Wirepane CA's PEM files, for the leaf certificates QUIC `decrypt` presents to phones. The server passes the CA next to the state file. |
+| `--ca-cert`, `--ca-key` | The Wirepane CA's PEM files, for the leaf certificates QUIC `decrypt` presents to phones. The server passes them (next to the state file) only while the QUIC mode is `decrypt`, and restarts the sidecar when the mode changes to or from it, so the private key isn't handed out while nothing uses it. |
 | `--ikev2`         | UDP address for the IKEv2/IPsec front-end (iOS's built-in VPN, no extra app). Only used when the build supports it (`ready` → `capabilities.ikev2`); see `docs/ikev2.md`. |
 
 A hidden `--unsafe-allow-loopback` exists for tests only (see "Security"). Do not pass it from the server.

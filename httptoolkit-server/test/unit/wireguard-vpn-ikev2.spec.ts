@@ -45,7 +45,7 @@ describe('IKEv2 profile for iPhones', function () {
     let options: Ikev2ProfileOptions;
 
     before(async () => {
-        const ca = await generateCACertificate({ commonName: 'Wirepane CA (test)' });
+        const ca = await generateCACertificate({ subject: { commonName: 'Wirepane CA (test)' } });
         caPem = ca.cert;
         options = {
             peer: 'p3',

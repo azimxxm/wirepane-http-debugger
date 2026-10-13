@@ -1,6 +1,6 @@
 # IKEv2 front-end: VPN mode without an extra app
 
-Status (2026-10-13): design, a sans-IO protocol engine, its UDP listener and the wiring into `Tunnel` (`--ikev2 <ip:port>`, `add-peer` with `"kind":"ikev2"`), with tests in `src/frontend/ikev2/`: RFC 4231 and GCM-spec vectors, an independent key-schedule cross-check, a software initiator through the responder, through real loopback sockets, and through the whole `Tunnel` (handshake, DNS over ESP through the core, restart, revocation), plus garbage input. `ikev2::supported()` is `true`. Not yet done: the server's `ikev2-profile` action and `--ikev2` on start (T0's interceptor), and a real iPhone (§10). Plan: `docs/plans/2026-10-13-rust-network-tools.md`, task T1.
+Status (2026-10-13): design, a sans-IO protocol engine, its UDP listener and the wiring into `Tunnel` (`--ikev2 <ip:port>`, `add-peer` with `"kind":"ikev2"`), with tests in `src/frontend/ikev2/`: RFC 4231 and GCM-spec vectors, an independent key-schedule cross-check, a software initiator through the responder, through real loopback sockets, and through the whole `Tunnel` (handshake, DNS over ESP through the core, restart, revocation), plus garbage input. `ikev2::supported()` is `true`. The server starts the sidecar with `--ikev2 0.0.0.0:500` and answers the UI's `ikev2-profile` action (`httptoolkit-server/src/interceptors/wireguard-vpn.ts`, see §8). Not yet done: a real iPhone (§10). Plan: `docs/plans/2026-10-13-rust-network-tools.md`, task T1.
 
 WireGuard mode needs the WireGuard app on the phone. iOS has an IKEv2/IPsec client built in, configured by a `.mobileconfig` profile, so a second front-end that speaks IKEv2 lets an iPhone use VPN mode with nothing but Settings. It is a second front-end next to `frontend/wireguard.rs`: it turns ESP into the same plain IPv4 packets, and the shared core treats them exactly like WireGuard's.
 
@@ -94,6 +94,7 @@ Exactly like WireGuard's: the front-end hands `NetworkEvent::ReceivePacket` to m
 
 How it is wired (`Tunnel::start` in `src/lib.rs`, `start_side` in `listener.rs`): the IKEv2 phones get their own smoltcp network layer and their own `Core`, next to WireGuard's. Connection ids are per network layer and each core sends its commands to its own layer, so the two never mix, and the WireGuard front-end stays untouched. Both cores share the SOCKS address, the events and T0's hooks: DNS rules, the QUIC mode, the capture and network conditions (delay, bandwidth and loss, with the same delay queue as WireGuard). Not shared yet: the flow counters in `stats` (the IKEv2 core has its own `CoreStats`) and HTTP/3 decryption (its gateway injects into the WireGuard front-end, so IKEv2 phones get `block` or `relay`).
 
+- The server always starts the sidecar with `--ikev2 0.0.0.0:500`. A helper built before the option refuses to start with it, so the server starts it again without (WireGuard only). The detailed metadata's `ikev2` says `{ running, ike, natT }`, or `{ running: false, error }` when the ports couldn't be bound; that error stays out of the VPN's own `error`, so the UI doesn't call WireGuard broken.
 - `--ikev2 <ip:port>` is the IKE address; NAT-T is port 4500 when IKE is 500 (what iOS needs), any free port otherwise (tests). The `ready` event says `"ikev2":{"ike":"…","natT":"…"}`, or `null` when IKEv2 is off. A port that can't be bound only turns IKEv2 off (an `error` event), WireGuard keeps working.
 - `{"cmd":"add-peer","name":"iPhone","kind":"ikev2"}` uses the same ids and addresses as WireGuard peers and answers `{"event":"peer-added","peer":"p3","name":"iPhone","kind":"ikev2","tunnelIp":"10.73.0.4","config":"","ikev2":{"localId":"p3.wirepane","remoteId":"vpn.wirepane","psk":"<base64>"}}`. The state file stores it with `kind: "ikev2"`; its secret is derived again on every start, and its WireGuard key fields hold a fresh, unused key only so that older builds, which read a key for every peer, still start.
 - `remove-peer`, `list-peers` and the per-phone bytes in `stats` work for both kinds (the IKEv2 core's flow counters aren't added to `stats` yet); removal cuts an IKEv2 phone off within 250 ms. IKEv2 has no handshake every two minutes like WireGuard, so an IKEv2 phone's `lastHandshake` is its last authenticated packet, and the UI's freshness check (3 minutes) means the same for both kinds.
@@ -125,6 +126,8 @@ How the phone gets it, before the VPN exists (`http://wirepane.cert/...` only wo
 
 The profile holds the device's secret: it must not be logged, cached by the UI, or left on disk.
 
+The server's side (`activate` with `{ action: 'ikev2-profile', name }`): it checks first that the helper has IKEv2 (`capabilities.ikev2`, else "IKEv2 is not available in this build", which the UI shows as unsupported), that it listens (else the bind error and what to do), that the Mac has a LAN address and that `wirepane-ca.pem` can be read. Only then does it send `add-peer` with `"kind":"ikev2"`, build the profile and open the link, and it answers `{ peer, name, profile, link? }` (what `vpn-ikev2-setup.tsx` reads). A device whose answer can't make a profile is removed again. Open links close when the helper stops or restarts.
+
 ## 9. Security checklist
 
 - Every parser takes `&[u8]` and returns `Result`/`Option`; lengths are checked before every slice; no `unwrap` or panicking index on network input; garbage-input tests cover truncation at every byte and random bytes.
@@ -134,7 +137,7 @@ The profile holds the device's secret: it must not be logged, cached by the UI, 
 
 ## 10. Real-iPhone checks still to do (the owner's)
 
-0. First the server needs its `ikev2-profile` action and has to start the sidecar with `--ikev2 0.0.0.0:500` (T0's interceptor), and the dev server must run a sidecar built after this change. Then: Intercept › iPhone or iPad › "Without an app (IKEv2, beta)" › Show the steps › Create the profile.
+0. The dev server must run a sidecar built from this branch (`cargo build --release` in `wirepane-tunnel`, then restart `./start.sh`). Then: Intercept › iPhone or iPad › "Without an app (IKEv2, beta)" › Show the steps › Create the profile.
 1. Install the profile from AirDrop and from Safari; check iOS shows "Wirepane VPN" with the CA inside.
 2. Turn on full trust for the Wirepane CA, then Settings › VPN › Wirepane: connects, the status bar shows "VPN".
 3. Safari, an App Store app and a Flutter app show up in View with the `wirepane-vpn` tags.

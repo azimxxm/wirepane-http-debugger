@@ -22,6 +22,19 @@ export interface AddedPeer {
     config: string; // The wg-quick text the phone scans as a QR code
 }
 
+// The two kinds of phones the helper takes. IKEv2 is iOS's built-in VPN
+// (wirepane-tunnel/docs/ikev2.md), set up by a profile instead of a WireGuard config.
+export type PeerKind = 'wireguard' | 'ikev2';
+
+// Where the IKEv2 front-end listens, from the ready event. It can be off while WireGuard
+// works: a build without it, or UDP 500 or 4500 taken by another program.
+export interface Ikev2Status {
+    running: boolean;
+    ike?: string; // e.g. "0.0.0.0:500"
+    natT?: string; // e.g. "0.0.0.0:4500"
+    error?: string; // why it's off, when the helper said
+}
+
 export interface SidecarOptions {
     binaryPath: string;
     listenPort: number;
@@ -35,6 +48,8 @@ export interface SidecarOptions {
     ikev2?: string;
     // Every event the network tools show (dns, udp-*, quic, tls-hello, stats)
     onToolEvent?: (event: TunnelEvent) => void;
+    // How often the helper is asked for its counters; 0 never asks
+    statsIntervalMs?: number;
 }
 
 // What this build of the helper can do, from its ready event
@@ -57,6 +72,8 @@ export interface CaptureSummary {
 }
 
 const READY_TIMEOUT_MS = 10_000;
+// The helper only sends its counters (the stats event the UI's network tools read) when asked
+const STATS_INTERVAL_MS = 2_000;
 const COMMAND_TIMEOUT_MS = 5_000;
 // After stdin closes the helper should leave straight away. These are the grace periods
 // before we get firmer. The server only gives shutdown handlers about 3s in all.
@@ -67,6 +84,11 @@ const STDERR_LINES_KEPT = 20;
 // to one at all). An error that arrives while a command waits fails it only if the command's
 // real reply doesn't follow within this time.
 const ERROR_GRACE_MS = 150;
+// The helper's error when IKEv2 couldn't start (docs/ikev2.md section 7). It only turns IKEv2
+// off, so it isn't kept as the helper's problem: WireGuard phones keep working.
+const IKEV2_OFF_ERROR = /^IKEv2 is off\b/;
+// What a helper built before the IKEv2 option says when it gets it
+const UNKNOWN_IKEV2_OPTION = /unknown option --ikev2\b/;
 
 export type TunnelEvent = { event: string, [key: string]: unknown };
 
@@ -81,6 +103,14 @@ interface PendingCommand {
 }
 
 const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms).unref());
+
+function toIkev2Status(raw: unknown, offReason: string | undefined): Ikev2Status {
+    const { ike, natT } = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>;
+    if (typeof ike === 'string' && ike && typeof natT === 'string' && natT) {
+        return { running: true, ike, natT };
+    }
+    return { running: false, ...(offReason ? { error: offReason } : {}) };
+}
 
 function toPeer(raw: unknown): TunnelPeer | undefined {
     if (!raw || typeof raw !== 'object') return undefined;
@@ -103,6 +133,18 @@ export class TunnelSidecar {
      * own error output if it can't start.
      */
     static async start(options: SidecarOptions): Promise<TunnelSidecar> {
+        try {
+            return await TunnelSidecar.startOnce(options);
+        } catch (e: any) {
+            // A helper built before the IKEv2 option refuses to start with it. It still runs
+            // WireGuard, so it starts again without the option.
+            if (!options.ikev2 || !UNKNOWN_IKEV2_OPTION.test(e?.message ?? '')) throw e;
+            console.warn('wireguard-vpn: this VPN helper has no IKEv2, starting it without');
+            return TunnelSidecar.startOnce({ ...options, ikev2: undefined });
+        }
+    }
+
+    private static async startOnce(options: SidecarOptions): Promise<TunnelSidecar> {
         let sidecar: TunnelSidecar;
         try {
             sidecar = new TunnelSidecar(options);
@@ -124,6 +166,7 @@ export class TunnelSidecar {
             await sidecar.stop();
             throw e;
         }
+        sidecar.pollStats(options.statsIntervalMs ?? STATS_INTERVAL_MS);
         return sidecar;
     }
 
@@ -135,6 +178,9 @@ export class TunnelSidecar {
     // The latest problem the helper reported while running, cleared when it's fixed
     lastError: string | undefined;
     capabilities: TunnelCapabilities = NO_CAPABILITIES;
+    ikev2: Ikev2Status = { running: false };
+    // Why IKEv2 is off, from the helper's error before ready
+    private ikev2OffReason: string | undefined;
 
     private onToolEvent: ((event: TunnelEvent) => void) | undefined;
 
@@ -144,6 +190,8 @@ export class TunnelSidecar {
     private commandQueue: Promise<unknown> = Promise.resolve();
     private stderrTail: string[] = [];
     private refreshQueued = false;
+    private statsTimer: NodeJS.Timeout | undefined;
+    private statsAsked = false;
 
     private readyEvent!: Promise<void>;
     private markReady!: () => void;
@@ -195,6 +243,7 @@ export class TunnelSidecar {
                 if (this.exitedFlag) return;
                 this.exitedFlag = true;
                 this.exitMessage = message;
+                clearInterval(this.statsTimer);
                 this.failPending(new Error(message));
                 this.markFailedToStart(new Error(message));
                 resolve({ unexpected: !this.stopping, message });
@@ -229,11 +278,17 @@ export class TunnelSidecar {
 
     // --- Commands ---
 
-    async addPeer(name: string): Promise<AddedPeer> {
+    // WireGuard (the default) answers with the config the phone scans. IKEv2 answers with the
+    // whole peer-added event, whose `ikev2` part (identities and the device's secret) goes into
+    // the phone's profile: callers must not log or keep it.
+    addPeer(name: string, kind?: 'wireguard'): Promise<AddedPeer>;
+    addPeer(name: string, kind: 'ikev2'): Promise<TunnelEvent>;
+    async addPeer(name: string, kind: PeerKind = 'wireguard'): Promise<AddedPeer | TunnelEvent> {
         const reply = await this.sendCommand(
-            { cmd: 'add-peer', name, kind: 'wireguard' },
+            { cmd: 'add-peer', name, kind },
             'peer-added'
         );
+        if (kind === 'ikev2') return reply;
 
         const peer = toPeer(reply);
         if (!peer || typeof reply.config !== 'string' || !reply.config) {
@@ -278,6 +333,20 @@ export class TunnelSidecar {
 
     async captureStart(path: string): Promise<void> {
         await this.sendCommand({ cmd: 'capture-start', path }, 'capture-started');
+    }
+
+    // The reply is a tool event like the others: it reaches onToolEvent on its way in. A slow
+    // helper gets no second question while the first is still waiting.
+    private pollStats(intervalMs: number) {
+        if (!(intervalMs > 0) || this.exitedFlag) return;
+        this.statsTimer = setInterval(() => {
+            if (this.statsAsked || this.exitedFlag || this.stopping) return;
+            this.statsAsked = true;
+            this.sendCommand({ cmd: 'stats' }, 'stats')
+                .catch(() => {}) // A missed reading only means the next one comes later
+                .finally(() => { this.statsAsked = false; });
+        }, intervalMs);
+        this.statsTimer.unref();
     }
 
     async captureStop(): Promise<CaptureSummary> {
@@ -352,6 +421,8 @@ export class TunnelSidecar {
                     quicDecrypt: capabilities?.quicDecrypt === true,
                     ikev2: capabilities?.ikev2 === true
                 };
+                // null when IKEv2 is off; its error event, if any, came just before this
+                this.ikev2 = toIkev2Status(event.ikev2, this.ikev2OffReason);
                 this.markReady();
                 break;
             }
@@ -451,6 +522,14 @@ export class TunnelSidecar {
             ? event.message
             : 'The VPN helper reported an error';
 
+        // Never the answer to a command, and never a reason to call the whole VPN broken
+        if (IKEV2_OFF_ERROR.test(message)) {
+            if (message !== this.ikev2OffReason) console.warn(`wireguard-vpn: ${message}`);
+            this.ikev2OffReason = message;
+            this.ikev2 = { running: false, error: message };
+            return;
+        }
+
         // With a command in flight, an error is most likely the answer to it
         const pending = this.pending;
         if (pending) {
@@ -510,6 +589,7 @@ export class TunnelSidecar {
     async stop(): Promise<void> {
         if (this.exitedFlag) return;
         this.stopping = true;
+        clearInterval(this.statsTimer);
 
         this.child.stdin!.end();
         if (await this.exitedWithin(STDIN_CLOSE_GRACE_MS)) return;

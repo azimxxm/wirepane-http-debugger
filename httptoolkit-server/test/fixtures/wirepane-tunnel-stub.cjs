@@ -15,6 +15,15 @@
 //   STUB_LATE_PEER            shortly after ready, add a peer behind the parent's back and
 //                             send a "peer" event for it
 //   STUB_CAPABILITIES         JSON for the ready event's "capabilities"
+//   STUB_NO_IKEV2_OPTION      refuse to start with --ikev2, like a helper built before it
+//   STUB_IKEV2_BIND_ERROR     with --ikev2 and capabilities.ikev2, report UDP 500 as taken:
+//                             IKEv2 stays off (ready's "ikev2" is null), WireGuard works
+//   STUB_IKEV2_BAD_IDENTITY   answer an ikev2 add-peer with the wrong phone identity
+//   STUB_REFUSE_DNS_PATTERN   refuse set-dns-rules when a rule has this pattern
+//
+// An add-peer with "kind":"ikev2" answers like the real helper (docs/ikev2.md section 7): no
+// config, and an "ikev2" part with the identities and a secret derived from the peer id.
+// stats answers with counters for every peer.
 //
 // The network tools' commands (set-conditions, set-dns-rules, set-quic, capture-start,
 // capture-stop) answer like the real helper; capture-start writes an empty file, and
@@ -34,6 +43,10 @@ const listen = argValue('--wireguard');
 const statePath = argValue('--state');
 const socksAddr = argValue('--socks');
 const endpointHost = argValue('--endpoint-host');
+const ikev2Addr = argValue('--ikev2');
+const capabilities = process.env.STUB_CAPABILITIES
+    ? JSON.parse(process.env.STUB_CAPABILITIES)
+    : { quicDecrypt: false, ikev2: false };
 const listenPort = listen ? listen.split(':').pop() : '';
 
 const log = (entry) => {
@@ -48,6 +61,34 @@ if (process.env.STUB_FAIL_START) {
     emit({ event: 'error', message: `failed to bind UDP ${listen}: address in use` });
     process.exit(1);
 }
+
+if (ikev2Addr && process.env.STUB_NO_IKEV2_OPTION) {
+    emit({ event: 'error', message: 'unknown option --ikev2' });
+    process.stderr.write('wirepane-tunnel: unknown option --ikev2\nusage: wirepane-tunnel --wireguard <ip:port> ...\n');
+    process.exit(1);
+}
+
+// Where IKEv2 phones connect, or null when it's off (like the real helper's ready event)
+let ikev2Listen = null;
+if (ikev2Addr && capabilities.ikev2) {
+    if (process.env.STUB_IKEV2_BIND_ERROR) {
+        emit({
+            event: 'error',
+            message: `IKEv2 is off: cannot bind UDP ${ikev2Addr} for IKEv2: Address already in use (os error 48)`
+        });
+    } else {
+        const host = ikev2Addr.slice(0, ikev2Addr.lastIndexOf(':'));
+        ikev2Listen = { ike: ikev2Addr, natT: `${host}:4500` };
+    }
+}
+
+// The real helper derives each phone's secret from its server key; any stable key will do here
+const crypto = require('crypto');
+const ikev2Details = (peer) => ({
+    localId: process.env.STUB_IKEV2_BAD_IDENTITY ? 'someone-else.wirepane' : `${peer}.wirepane`,
+    remoteId: 'vpn.wirepane',
+    psk: crypto.createHmac('sha256', 'stub server key').update(`wirepane ikev2 psk v1${peer}`).digest('base64')
+});
 
 // The state file keeps the peers between runs, like the real helper's
 let state = { nextPeer: 1, peers: [] };
@@ -87,6 +128,9 @@ const buildConfig = (peer) => [
 
 const handlers = {
     'add-peer': (cmd) => {
+        if (cmd.kind === 'ikev2' && !ikev2Listen) {
+            return emit({ event: 'error', message: 'add-peer failed: IKEv2 is not running (start with --ikev2)' });
+        }
         const number = state.nextPeer++;
         const peer = {
             peer: `p${number}`,
@@ -97,7 +141,11 @@ const handlers = {
         state.peers.push(peer);
         saveState();
 
-        emit({ event: 'peer-added', ...describePeer(peer), config: buildConfig(peer) });
+        if (cmd.kind === 'ikev2') {
+            emit({ event: 'peer-added', ...describePeer(peer), config: '', ikev2: ikev2Details(peer.peer) });
+        } else {
+            emit({ event: 'peer-added', ...describePeer(peer), config: buildConfig(peer) });
+        }
 
         if (process.env.STUB_HANDSHAKE_MS) {
             setTimeout(() => {
@@ -140,6 +188,10 @@ const handlers = {
         if (!Array.isArray(cmd.rules)) {
             return emit({ event: 'error', message: 'set-dns-rules failed: no rules' });
         }
+        const refused = cmd.rules.findIndex((rule) => rule.pattern === process.env.STUB_REFUSE_DNS_PATTERN);
+        if (refused !== -1) {
+            return emit({ event: 'error', message: `set-dns-rules failed: rule ${refused + 1}: the helper refuses this name` });
+        }
         emit({ event: 'dns-rules-set', count: cmd.rules.length });
     },
 
@@ -162,6 +214,13 @@ const handlers = {
         emit({ event: 'capture-stopped', path: capture, packets: 12, bytes: 3456 });
         capture = undefined;
     },
+
+    'stats': () => emit({
+        event: 'stats',
+        uptimeMs: Math.round(process.uptime() * 1000),
+        peers: state.peers.map((peer) => ({ ...describePeer(peer), bytesUp: 0, bytesDown: 0 })),
+        flowsOpened: 0
+    }),
 
     'emit': (cmd) => emit(cmd.event),
 
@@ -211,9 +270,8 @@ emit({
     event: 'ready',
     listen,
     publicKey: 'STUBPUBLICKEY=',
-    capabilities: process.env.STUB_CAPABILITIES
-        ? JSON.parse(process.env.STUB_CAPABILITIES)
-        : { quicDecrypt: false, ikev2: false }
+    capabilities,
+    ikev2: ikev2Listen
 });
 emit({ event: 'dns', peer: 'p1', name: 'example.com', qtype: 'A', rcode: 'NOERROR', answers: [], ms: 3 });
 emit({ event: 'quic', peer: 'p1', dst: '1.2.3.4:443', action: 'blocked' });

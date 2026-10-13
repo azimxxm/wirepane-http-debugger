@@ -50,11 +50,12 @@ Each tool owns its module file and keeps these signatures (it may add private it
 
 ### Server: `wireguard-vpn` interceptor (T0)
 
-- `activate(port, { action: 'configure', settings })`: `settings` is a patch of `{ conditions: { [peer]: Conditions | null }, dnsRules: DnsRule[], quic: 'block'|'relay'|'decrypt' }`, saved to `<configPath>/wirepane-vpn-settings.json`, sent to the sidecar now and after every restart.
+- `activate(port, { action: 'configure', settings })`: `settings` is a patch of `{ conditions: { [peer]: Conditions | null }, dnsRules: DnsRule[], quic: 'block'|'relay'|'decrypt' }`, sent to a running sidecar first and saved to `<configPath>/wirepane-vpn-settings.json` only when it accepts (without a sidecar, the server's own checks, the same as the sidecar's), then sent again after every restart.
 - `activate(port, { action: 'capture-start' })` → `{ path }` (in `<configPath>/captures/wirepane-<timestamp>.pcapng`); `{ action: 'capture-stop' }` → `{ path, packets, bytes }`.
 - Events: a ring buffer of the last 5000 relayed sidecar events with a sequence number; `GET /interceptors/wireguard-vpn/metadata/events-<since>` (the existing sub-metadata route) → `{ seq, events }`.
 - The detailed metadata gains `settings` and `capture` (running or not, path).
-- The sidecar is started with `--ca-cert`/`--ca-key` pointing at the Wirepane CA files (`generateHTTPSConfig`'s paths) and, when T1 is on, `--ikev2`.
+- The sidecar gets `--ca-cert`/`--ca-key` (the Wirepane CA files, `generateHTTPSConfig`'s paths) only while the QUIC mode is `decrypt`: a change to or from it restarts the sidecar, keeping its peers and the other settings. It always gets `--ikev2 0.0.0.0:500` (T1).
+- The server asks a running sidecar for `stats` every 2 s; the reply goes into the event log like the other tool events.
 
 ### UI (stubs written by the lead)
 

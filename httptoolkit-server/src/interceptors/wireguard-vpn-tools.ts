@@ -43,8 +43,8 @@ const MAX_KBPS = 10_000_000;
 const MAX_DNS_RULES = 10_000;
 const MAX_PATTERN_LENGTH = 253;
 const PEER_ID_PATTERN = /^[A-Za-z0-9_-]{1,64}$/;
-// A name like api.example.com, or a wildcard like *.example.com
-const DNS_PATTERN = /^(\*\.)?[a-z0-9_*-]+(\.[a-z0-9_*-]+)*\.?$/;
+// One part of a name between dots
+const DNS_LABEL = /^[a-z0-9_-]{1,63}$/;
 const IPV4_PATTERN = /^(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)(\.(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)){3}$/;
 const QUIC_MODES: ReadonlyArray<VpnQuicMode> = ['block', 'relay', 'decrypt'];
 
@@ -76,11 +76,22 @@ export function parseConditions(raw: unknown): VpnConditions | null {
     };
 }
 
+// A name like api.example.com, or *.example.com for the names below one. The same rules as the
+// helper's parse_pattern (wirepane-tunnel/src/features/dns_rules.rs) and the UI's checkDnsPattern,
+// so the helper never refuses a saved rule: "*" only as a whole first "*." part, parts of 1-63
+// letters, digits, - and _, at most 253 characters in all.
+function isDnsPattern(pattern: string): boolean {
+    if (!pattern || pattern.length > MAX_PATTERN_LENGTH) return false;
+    const name = pattern.startsWith('*.') ? pattern.slice(2) : pattern;
+    return name.split('.').every((label) => DNS_LABEL.test(label));
+}
+
 export function parseDnsRule(raw: unknown, index: number): VpnDnsRule {
     if (!isRecord(raw)) throw new Error(`DNS rule ${index + 1} must be an object`);
 
-    const pattern = typeof raw.pattern === 'string' ? raw.pattern.trim().toLowerCase() : '';
-    if (!pattern || pattern.length > MAX_PATTERN_LENGTH || !DNS_PATTERN.test(pattern)) {
+    // Compared the way the helper does: no spaces around, no trailing dot, lower case
+    const pattern = typeof raw.pattern === 'string' ? raw.pattern.trim().replace(/\.$/, '').toLowerCase() : '';
+    if (!isDnsPattern(pattern)) {
         throw new Error(`DNS rule ${index + 1} needs a name like api.example.com or *.example.com`);
     }
 
@@ -92,6 +103,16 @@ export function parseDnsRule(raw: unknown, index: number): VpnDnsRule {
         return { pattern, action: 'answer', ipv4: raw.ipv4 };
     }
     throw new Error(`DNS rule ${index + 1}: the action must be block or answer`);
+}
+
+function isUsableDnsRule(rule: unknown, index: number): boolean {
+    try {
+        parseDnsRule(rule, index);
+        return true;
+    } catch (e: any) {
+        console.warn(`wireguard-vpn: dropping a saved DNS rule the helper would refuse (${e?.message})`);
+        return false;
+    }
 }
 
 /** Checks a settings patch from the UI. Throws on anything the helper couldn't use. */
@@ -147,6 +168,11 @@ export async function loadSettings(configPath: string): Promise<VpnSettings> {
     } catch (e: any) {
         if (e?.code !== 'ENOENT') console.warn(`wireguard-vpn: ignoring unreadable settings (${e?.message})`);
         return DEFAULT_VPN_SETTINGS;
+    }
+
+    // Older builds saved DNS rules the helper refuses. Only those go, not every other setting.
+    if (isRecord(raw) && Array.isArray(raw.dnsRules)) {
+        raw = { ...raw, dnsRules: raw.dnsRules.filter(isUsableDnsRule) };
     }
 
     try {

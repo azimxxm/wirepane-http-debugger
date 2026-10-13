@@ -1,11 +1,14 @@
 import * as dgram from 'dgram';
 import * as fs from 'fs';
+import * as http from 'http';
 import * as os from 'os';
 import * as path from 'path';
 import { spawn } from 'child_process';
 import { expect } from 'chai';
+import { generateCACertificate } from 'mockttp';
 
 import type { HtkConfig } from '../../src/config';
+import type { Ikev2ProfileAnswer } from '../../src/interceptors/wireguard-vpn-ikev2';
 import {
     WireGuardVpnInterceptor,
     WireGuardVpnMetadata,
@@ -24,6 +27,7 @@ import {
     applySettingsPatch,
     capturePath,
     DEFAULT_VPN_SETTINGS,
+    loadSettings,
     parseSettingsPatch,
     ToolEventLog
 } from '../../src/interceptors/wireguard-vpn-tools';
@@ -34,6 +38,22 @@ const STUB = path.join(FIXTURES, 'wirepane-tunnel-stub.cjs');
 const HARNESS = path.join(FIXTURES, 'wireguard-vpn-harness.ts');
 
 const PROXY_PORT = 9474;
+
+// The plist package comes with usbmux-client (a server dependency); it reads the profiles back
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const plist: { parse(xml: string): any } = require('plist');
+
+// A fresh connection each time, so a closed link shows as refused
+function httpGet(url: string): Promise<{ status: number, body: string }> {
+    return new Promise((resolve, reject) => {
+        const req = http.get(url, { agent: false }, (res) => {
+            const chunks: Buffer[] = [];
+            res.on('data', (chunk: Buffer) => chunks.push(chunk));
+            res.on('end', () => resolve({ status: res.statusCode ?? 0, body: Buffer.concat(chunks).toString('utf8') }));
+        });
+        req.on('error', reject);
+    });
+}
 
 type Falsy = false | 0 | '' | null | undefined;
 
@@ -224,7 +244,8 @@ describe("The WireGuard VPN helpers", () => {
         const stubEnvKeys = [
             'WIREPANE_TUNNEL_BINPATH', 'STUB_LOG', 'STUB_HANDSHAKE_MS', 'STUB_NO_SET_SOCKS',
             'STUB_FAIL_START', 'STUB_IGNORE_STDIN_EOF', 'STUB_NOISY_ERROR', 'STUB_LIST_PEERS_ERROR',
-            'STUB_LATE_PEER', 'STUB_CAPABILITIES'
+            'STUB_LATE_PEER', 'STUB_CAPABILITIES', 'STUB_NO_IKEV2_OPTION', 'STUB_IKEV2_BIND_ERROR',
+            'STUB_IKEV2_BAD_IDENTITY', 'STUB_REFUSE_DNS_PATTERN'
         ];
 
         beforeEach(() => {
@@ -277,7 +298,8 @@ describe("The WireGuard VPN helpers", () => {
                 peers: [],
                 settings: DEFAULT_VPN_SETTINGS,
                 capture: { running: false },
-                capabilities: { quicDecrypt: false, ikev2: false }
+                capabilities: { quicDecrypt: false, ikev2: false },
+                ikev2: { running: false }
             });
             expect(startsOf()).to.have.length(0);
         });
@@ -304,6 +326,9 @@ describe("The WireGuard VPN helpers", () => {
             } else {
                 expect(started.args).not.to.include('--endpoint-host');
             }
+            // IKEv2 is always asked for; this build of the stand-in doesn't have it
+            expect(argValue(started.args, '--ikev2')).to.equal('0.0.0.0:500');
+            expect(result.ikev2).to.deep.equal({ running: false });
         });
 
         // --- The network tools (docs/plans/2026-10-13-rust-network-tools.md) ---
@@ -381,12 +406,74 @@ describe("The WireGuard VPN helpers", () => {
                 { conditions: { p1: { latencyMs: -1 } } },
                 { conditions: { p1: { lossPct: 101 } } },
                 { conditions: { '../p1': null } },
+                // What the helper's parse_pattern refuses (wirepane-tunnel/src/features/dns_rules.rs)
+                { dnsRules: [{ pattern: '*', action: 'block' }] },
+                { dnsRules: [{ pattern: '*.', action: 'block' }] },
+                { dnsRules: [{ pattern: 'a*.example.com', action: 'block' }] },
+                { dnsRules: [{ pattern: '*.*.example.com', action: 'block' }] },
+                { dnsRules: [{ pattern: 'api.*', action: 'block' }] },
+                { dnsRules: [{ pattern: `${'a'.repeat(64)}.com`, action: 'block' }] },
+                { dnsRules: [{ pattern: `${'a.'.repeat(126)}com`, action: 'block' }] },
+                { dnsRules: [{ pattern: 'a..b', action: 'block' }] },
+                { dnsRules: [{ pattern: '.a.b', action: 'block' }] },
+                { dnsRules: [{ pattern: 'exämple.com', action: 'block' }] },
                 'nothing'
             ]) {
                 const message = await rejectionOf(configure(bad));
                 expect(message, JSON.stringify(bad)).to.be.a('string');
             }
             expect(fs.existsSync(settingsFile())).to.equal(false);
+        });
+
+        it("keeps nothing the helper refuses, so a restart gets the last good rules", async () => {
+            process.env.STUB_REFUSE_DNS_PATTERN = 'refused.test';
+            await start();
+            const good = await configure({ dnsRules: [{ pattern: 'good.test', action: 'block' }] });
+
+            const message = await rejectionOf(configure({
+                quic: 'relay',
+                dnsRules: [{ pattern: 'good.test', action: 'block' }, { pattern: 'refused.test', action: 'block' }]
+            }));
+            expect(message).to.include('rule 2: the helper refuses this name');
+
+            // Neither saved nor remembered, and the helper is back on what is saved
+            expect((await metadata()).settings).to.deep.equal(good);
+            expect(JSON.parse(fs.readFileSync(settingsFile(), 'utf8'))).to.deep.equal(good);
+            expect(lastCommand('set-dns-rules').rules).to.deep.equal(good.dnsRules);
+            expect(lastCommand('set-quic').mode).to.equal('block');
+
+            // A new helper gets the rules that worked
+            await interceptor.deactivate(PROXY_PORT);
+            await start();
+            expect(lastCommand('set-dns-rules').rules).to.deep.equal(good.dnsRules);
+            expect(startsOf()).to.have.length(2);
+        });
+
+        it("asks a running helper for its counters and relays them to the UI's log", async () => {
+            interceptor = new WireGuardVpnInterceptor({ configPath } as HtkConfig, findTunnelBinary, {
+                statsIntervalMs: 40
+            });
+            await addPeer('iPhone');
+
+            const stats = await waitFor(async () => (await interceptor.getSubMetadata('events-0')).events
+                .find((event) => event.event === 'stats'));
+            expect((stats.peers as Array<{ peer: string }>).map((peer) => peer.peer)).to.deep.equal(['p1']);
+            expect(stats.seq).to.be.a('number');
+            expect(commandsOf('stats')[0].cmd).to.deep.equal({ cmd: 'stats' });
+
+            // Nothing is asked once it's stopped
+            await interceptor.deactivate(PROXY_PORT);
+            const asked = commandsOf('stats').length;
+            await new Promise((resolve) => setTimeout(resolve, 150));
+            expect(commandsOf('stats')).to.have.length(asked);
+        });
+
+        it("asks for the counters every 2 seconds by default", async function () {
+            this.timeout(6000);
+            await start();
+            await new Promise((resolve) => setTimeout(resolve, 1500));
+            expect(commandsOf('stats')).to.have.length(0);
+            await waitFor(() => commandsOf('stats').length === 1, 1500);
         });
 
         it("captures to a pcapng file in the captures folder", async () => {
@@ -442,17 +529,54 @@ describe("The WireGuard VPN helpers", () => {
             expect((await metadata()).capabilities).to.deep.equal({ quicDecrypt: true, ikev2: false });
         });
 
-        it("hands the Wirepane CA to the helper when it exists", async () => {
+        it("hands the Wirepane CA to the helper only when it decrypts HTTP/3", async () => {
+            const caCert = path.join(configPath, 'wirepane-ca.pem');
+            const caKey = path.join(configPath, 'wirepane-ca.key');
+
+            // Without the files there's nothing to hand over, even for decrypt
+            await configure({ quic: 'decrypt' });
             await start();
             expect(startsOf()[0].args).not.to.include('--ca-cert');
             await interceptor.deactivate(PROXY_PORT);
+            await configure({ quic: 'block' });
 
-            fs.writeFileSync(path.join(configPath, 'wirepane-ca.pem'), 'cert');
-            fs.writeFileSync(path.join(configPath, 'wirepane-ca.key'), 'key');
+            fs.writeFileSync(caCert, 'cert');
+            fs.writeFileSync(caKey, 'key');
+
+            // block (the default) and relay never use the private key
+            await addPeer('iPhone');
+            expect(startsOf()[1].args).not.to.include('--ca-key');
+            const rules = [{ pattern: 'a.test', action: 'block' }];
+            await configure({ quic: 'relay', dnsRules: rules });
+            expect(startsOf()).to.have.length(2);
+
+            // Switching to decrypt starts the helper again with the CA, its peers and settings
+            await configure({ quic: 'decrypt' });
+            expect(startsOf()).to.have.length(3);
+            const [, old, decrypting] = startsOf();
+            expect(isAlive(old.pid)).to.equal(false);
+            expect(argValue(decrypting.args, '--ca-cert')).to.equal(caCert);
+            expect(argValue(decrypting.args, '--ca-key')).to.equal(caKey);
+            expect(argValue(decrypting.args, '--socks')).to.equal(`127.0.0.1:${PROXY_PORT}`);
+            const restarted = await metadata();
+            expect(restarted.running).to.equal(true);
+            expect(restarted.peers.map((peer) => peer.name)).to.deep.equal(['iPhone']);
+            const sentToNew = (name: string) => commandsOf(name).filter((entry) => entry.pid === decrypting.pid);
+            expect(sentToNew('set-dns-rules').slice(-1)[0].cmd.rules).to.deep.equal(rules);
+            expect(sentToNew('set-quic').slice(-1)[0].cmd.mode).to.equal('decrypt');
+
+            // ...and switching away takes the key away again
+            await configure({ quic: 'block' });
+            expect(startsOf()).to.have.length(4);
+            expect(startsOf()[3].args).not.to.include('--ca-cert');
+            expect(startsOf()[3].args).not.to.include('--ca-key');
+
+            // A stopped VPN only saves the mode, and the next start brings the CA
+            await interceptor.deactivate(PROXY_PORT);
+            await configure({ quic: 'decrypt' });
+            expect(startsOf()).to.have.length(4);
             await start();
-            const args = startsOf()[1].args;
-            expect(argValue(args, '--ca-cert')).to.equal(path.join(configPath, 'wirepane-ca.pem'));
-            expect(argValue(args, '--ca-key')).to.equal(path.join(configPath, 'wirepane-ca.key'));
+            expect(argValue(startsOf()[4].args, '--ca-key')).to.equal(caKey);
         });
 
         it("keeps the same port the next time it starts", async () => {
@@ -662,7 +786,8 @@ describe("The WireGuard VPN helpers", () => {
                 peers: [],
                 settings: DEFAULT_VPN_SETTINGS,
                 capture: { running: false },
-                capabilities: { quicDecrypt: false, ikev2: false }
+                capabilities: { quicDecrypt: false, ikev2: false },
+                ikev2: { running: false }
             });
             expect(result).to.deep.equal(await metadata());
             expect(isAlive(pid)).to.equal(false);
@@ -821,6 +946,198 @@ describe("The WireGuard VPN helpers", () => {
             expect(startsOf()).to.have.length(1);
         });
 
+        // --- IKEv2 for iPhones without the WireGuard app (wirepane-tunnel/docs/ikev2.md) ---
+
+        const IKEV2_CAPABLE = JSON.stringify({ quicDecrypt: false, ikev2: true });
+        let testCaPem: string | undefined;
+
+        // The profile's address and its one-time link stay on this machine
+        const onLoopback = () => new WireGuardVpnInterceptor({ configPath } as HtkConfig, findTunnelBinary, {
+            lanAddress: () => '127.0.0.1'
+        });
+        const writeCa = async () => {
+            testCaPem ??= (await generateCACertificate({ subject: { commonName: 'Wirepane CA (test)' } })).cert;
+            fs.writeFileSync(path.join(configPath, 'wirepane-ca.pem'), testCaPem);
+            return testCaPem;
+        };
+        const requestProfile = (name?: string) =>
+            interceptor.activate(PROXY_PORT, { action: 'ikev2-profile', name }) as Promise<Ikev2ProfileAnswer>;
+
+        it("starts the helper with IKEv2 on UDP 500 and says where it listens", async () => {
+            process.env.STUB_CAPABILITIES = IKEV2_CAPABLE;
+            const result = await start();
+
+            expect(argValue(startsOf()[0].args, '--ikev2')).to.equal('0.0.0.0:500');
+            expect(result.capabilities.ikev2).to.equal(true);
+            expect(result.ikev2).to.deep.equal({ running: true, ike: '0.0.0.0:500', natT: '0.0.0.0:4500' });
+            expect(result.error).to.equal(undefined);
+        });
+
+        it("creates an IKEv2 profile with the CA and a one-time link, and adds the device", async function () {
+            this.timeout(10000);
+            process.env.STUB_CAPABILITIES = IKEV2_CAPABLE;
+            interceptor = onLoopback();
+            const caPem = await writeCa();
+
+            const answer = await requestProfile('Azim iPhone');
+
+            // Exactly what vpn-ikev2-setup.tsx reads (parseIkev2ProfileAnswer)
+            expect(Object.keys(answer).sort()).to.deep.equal(['link', 'name', 'peer', 'profile']);
+            expect(answer.peer).to.equal('p1');
+            expect(answer.name).to.equal('Azim iPhone');
+            expect(answer.link).to.match(/^http:\/\/\d{1,3}(\.\d{1,3}){3}:\d{1,5}\/[0-9a-f]{32}\.mobileconfig$/);
+            expect(answer.link).to.match(/^http:\/\/127\.0\.0\.1:/);
+            expect(commandsOf('add-peer')[0].cmd).to.deep.equal({ cmd: 'add-peer', name: 'Azim iPhone', kind: 'ikev2' });
+
+            const [ca, vpn] = plist.parse(answer.profile).PayloadContent;
+            expect(vpn.IKEv2).to.deep.include({
+                RemoteAddress: '127.0.0.1',
+                RemoteIdentifier: 'vpn.wirepane',
+                LocalIdentifier: 'p1.wirepane',
+                AuthenticationMethod: 'SharedSecret'
+            });
+            expect(vpn.IKEv2.SharedSecret).to.match(/^[A-Za-z0-9+/]{43}=$/);
+            const der = Buffer.from(caPem.replace(/-----[^-]+-----/g, '').replace(/\s+/g, ''), 'base64');
+            expect(Buffer.from(ca.PayloadContent).equals(der)).to.equal(true);
+
+            // The device is listed like a WireGuard one
+            expect((await metadata()).peers.map((peer) => peer.name)).to.deep.equal(['Azim iPhone']);
+
+            // Safari on the iPhone gets the same profile from the link
+            const download = await httpGet(answer.link!);
+            expect(download.status).to.equal(200);
+            expect(download.body).to.equal(answer.profile);
+
+            // A second device gets its own profile
+            const second = await requestProfile('iPad');
+            expect(second.peer).to.equal('p2');
+            expect(plist.parse(second.profile).PayloadContent[1].IKEv2.LocalIdentifier).to.equal('p2.wirepane');
+        });
+
+        it("never logs or saves the device's secret", async function () {
+            this.timeout(10000);
+            process.env.STUB_CAPABILITIES = IKEV2_CAPABLE;
+            interceptor = onLoopback();
+            await writeCa();
+
+            const logged: string[] = [];
+            const levels = ['log', 'info', 'warn', 'error', 'debug'] as const;
+            const originals = levels.map((level) => console[level]);
+            levels.forEach((level) => {
+                console[level] = (...args: unknown[]) => { logged.push(args.map(String).join(' ')); };
+            });
+            let answer: Ikev2ProfileAnswer;
+            try {
+                answer = await requestProfile();
+                await httpGet(answer.link!);
+            } finally {
+                levels.forEach((level, i) => { console[level] = originals[i]; });
+            }
+
+            const secret: string = plist.parse(answer.profile).PayloadContent[1].IKEv2.SharedSecret;
+            expect(logged.join('\n')).not.to.include(secret);
+            expect(JSON.stringify(await metadata())).not.to.include(secret);
+            expect(JSON.stringify(await interceptor.getSubMetadata('events-0'))).not.to.include(secret);
+
+            // Nothing in the config folder holds it or the profile
+            const files = (fs.readdirSync(configPath, { recursive: true }) as string[])
+                .map((file) => path.join(configPath, file))
+                .filter((file) => fs.statSync(file).isFile());
+            expect(files.length).to.be.at.least(2);
+            for (const file of files) {
+                const content = fs.readFileSync(file, 'utf8');
+                expect(content, file).not.to.include(secret);
+                expect(content, file).not.to.include('<plist');
+            }
+        });
+
+        it("keeps WireGuard working when UDP 500 or 4500 can't be bound", async () => {
+            process.env.STUB_CAPABILITIES = IKEV2_CAPABLE;
+            process.env.STUB_IKEV2_BIND_ERROR = '1';
+            interceptor = onLoopback();
+            await writeCa();
+
+            const result = await start();
+            expect(result.running).to.equal(true);
+            // Not the VPN's problem: the UI only shows IKEv2 as off
+            expect(result.error).to.equal(undefined);
+            expect(result.ikev2.running).to.equal(false);
+            expect(result.ikev2.error).to.include('cannot bind UDP 0.0.0.0:500');
+
+            expect((await addPeer('Android')).config).to.include('[Interface]');
+
+            const message = await rejectionOf(requestProfile());
+            expect(message).to.include("IKEv2 couldn't listen on UDP ports 500 and 4500");
+            expect(message).to.include('Address already in use');
+            expect(message).to.include('stop VPN mode and start it again');
+            // Not what the UI takes for "this build can't do IKEv2" (isIkev2Unsupported)
+            expect(message).not.to.match(/ikev2 is not (available|supported|running)/i);
+            expect(commandsOf('add-peer').map((entry) => entry.cmd.kind)).to.deep.equal(['wireguard']);
+            expect((await metadata()).error).to.equal(undefined);
+        });
+
+        it("starts a helper built before IKEv2 without the option, and says it can't make profiles", async () => {
+            process.env.STUB_NO_IKEV2_OPTION = '1';
+            interceptor = onLoopback();
+            await writeCa();
+
+            const result = await start();
+            expect(result.running).to.equal(true);
+            expect(result.error).to.equal(undefined);
+            expect(result.ikev2).to.deep.equal({ running: false });
+            const [refused, started] = startsOf();
+            expect(startsOf()).to.have.length(2);
+            expect(refused.args).to.include('--ikev2');
+            expect(started.args).not.to.include('--ikev2');
+            expect(isAlive(refused.pid)).to.equal(false);
+
+            // The UI shows "this build can't run the IKEv2 VPN yet" for this message
+            expect(await rejectionOf(requestProfile())).to.match(/ikev2 is not (available|supported|running)/i);
+            expect(commandsOf('add-peer')).to.have.length(0);
+        });
+
+        it("adds no device when there's no address to dial or no CA to put in the profile", async () => {
+            process.env.STUB_CAPABILITIES = IKEV2_CAPABLE;
+            interceptor = new WireGuardVpnInterceptor({ configPath } as HtkConfig, findTunnelBinary, {
+                lanAddress: () => undefined
+            });
+            await writeCa();
+            expect(await rejectionOf(requestProfile())).to.include('no network address');
+            await interceptor.deactivateAll();
+
+            fs.rmSync(path.join(configPath, 'wirepane-ca.pem'));
+            interceptor = onLoopback();
+            expect(await rejectionOf(requestProfile())).to.include('Wirepane CA certificate');
+            expect(commandsOf('add-peer')).to.have.length(0);
+        });
+
+        it("takes the device out again when the helper's answer can't make a profile", async () => {
+            process.env.STUB_CAPABILITIES = IKEV2_CAPABLE;
+            process.env.STUB_IKEV2_BAD_IDENTITY = '1';
+            interceptor = onLoopback();
+            await writeCa();
+
+            expect(await rejectionOf(requestProfile())).to.include('no usable IKEv2 setup');
+            expect(commandsOf('remove-peer').map((entry) => entry.cmd.peer)).to.deep.equal(['p1']);
+            expect((await metadata()).peers).to.deep.equal([]);
+        });
+
+        it("closes open profile links when the helper stops, on purpose or not", async function () {
+            this.timeout(10000);
+            process.env.STUB_CAPABILITIES = IKEV2_CAPABLE;
+            interceptor = onLoopback();
+            await writeCa();
+
+            const first = await requestProfile();
+            await interceptor.deactivate(PROXY_PORT);
+            expect(await rejectionOf(httpGet(first.link!))).to.include('ECONNREFUSED');
+
+            const second = await requestProfile();
+            await addPeer('crash-me');
+            await waitFor(async () => !(await metadata()).running);
+            expect(await rejectionOf(httpGet(second.link!))).to.include('ECONNREFUSED');
+        });
+
         it("doesn't let the helper outlive the server", async function () {
             this.timeout(20000);
 
@@ -866,6 +1183,39 @@ describe("the VPN network tools' settings", () => {
         expect(Object.keys(two.conditions)).to.deep.equal(['p2']);
         expect(two.dnsRules).to.deep.equal([]);
         expect(DEFAULT_VPN_SETTINGS.conditions).to.deep.equal({});
+    });
+
+    it("accepts the DNS names the helper accepts, compared like it does", () => {
+        const longest = `${'a'.repeat(63)}.${'a'.repeat(63)}.${'a'.repeat(63)}.${'b'.repeat(61)}`;
+        expect(longest).to.have.length(253);
+        const { dnsRules } = parseSettingsPatch({
+            dnsRules: [
+                { pattern: ' *.Example.COM. ', action: 'block' },
+                { pattern: '_dmarc.my-site.test', action: 'block' },
+                { pattern: `${'x'.repeat(63)}.test`, action: 'block' },
+                { pattern: longest, action: 'answer', ipv4: '10.0.0.5' }
+            ]
+        });
+        expect(dnsRules!.map((rule) => rule.pattern)).to.deep.equal([
+            '*.example.com', '_dmarc.my-site.test', `${'x'.repeat(63)}.test`, longest
+        ]);
+    });
+
+    it("drops only the saved DNS rules the helper would refuse", async () => {
+        const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'htk-vpn-settings-'));
+        try {
+            fs.writeFileSync(path.join(dir, 'wirepane-vpn-settings.json'), JSON.stringify({
+                dnsRules: [{ pattern: '*', action: 'block' }, { pattern: 'ok.test', action: 'block' }],
+                quic: 'relay',
+                conditions: { p1: { latencyMs: 80 } }
+            }));
+            const settings = await loadSettings(dir);
+            expect(settings.dnsRules).to.deep.equal([{ pattern: 'ok.test', action: 'block' }]);
+            expect(settings.quic).to.equal('relay');
+            expect(settings.conditions.p1?.latencyMs).to.equal(80);
+        } finally {
+            fs.rmSync(dir, { recursive: true, force: true });
+        }
     });
 
     it("names captures by the local time", () => {
