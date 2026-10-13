@@ -36,7 +36,8 @@ Release profile: `lto = true`, `codegen-units = 1`, `opt-level = "s"`, `strip = 
 
 ```
 wirepane-tunnel --wireguard <ip:port> --state <file> --socks <host:port>
-                [--endpoint-host <LAN IPv4 the phone dials>] [--tunnel-net 10.73.0.0/24] [--quic block|relay]
+                [--endpoint-host <LAN IPv4 the phone dials>] [--tunnel-net 10.73.0.0/24] [--quic block|relay|decrypt]
+                [--ca-cert <pem> --ca-key <pem>] [--ikev2 <ip:port>]
 ```
 
 | Option            | Meaning                                                                                                                                                                       |
@@ -46,7 +47,9 @@ wirepane-tunnel --wireguard <ip:port> --state <file> --socks <host:port>
 | `--socks`         | Mockttp's proxy port, `host:port`. Can be changed while running with `set-socks`.                                                                                             |
 | `--endpoint-host` | Written into the client config as `Endpoint = <host>:<port>`. Default: the bind address, or `127.0.0.1` when it is `0.0.0.0`.                                                 |
 | `--tunnel-net`    | Virtual network, `/16` to `/24`. Default `10.73.0.0/24`: server `.1`, DNS `.53`, `wirepane.cert` `.54`, peers from `.2` (skipping `.53` and `.54`).                           |
-| `--quic`          | `block` (default) answers UDP/443 with an ICMP port unreachable and reports it; `relay` forwards it like other UDP.                                                           |
+| `--quic`          | `block` (default) answers UDP/443 with an ICMP port unreachable and reports it; `relay` forwards it like other UDP; `decrypt` terminates HTTP/3 and hands each request to Mockttp (needs `--ca-cert`/`--ca-key`; see `docs/http3.md`). Can be changed while running with `set-quic`. |
+| `--ca-cert`, `--ca-key` | The Wirepane CA's PEM files, for the leaf certificates QUIC `decrypt` presents to phones. The server passes the CA next to the state file. |
+| `--ikev2`         | UDP address for the IKEv2/IPsec front-end (iOS's built-in VPN, no extra app). Only used when the build supports it (`ready` → `capabilities.ikev2`); see `docs/ikev2.md`. |
 
 A hidden `--unsafe-allow-loopback` exists for tests only (see "Security"). Do not pass it from the server.
 
@@ -85,6 +88,11 @@ Peer ids (`p1`, `p2`, ...) are never reused. An unreadable file is moved to `<fi
 | `{"cmd":"list-peers"}`                          | `{"event":"peers","peers":[{"peer":"p1","name":"iPhone","kind":"wireguard","tunnelIp":"10.73.0.2","endpoint":"192.168.0.199:61234","lastHandshake":1791809205206}]}` |
 | `{"cmd":"set-socks","addr":"127.0.0.1:9474"}`   | `{"event":"socks-set","addr":"127.0.0.1:9474"}`; new flows use it, open flows keep their connection                              |
 | `{"cmd":"stats"}`                               | `{"event":"stats",...}`: running totals since the sidecar started (see "Events")                                                  |
+| `{"cmd":"set-conditions","peer":"p1","conditions":{"latencyMs":200,"jitterMs":0,"downKbps":750,"upKbps":250,"lossPct":0}}` | `{"event":"conditions-set","peer":"p1"}`; `"conditions":null` turns them off. Missing fields are 0 (no delay, no limit) |
+| `{"cmd":"set-dns-rules","rules":[{"pattern":"*.example.com","action":"block"},{"pattern":"api.test","action":"answer","ipv4":"192.168.0.10"}]}` | `{"event":"dns-rules-set","count":2}`; replaces the whole list; the first matching rule wins |
+| `{"cmd":"set-quic","mode":"block"}`               | `{"event":"quic-mode","mode":"block"}` (`block`, `relay` or `decrypt`)                                                 |
+| `{"cmd":"capture-start","path":"/…/wirepane.pcapng"}` | `{"event":"capture-started","path":"…"}`: every IP packet of every phone goes to a pcapng file, one interface per phone |
+| `{"cmd":"capture-stop"}`                        | `{"event":"capture-stopped","path":"…","packets":1234,"bytes":567890}`                                              |
 
 `name` defaults to `Phone` (control characters removed, 64 characters at most). `kind` defaults to `wireguard`, the only kind for now. `endpoint` and `lastHandshake` are `null` until the phone has connected; `lastHandshake` is a ms epoch. A bad or unknown command, an unknown peer or an invalid address gives `{"event":"error","message":"..."}` and nothing else changes.
 
@@ -106,22 +114,24 @@ PersistentKeepalive = 25
 ## Events (stdout, one JSON object per line)
 
 ```jsonc
-{"event":"ready","listen":"0.0.0.0:51873","publicKey":"<server public key, base64>"}
+{"event":"ready","listen":"0.0.0.0:51873","publicKey":"<server public key, base64>","capabilities":{"quicDecrypt":true,"ikev2":false}}
 {"event":"peer","peer":"p1","endpoint":"192.168.0.199:61234","lastHandshake":1791809205206}
 {"event":"dns","peer":"p1","name":"api.example.com","qtype":"A","rcode":"NOERROR","answers":["93.184.216.34"],"ms":12}
 {"event":"udp-open","flow":1,"peer":"p1","src":"10.73.0.2:40003","dst":"1.2.3.4:5000","name":null}
 {"event":"udp-update","flow":1,"peer":"p1","packetsUp":1,"packetsDown":1,"bytesUp":13,"bytesDown":13}
 {"event":"udp-close","flow":1,"peer":"p1","reason":"idle","packetsUp":1,"packetsDown":1,"bytesUp":13,"bytesDown":13}
 {"event":"quic","peer":"p1","dst":"93.184.216.34:443","action":"blocked"}
+{"event":"tls-hello","peer":"p1","dst":"93.184.216.34:443","sni":"api.example.com","alpn":["h2","http/1.1"],"ja4":"t13d1516h2_8daaf6152771_e5627efa2ab1"}
 {"event":"stats","uptimeMs":812345,"peers":[{"peer":"p1","name":"iPhone","tunnelIp":"10.73.0.2","endpoint":"192.168.0.199:61234","lastHandshake":1791809205206,"bytesUp":48213,"bytesDown":902114}],"tcp":{"flowsOpened":41,"flowsActive":3,"bytesUp":30211,"bytesDown":881200},"udp":{"flowsOpened":2,"flowsActive":1,"packetsUp":5,"packetsDown":4,"bytesUp":410,"bytesDown":380},"dns":{"queries":57},"quic":{"blocked":6,"icmpSent":6}}
 {"event":"error","message":"..."}
 ```
 
 - `ready`: once, after the UDP socket is bound. `listen` is the real bound address.
 - `peer`: when a handshake completes (one the phone started, or one the server's timers started and the phone answered) and when a phone's endpoint changes (roaming between Wi-Fi and mobile data). Only authenticated packets move the endpoint.
-- `dns`: one per query. `qtype` is a name (`A`, `AAAA`, `HTTPS`, ..., or `TYPE99`); `rcode` is `NOERROR`, `NXDOMAIN`, `SERVFAIL`, `FORMERR` or `NOTIMP`; `answers` are IPv4 addresses.
+- `dns`: one per query; `"rule":"blocked"` or `"answered"` is added when a DNS rule decided the answer. `qtype` is a name (`A`, `AAAA`, `HTTPS`, ..., or `TYPE99`); `rcode` is `NOERROR`, `NXDOMAIN`, `SERVFAIL`, `FORMERR` or `NOTIMP`; `answers` are IPv4 addresses.
 - `udp-open` / `udp-update` / `udp-close`: only for relayed UDP (not DNS, not blocked QUIC). `name` is the DNS name that phone got for `dst`, or `null`. `reason` is `idle`, `closed`, `error` or `peer-removed`. `udp-update` carries the running counts (`Up` = from the phone) and is throttled: at most one a second per flow, and none while the counts have not changed. `udp-close` has the final counts.
 - `quic`: once per blocked UDP/443 flow. Every blocked datagram also gets an ICMP port unreachable (at most one per 100 ms per flow), which is counted in `stats` but not reported as an event.
+- `tls-hello`: the first bytes of a TCP flow were a TLS ClientHello; its SNI and JA4 also go on that flow's SOCKS connection as the tags `wirepane-vpn-sni:` and `wirepane-vpn-ja4:`.
 - `stats`: the answer to `{"cmd":"stats"}`, running totals since start. `peers[]` counts plaintext bytes through each phone's tunnel (`bytesUp` from the phone, `bytesDown` to it). `tcp`, `udp`, `dns` and `quic` count what the core served; `flowsActive` is a gauge, everything else only grows. Fields may be added later, never removed.
 - `error`: fatal problems and rejected commands. Not used for ordinary per-flow failures (those are logged at `debug`).
 
