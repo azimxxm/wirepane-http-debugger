@@ -22,6 +22,12 @@ These builds aren't signed yet: there's no Apple Developer account or code signi
 
 To see HTTPS traffic, a device has to trust Wirepane's own certificate, **Wirepane CA**: the Intercept page shows how for each device.
 
+## VPN mode (iPhone and iPad)
+
+**Intercept** → **iPhone or iPad** → **Capture all apps (VPN)** sends everything the phone does through Wirepane, including Flutter apps, games and apps that ignore the Wi-Fi proxy. The iPhone needs the free WireGuard app: start the VPN in Wirepane, scan the QR code in WireGuard and turn the tunnel on. HTTPS still needs the Wirepane CA, and apps that pin their certificate show only the host name. Turn the tunnel off when you're done, or the iPhone has no internet while Wirepane isn't running.
+
+On macOS 15 or later, macOS asks Wirepane for access to the local network the first time VPN mode starts. Click **Allow**: without it the iPhone may not be able to connect. VPN mode has only been tested on macOS so far, not on Windows or Linux.
+
 ## O'zbekcha
 
 Wirepane — developerlar, QA va boshlovchilar uchun bepul HTTP(S) debugger. U [HTTP Toolkit](https://httptoolkit.com) (AGPL-3.0) va [Bruno](https://www.usebruno.com) (MIT) kodi asosida yasalgan, rasmiy HTTP Toolkit emas.
@@ -31,3 +37,7 @@ Bu build'lar hali imzolanmagan, shuning uchun birinchi ochishda ogohlantirish ch
 - **macOS:** `.pkg`ni oching. macOS to'xtatsa: faylni o'ng tugma bilan bosib **Open** → **Open**, yoki System Settings → Privacy & Security → **Open Anyway**.
 - **Windows:** setup `.exe`ni ishga tushiring. SmartScreen chiqsa: **More info** → **Run anyway**.
 - **Linux:** `.deb` yoki `.rpm`ni o'rnating. AppImage uchun avval `chmod +x Wirepane-{{VERSION}}-linux-x86_64.AppImage`, keyin ishga tushiring.
+
+**VPN rejimi (iPhone va iPad):** **Intercept** → **iPhone or iPad** → **Capture all apps (VPN)** telefondagi hamma ilovaning trafigini, jumladan Flutter ilovalarini ham, Wirepane orqali o'tkazadi. iPhone'da bepul WireGuard ilovasi kerak: Wirepane'da VPN'ni ishga tushiring, QR code'ni WireGuard'da skanerlang va tunnel'ni yoqing. HTTPS uchun Wirepane CA baribir kerak; sertifikatni pin qiladigan ilovalarda faqat host ko'rinadi. Ish tugagach, tunnel'ni o'chiring: aks holda Wirepane ishlamayotganda iPhone'da internet bo'lmaydi.
+
+macOS 15 va yangiroq'da VPN rejimi birinchi marta ishga tushganda macOS Wirepane'dan lokal tarmoqqa kirish ruxsatini so'raydi. **Allow** bosing, aks holda iPhone ulana olmasligi mumkin. VPN rejimi hozircha faqat macOS'da sinalgan.

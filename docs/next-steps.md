@@ -1,6 +1,6 @@
 # Next steps: start here
 
-Last updated 2026-10-13. A new session (or one after /clear or /compact) reads this file first, then `docs/remaining-work.md` (the full list, Uzbek) and the top of `PROJECT_LOG.md`.
+Last updated 2026-10-13 (afternoon). A new session (or one after /clear or /compact) reads this file first, then `docs/remaining-work.md` (the full list, Uzbek) and the top of `PROJECT_LOG.md`.
 
 **Qisqacha (o'zbekcha):** iPhone sinovidagi UI xatolari tuzatildi, VPN rejimining 1-bosqichi (WireGuard) qurildi va `main`ga push qilindi. Egasining iPhone'i Wirepane'ning o'z VPN'iga ulandi. Endi egasidan ilovalar bo'yicha natija va packaged app sinovi kutilyapti, kod tomonda esa quyidagi ro'yxat qoldi. Release faqat egasi aytganda.
 
@@ -31,26 +31,30 @@ Last updated 2026-10-13. A new session (or one after /clear or /compact) reads t
 
 ### P0, before the release
 
-- [ ] Devices panel: VPN peers show as "(p1)"; map peer ids to their names (the UI's vpn-mode store has them) so it says "iPhone".
-- [ ] README "Telefon trafigi" and the release notes: describe VPN mode (WireGuard app, QR, turn it off when done, pinned apps stay opaque), the Local Network prompt, Windows Firewall and `ufw` notes. The README's `ipconfig getifaddr en0` is wrong on Macs whose Wi-Fi is `en1`: say "the address the iPhone page shows".
-- [ ] `./setup.sh` builds the sidecar when `cargo` exists (and says how to get Rust when it doesn't), so VPN mode works in a fresh dev checkout.
-- [ ] A unit test for the interceptor's `{ action: 'stop' }` (added by the lead in `a7498792d`, untested).
-- [ ] Publish checklist (`docs/remaining-work.md` section 7): Local Network prompt on first VPN start, the helper adds ~1 MB, Windows/Linux CI not run yet.
+- [x] Devices panel: VPN peers show as "(p1)"; map peer ids to their names (the UI's vpn-mode store has them) so it says "iPhone".
+- [x] README "Telefon trafigi" and the release notes: describe VPN mode (WireGuard app, QR, turn it off when done, pinned apps stay opaque), the Local Network prompt, Windows Firewall and `ufw` notes. The README's `ipconfig getifaddr en0` is wrong on Macs whose Wi-Fi is `en1`: say "the address the iPhone page shows".
+- [x] `./setup.sh` builds the sidecar when `cargo` exists (and says how to get Rust when it doesn't), so VPN mode works in a fresh dev checkout.
+- [x] A unit test for the interceptor's `{ action: 'stop' }` (added by the lead in `a7498792d`, untested).
+- [x] Publish checklist (`docs/remaining-work.md` section 7): Local Network prompt on first VPN start, the helper adds ~1 MB, Windows/Linux CI not run yet.
 
 ### P1, VPN robustness (sidecar)
 
-- [ ] WireGuard timers: the server side never calls boringtun's `update_timers`, and its handshake `RateLimiter` is unused. Add both.
-- [ ] QUIC block answers with ICMP port unreachable instead of a silent drop, so apps fall back to TCP at once.
-- [ ] A test for DNS over TCP; `udp-update` and `stats` events; throughput numbers.
+- [x] WireGuard timers: the server side never calls boringtun's `update_timers`, and its handshake `RateLimiter` is unused. Add both.
+- [x] QUIC block answers with ICMP port unreachable instead of a silent drop, so apps fall back to TCP at once.
+- [x] A test for DNS over TCP; `udp-update` and `stats` events; throughput numbers.
 - [ ] IPv6 (now dropped; AAAA answered empty).
 - [ ] Windows and Linux builds of the sidecar in CI.
 
 ### P1, UI polish found in the agents' reports
 
-- [ ] View column headers: on hover the chevron covers the sort arrow; check the menus in dark theme and at 1280×800; `status=4xx` / `type=` filters aren't offered by the filter box; one value per column (no GET+POST).
-- [ ] Body viewer: picking Hex by hand on a 4 MB body freezes Monaco for ~1.5 s (truncate); windows-1251 text shows U+FFFD; WebSocket message and Send response views not checked in a browser.
-- [ ] VPN badge in the View list's device cell (now only in its tooltip).
-- [ ] iPhone page: remember the chosen mode; a Remove button for old VPN devices; Settings › Proxy doesn't list the default passthrough hosts.
+- [x] View column headers: on hover the chevron covers the sort arrow; check the menus in dark theme and at 1280×800; `status=4xx` / `type=` filters aren't offered by the filter box; one value per column (no GET+POST).
+- [x] Body viewer: picking Hex by hand on a 4 MB body freezes Monaco for ~1.5 s (truncate); windows-1251 text shows U+FFFD; WebSocket message and Send response views not checked in a browser.
+- [x] VPN badge in the View list's device cell (now only in its tooltip).
+- [x] iPhone page: remember the chosen mode; a Remove button for old VPN devices; Settings › Proxy doesn't list the default passthrough hosts.
+
+### Next: the nine network tools on VPN mode
+
+Plan with models, time limits, contracts and file ownership: `docs/plans/2026-10-13-rust-network-tools.md` (IKEv2, Network Conditions, DNS view, DNS spoofing and blocking, JA4, UDP view, HTTP/3 decryption, pcap export, Android VPN). Languages: TypeScript + Rust (CLAUDE.md, Architecture).
 
 ### Phase 2: IKEv2, no extra app (owner's choice: after WireGuard)
 
