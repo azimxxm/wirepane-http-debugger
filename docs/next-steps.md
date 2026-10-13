@@ -4,16 +4,32 @@ Last updated 2026-10-13 (afternoon). A new session (or one after /clear or /comp
 
 **Qisqacha (o'zbekcha):** iPhone sinovidagi UI xatolari tuzatildi, VPN rejimining 1-bosqichi (WireGuard) qurildi va `main`ga push qilindi. Egasining iPhone'i Wirepane'ning o'z VPN'iga ulandi. Endi egasidan ilovalar bo'yicha natija va packaged app sinovi kutilyapti, kod tomonda esa quyidagi ro'yxat qoldi. Release faqat egasi aytganda.
 
-## In progress (2026-10-13, 13:05)
+## Done on 2026-10-13: nine network tools on VPN mode (merged into main, not pushed)
 
-- Branch `feature/rust-network-tools`: the foundation and all nine tools are committed (one commit per tool, `45f80beff`..`6a874cd48`); IKEv2's engine, profile builder and UI option too, but its server glue is still being written.
-- **W1 Build** done (10 agents, 184 sidecar tests, 69 server tests, 2042 UI tests). **W2 Quality** done: 1 P0 (pre-existing: the Mockttp admin API has no token, and the proxy forwards absolute-form requests to 127.0.0.1, so any Wi-Fi device can reach it), 9 P1, ~20 P2; full list in `subagents/workflows/wf_a21e17e1-832/journal.jsonl`.
-- **Running:** W3 Fix `wf_d3308ca5-2d3` (X1 P0 admin token + internal-port block rule, Opus 5.5; X2/X3 sidecar fixes; X4/X5 UI fixes; Sonnet 5.5), due 13:50; and a background Opus agent in a worktree wiring IKEv2 into `wireguard-vpn.ts` plus four server fixes (DNS pattern, validate-before-save, CA key only for decrypt, stats poll), due 13:50.
-- **Then:** check everything, cherry-pick the worktree commit, commit the fixes, merge into main, delete the branch, report; the owner tests on the iPhone (IKEv2 profile, network tools) and decides on pushing.
+Plan: `docs/plans/2026-10-13-rust-network-tools.md`. Three workflows (build 10 agents, quality 4, fix 5) plus one background agent; the lead integrated each result as it came in.
+
+- **Tools** (Phone network page `/network`, linked from the iPhone page and the Devices panel): DNS view, DNS block/answer rules (every port-53 flow, not only the tunnel's resolver), UDP view with the QUIC switch (block / let through / decrypt), JA4 fingerprints (requests, failed TLS rows, grouped tab), Network Conditions per phone (presets 3G, Edge, LTE, lossy Wi-Fi, offline), pcap capture (2 GiB cap, numbered files, Show in Finder), HTTP/3 decryption (sidecar gateway → Mockttp as HTTP/1.1), Android VPN page, and **IKEv2 without an app** (sidecar front-end, one-time `.mobileconfig` link, "Without an app (IKEv2, beta)" on the iPhone page).
+- **Security P0 fixed** (pre-existing): the Mockttp admin API now needs the per-run token (header or `/token/<token>` prefix) in packaged builds, and built-in rules close proxied requests to the app's own ports on loopback. Dev runs stay tokenless (CLAUDE.md, Pitfalls).
+- **Checks:** sidecar 221 tests and release build (3.2 MB now, QUIC/HTTP3 crates); server 193 unit tests; UI 2155 tests, tsc clean; desktop build and 7 path tests; end to end through the dev server with the test WireGuard client.
+
+### The owner checks on the iPhone (real device)
+
+1. WireGuard VPN (dev, Chrome): http://localhost:45458/intercept/iphone → Capture all apps (VPN) → Start; then **Network tools**: DNS fills as apps run; add `*.example.com` Block and open it in Safari (blocked); Conditions → 3G on the iPhone (pages slow down) → Off; Capture → Start/Stop, Show in Finder, open in Wireshark; UDP tab during a call or a game; TLS tab shows a fingerprint per app.
+2. HTTP/3: UDP tab → QUIC: Decrypt (beta), open https://cloudflare-quic.com twice in Safari: the requests show in View tagged `wirepane-vpn-h3`.
+3. IKEv2 (no app): iPhone page → Without an app (IKEv2, beta) → Create the profile → QR in Safari or AirDrop → install → Settings › VPN › Wirepane on; traffic in View with `wirepane-vpn` tags; if it fails, `WIREPANE_TUNNEL_LOG=info` lines (`no acceptable IKE/ESP proposal`, `wrong secret`, `unknown identity`, `stayed on UDP 500`).
+4. Packaged app (when asked for a test pkg): the macOS Local Network prompt, and the admin token path.
+
+### Left (not done)
+
+- IKEv2: no IKE SA rekey (iOS reconnects about daily), PSK only (no EAP/certificates), no IKE fragmentation, MOBIKE or IPv6, no HTTP/3 decrypt for IKEv2 phones; real-device proposals unverified.
+- Mockttp's TLS-failure events carry no SOCKS tags (the UI matches tls-hello events instead); failed TLS panes say "this machine" for VPN phones.
+- Delay queue has no per-phone share; dropped-packet count isn't in `stats`; a SIGKILL loses up to 1 s of a capture.
+- Devices panel: the Network link only goes to the second line when the panel is wide enough.
+- Windows and Linux sidecar builds never ran in CI.
 
 ## State
 
-- Branch `feature/rebrand` = `main` = `origin/main` (`57ce4b2e1`). The tree is clean. **No GitHub release exists**; the owner decides when (v1.0.0, macOS arm64 `.pkg` only; Windows and Linux "coming soon").
+- `main` holds everything (2026-10-13), not pushed: `origin/main` is behind. **No GitHub release exists**; the owner decides when (v1.0.0, macOS arm64 `.pkg` only; Windows and Linux "coming soon").
 - Nothing is running. Start the dev instance for checks with `./start.sh --no-window` (UI http://localhost:45458, API :45457, Mockttp admin :45456), in the background.
 - Test pkg with VPN mode for the owner: `~/Downloads/Wirepane-1.0.0-vpn-test-mac-arm64.pkg` (built 2026-10-12 from `57ce4b2e1`'s code).
 - The sidecar's dev build lives in `wirepane-tunnel/target/release/wirepane-tunnel` (gitignored; `cd wirepane-tunnel && cargo build --release --locked`). The dev server's `wireguard-vpn` interceptor finds it there.

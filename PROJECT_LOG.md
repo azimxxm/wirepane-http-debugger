@@ -9,6 +9,14 @@
 - **Decision:** TypeScript + Rust; Rust only for network work below HTTP (CLAUDE.md). A Rust rewrite of Mockttp/server (~35k lines) was rejected.
 - **Next:** the nine tools on VPN mode, plan with models and time limits in `docs/plans/2026-10-13-rust-network-tools.md`, building on `feature/rust-network-tools`.
 
+### Nine network tools on VPN mode (merged into main, not pushed)
+
+- **Built** (W1, 10 agents: Opus 5.5 for the foundation, IKEv2 and HTTP/3, Sonnet 5.5 for the rest): DNS view, DNS rules, UDP view + QUIC switch, JA4, Network Conditions, pcap capture, HTTP/3 decryption, Android VPN, IKEv2 without an app; the `/network` page.
+- **Quality** (W2: review on Opus 4.8, security on Opus 5.5, QA and end to end on Sonnet 5.5): 1 P0 (pre-existing: the Mockttp admin API had no token and the proxy forwards absolute-form requests to loopback), 9 P1, ~20 P2.
+- **Fixed** (W3, 5 agents, plus the lead): the P0 (admin token in packaged builds, built-in rules closing proxied requests to the app's own ports), DNS rules on every port-53 flow, captures (flush on stop, 2 GiB cap, numbered files, device names), delay queue byte budget, QUIC mode switch ends old flows, HTTP/3 origin-form only, iPhone vs Android peers, JA4 on failed TLS rows, labels, Show in Finder, server validates settings before saving, CA key only for decrypt, stats every 2 s.
+- **Checks:** sidecar 221 tests, server 193, UI 2155, desktop build + 7 tests, end to end through the dev server.
+- **Next:** the owner's iPhone checks (`docs/next-steps.md`), then push when asked.
+
 ## 2026-10-12
 
 ### iPhone test fixes and VPN mode phase 1 (WireGuard)
