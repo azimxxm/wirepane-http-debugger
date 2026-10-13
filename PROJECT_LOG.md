@@ -1,5 +1,14 @@
 # Project log
 
+## 2026-10-13
+
+### VPN mode polish, and the plan for nine network tools
+
+- **Merged into main (local, not pushed):** VPN peer names and a VPN marker on devices; `./setup.sh` builds the helper (start.sh warns when it's missing); a test for stopping VPN mode; the helper's WireGuard timers, handshake limiter, ICMP for blocked QUIC, `stats`/`udp-update`, DNS-over-TCP test and throughput test; View column headers polish (arrow and chevron, multi-pick, `status=4xx`/`type=` in the filter box); body viewer Hex cut for big bodies, legacy charsets, WebSocket/Send checks; iPhone page remembers its mode, lists VPN devices with Remove, Settings › Proxy shows the passthrough hosts; README/release notes/publish checklist for VPN mode.
+- **Checks:** UI 1738 tests and tsc clean; server 46 VPN tests; sidecar 24 tests and release build; end to end with a test WireGuard client (DNS + HTTP 200 with tags).
+- **Decision:** TypeScript + Rust; Rust only for network work below HTTP (CLAUDE.md). A Rust rewrite of Mockttp/server (~35k lines) was rejected.
+- **Next:** the nine tools on VPN mode, plan with models and time limits in `docs/plans/2026-10-13-rust-network-tools.md`, building on `feature/rust-network-tools`.
+
 ## 2026-10-12
 
 ### iPhone test fixes and VPN mode phase 1 (WireGuard)

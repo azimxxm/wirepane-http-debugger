@@ -4,6 +4,11 @@ Last updated 2026-10-13 (afternoon). A new session (or one after /clear or /comp
 
 **Qisqacha (o'zbekcha):** iPhone sinovidagi UI xatolari tuzatildi, VPN rejimining 1-bosqichi (WireGuard) qurildi va `main`ga push qilindi. Egasining iPhone'i Wirepane'ning o'z VPN'iga ulandi. Endi egasidan ilovalar bo'yicha natija va packaged app sinovi kutilyapti, kod tomonda esa quyidagi ro'yxat qoldi. Release faqat egasi aytganda.
 
+## In progress (2026-10-13)
+
+- Branch `feature/rust-network-tools` (from `main` `953a27f9b`, which is 7 commits ahead of `origin/main`, not pushed). Contract stubs committed (`bdd065acb`, `a4ea002b3`).
+- **W1 Build** workflow `wf_c988b09c-a7c` started 11:35: T0 foundation + T1–T9 per `docs/plans/2026-10-13-rust-network-tools.md`; Sonnet agents due 12:10–12:20, T1 (IKEv2) and T7 (HTTP/3) by 13:05. If the session restarts: read its `journal.jsonl` (transcript dir `subagents/workflows/wf_c988b09c-a7c`), then run W2 Quality (code review on Opus 4.8, security on Opus 5.5, headless QA + end to end on Sonnet 5.5), W3 Fix, commit per tool, merge into main.
+
 ## State
 
 - Branch `feature/rebrand` = `main` = `origin/main` (`57ce4b2e1`). The tree is clean. **No GitHub release exists**; the owner decides when (v1.0.0, macOS arm64 `.pkg` only; Windows and Linux "coming soon").
