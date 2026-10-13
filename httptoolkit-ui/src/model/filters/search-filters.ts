@@ -9,6 +9,7 @@ import { getReadableSize } from '../../util/buffer';
 import { EventCategories } from '../events/categorization';
 import { WebSocketStream } from '../websockets/websocket-stream';
 import { buildDeviceFilterClasses } from '../devices/device-filters'; // wirepane: the Devices panel's filters
+import { addStatusClasses, buildColumnFilterClasses } from './column-filter-classes'; // wirepane: status=4xx & type=
 
 import {
     matchSyntax,
@@ -1394,12 +1395,15 @@ class ContainsFilter extends Filter {
     }
 }
 
+// wirepane: the column header menus' filters, which the filter box suggests too
+const [StatusClassFilter, TypeFilter] = buildColumnFilterClasses(Filter);
+
 const BaseSearchFilterClasses: FilterClass[] = [
     MethodFilter,
     HostnameFilter,
     PathFilter,
     QueryFilter,
-    StatusFilter,
+    addStatusClasses(StatusFilter, StatusClassFilter), // wirepane: status=404 & status=4xx
     HeadersFilter,
     HeaderFilter,
     BodyFilter,
@@ -1411,6 +1415,7 @@ const BaseSearchFilterClasses: FilterClass[] = [
     ErrorFilter,
     PinnedFilter,
     CategoryFilter,
+    TypeFilter, // wirepane: type=image, as the Type column shows it
     PortFilter,
     ProtocolFilter,
     HttpVersionFilter,

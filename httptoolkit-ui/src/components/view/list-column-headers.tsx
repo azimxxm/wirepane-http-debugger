@@ -22,11 +22,14 @@ import {
     ColumnFilterOption,
     FILTER_COLUMN_LABELS,
     FilterColumn,
+    createColumnFilter,
     getColumnFilterOptions,
     getColumnFilters,
+    getColumnFilterValues,
     getEventsForColumnMenu,
     getHostContainsFilterString,
-    toggleColumnFilter
+    toggleColumnFilter,
+    toggleColumnFilterValue
 } from '../../model/filters/column-filters';
 
 import { UnstyledButton } from '../common/inputs';
@@ -37,21 +40,38 @@ import { SORT_COLUMN_LABELS } from './list-sort';
  * Wirepane: the list's column headers. Clicking a header sorts by it (ascending,
  * descending, then back to the time order). Method, Status, Type, Source & Host also have
  * a filter menu, from the small button on the header or a right-click on it. A pick there
- * is a normal filter, so it shows as a chip in the filter bar.
+ * is a normal filter, so it shows as a chip in the filter bar. Shift or Cmd/Ctrl while
+ * picking adds more values to the column, as one or() chip.
  */
 
 const MENU_WIDTH = 260;
 const VIEWPORT_MARGIN = 8;
 
+// The room at the end of a filterable header for its filter button, kept free all the time
+// (not only on hover). So the sort arrow never sits under the button, and nothing jumps
+// when the pointer arrives. The narrowest headers (Method, Status & Source, 62-71px) have
+// about 21px left after the label, which is what the arrow and this slot have to share.
+const FILTER_SLOT_WIDTH = 10;
+const SORT_ARROW_SIZE = 9;
+
 const HeaderContent = styled.span`
     display: inline-flex;
     align-items: center;
+    box-sizing: border-box;
     max-width: 100%;
-    gap: 3px;
+    min-width: 0;
+    gap: 1px;
     vertical-align: middle;
+
+    &[data-filterable='true'] {
+        padding-right: ${FILTER_SLOT_WIDTH}px;
+    }
 `;
 
+// The label is the one that gives way (with an ellipsis) when a header is too narrow
 const HeaderLabel = styled.span`
+    flex: 0 1 auto;
+    min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
 `;
@@ -62,24 +82,24 @@ const SortArrow = styled.span`
     color: ${p => p.theme.popColor};
 `;
 
-// Sits over the end of the header cell. Only shown while the header is hovered or has
-// focus, or the column is filtered or its menu is open, so it doesn't crowd the labels.
+// Sits in the slot at the end of the header cell. Only shown while the header is hovered or
+// has focus, or the column is filtered or its menu is open, so it doesn't crowd the labels.
 const FilterButton = styled(UnstyledButton)`
     position: absolute;
     right: 0;
     top: 50%;
     transform: translateY(-50%);
 
-    width: 15px;
+    width: ${FILTER_SLOT_WIDTH}px;
     height: 22px;
     padding: 0;
-    border-radius: 4px;
+    border-radius: 3px;
 
     display: inline-flex;
     align-items: center;
     justify-content: center;
 
-    background-color: ${p => p.theme.mainLowlightBackground};
+    background-color: transparent;
     color: ${p => p.theme.mainLowlightColor};
 
     opacity: 0;
@@ -173,10 +193,13 @@ export const ColumnHeader = inject('listColumnsStore', 'uiStore')(observer((p: C
             openMenu(event.clientX, event.clientY);
         })}
     >
-        <HeaderContent>
+        <HeaderContent data-filterable={!!filterColumn}>
             <HeaderLabel>{ label }</HeaderLabel>
             { sort && <SortArrow aria-hidden={true}>
-                { sort === 'asc' ? <ArrowUp size={11} weight='bold' /> : <ArrowDown size={11} weight='bold' /> }
+                { sort === 'asc'
+                    ? <ArrowUp size={SORT_ARROW_SIZE} weight='bold' />
+                    : <ArrowDown size={SORT_ARROW_SIZE} weight='bold' />
+                }
             </SortArrow> }
         </HeaderContent>
         { filterColumn && <FilterButton
@@ -200,8 +223,8 @@ export const ColumnHeader = inject('listColumnsStore', 'uiStore')(observer((p: C
             onKeyDown={(event: React.KeyboardEvent) => event.stopPropagation()}
         >
             { activeFilter
-                ? <FunnelSimple size={13} weight='fill' aria-hidden={true} />
-                : <CaretDown size={12} weight='bold' aria-hidden={true} />
+                ? <FunnelSimple size={11} weight='fill' aria-hidden={true} />
+                : <CaretDown size={10} weight='bold' aria-hidden={true} />
             }
         </FilterButton> }
     </Cell>;
@@ -219,7 +242,7 @@ const MenuPanel = styled.div`
     padding: 6px;
 
     background-color: ${p => p.theme.highlightBackground};
-    color: ${p => p.theme.mainColor};
+    color: ${p => p.theme.highlightColor};
     border: 1px solid ${p => p.theme.containerBorder};
     border-radius: 8px;
     box-shadow: ${p => p.theme.floatingShadow};
@@ -230,17 +253,19 @@ const MenuPanel = styled.div`
     text-align: left;
 `;
 
+// Quieter text on the panel is the panel's own colour made fainter. mainLowlightColor is
+// white in the high contrast theme, which would vanish on its white panel.
 const MenuHeading = styled.h2`
     padding: 4px 8px 6px;
     font-size: ${p => p.theme.smallPrintSize};
     font-weight: 600;
-    color: ${p => p.theme.mainLowlightColor};
+    opacity: ${p => p.theme.lowlightTextOpacity};
 `;
 
 const MenuNote = styled.p`
     padding: 4px 8px 6px;
     font-size: ${p => p.theme.smallPrintSize};
-    color: ${p => p.theme.mainLowlightColor};
+    opacity: ${p => p.theme.lowlightTextOpacity};
 `;
 
 const MenuItem = styled(UnstyledButton)`
@@ -256,7 +281,7 @@ const MenuItem = styled(UnstyledButton)`
     text-align: left;
 
     &:hover {
-        background-color: ${p => p.theme.rowHover};
+        background-color: color-mix(in srgb, currentColor 10%, transparent);
     }
 
     &[aria-checked='true'] {
@@ -283,7 +308,7 @@ const ItemLabel = styled.span`
 const ItemCount = styled.span`
     font-size: ${p => p.theme.smallPrintSize};
     font-variant-numeric: tabular-nums;
-    color: ${p => p.theme.mainLowlightColor};
+    opacity: ${p => p.theme.lowlightTextOpacity};
 `;
 
 const MenuDivider = styled.hr`
@@ -349,7 +374,8 @@ const FilterMenu = inject('listColumnsStore', 'uiStore', 'devicesStore')(observe
 
     const filterSet = uiStore.activeFilterSet;
     const activeFilter = getColumnFilters(filterSet, column)[0];
-    const activeText = activeFilter?.serialize();
+    // One value for a plain pick, more for an or() of several (picked with Shift or Cmd)
+    const pickedValues = getColumnFilterValues(filterSet, column);
 
     // Counts are for what each pick would show, with the other filters kept
     const eventCount = events.length;
@@ -358,9 +384,14 @@ const FilterMenu = inject('listColumnsStore', 'uiStore', 'devicesStore')(observe
         const found = getColumnFilterOptions(column, counted);
 
         // A picked value with no events left (or typed in the filter box) stays listed
-        return activeFilter && !found.some((option) => option.filterString === activeText)
-            ? [{ filterString: activeText!, label: activeFilter.toString(), count: 0 }, ...found]
-            : found;
+        const missing = pickedValues
+            .filter((value) => !found.some((option) => option.filterString === value))
+            .map((value): ColumnFilterOption => ({
+                filterString: value,
+                label: createColumnFilter(value)?.toString() ?? value,
+                count: 0
+            }));
+        return [...missing, ...found];
     }, [eventCount, filterSet, column]);
 
     // Placed once it has rendered, when its real height is known
@@ -397,6 +428,13 @@ const FilterMenu = inject('listColumnsStore', 'uiStore', 'devicesStore')(observe
         });
         store.closeFilterMenu();
         focusHeader(column);
+    };
+
+    // Shift or Cmd/Ctrl adds the value to the picks (or takes it out), and the menu stays open
+    const toggleValue = (filterString: string) => {
+        runInAction(() => {
+            uiStore.activeFilterSet = toggleColumnFilterValue(uiStore.activeFilterSet, column, filterString);
+        });
     };
 
     const applyContains = () => {
@@ -471,20 +509,25 @@ const FilterMenu = inject('listColumnsStore', 'uiStore', 'devicesStore')(observe
         { options.length === 0 && <MenuNote>No { label.toLowerCase() } values in the requests yet.</MenuNote> }
 
         { options.map((option) => {
-            const isPicked = option.filterString === activeText;
+            const isPicked = pickedValues.includes(option.filterString);
             return <MenuItem
                 key={option.filterString}
                 role='menuitemradio'
                 aria-checked={isPicked}
                 data-menu-item
                 title={option.description}
-                onClick={() => applyFilter(option.filterString)}
+                onClick={(event: React.MouseEvent) => event.shiftKey || event.metaKey || event.ctrlKey
+                    ? toggleValue(option.filterString)
+                    : applyFilter(option.filterString)
+                }
             >
                 <ItemCheck>{ isPicked && <Check size={13} weight='bold' aria-hidden={true} /> }</ItemCheck>
                 <ItemLabel>{ option.label }</ItemLabel>
                 <ItemCount aria-label={`${option.count} requests`}>{ option.count }</ItemCount>
             </MenuItem>;
         }) }
+
+        { options.length > 1 && <MenuNote>Shift-click to pick more than one.</MenuNote> }
 
         { column === 'host' && <>
             <MenuDivider />

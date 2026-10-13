@@ -6,11 +6,9 @@ import {
     getRequestType
 } from '../events/request-type';
 
-import { buildColumnFilterClasses } from './column-filter-classes';
 import { matchFilters } from './filter-matching';
 import {
     Filter,
-    FilterClass,
     FilterSet,
     SelectableSearchFilterClasses,
     StringFilter
@@ -22,7 +20,8 @@ import {
  * so it shows as a chip in the filter bar and can be removed there.
  *
  * Each column holds one filter at a time: picking another value replaces it, picking the
- * same value again (or Clear) removes it.
+ * same value again (or Clear) removes it. Shift or Cmd/Ctrl adds a value to the picks
+ * instead, and several values are one or() filter (or(method=GET,method=POST)).
  */
 
 export const FILTER_COLUMNS = ['method', 'status', 'type', 'source', 'host'] as const;
@@ -68,35 +67,45 @@ const STATUS_OPTIONS: ReadonlyArray<{ filterString: string, label: string, descr
     { filterString: 'pending', label: 'Pending', description: 'Still waiting for the response' }
 ];
 
-// status=4xx & type=image. They're only for the menus, so the filter box doesn't list them
-// next to status= and the rest.
-const MENU_FILTER_CLASSES: FilterClass[] = [
-    ...SelectableSearchFilterClasses,
-    ...buildColumnFilterClasses(Filter)
-];
-
 /**
  * Turns the text of a filter into the filter, or undefined if it isn't exactly one filter.
  */
 export function createColumnFilter(filterString: string): Filter | undefined {
-    const [leftover, ...filters] = matchFilters(MENU_FILTER_CLASSES, filterString);
+    const [leftover, ...filters] = matchFilters(SelectableSearchFilterClasses, filterString);
     if (leftover.filter !== '' || filters.length !== 1) return undefined;
     return filters[0];
 }
 
+function getTextColumn(text: string): FilterColumn | undefined {
+    // Typed text can be in any case: the filter syntax doesn't mind
+    if (/^method(=|!=)/i.test(text)) return 'method';
+    if (/^status/i.test(text) || /^(pending|aborted)$/i.test(text)) return 'status';
+    if (/^type(=|!=)/i.test(text)) return 'type';
+    if (/^app(=|!=|\*=|\^=|\$=)/i.test(text)) return 'source';
+    if (/^hostname(=|!=|\*=|\^=|\$=)/i.test(text)) return 'host';
+    return undefined;
+}
+
+// Several values of one column are one or() filter, like or(method=GET,method=POST)
+const OR_PATTERN = /^or\((.*)\)$/i;
+
+function getOrParts(text: string): string[] | undefined {
+    const inner = OR_PATTERN.exec(text.trim())?.[1];
+    return inner === undefined ? undefined : inner.split(',').map((part) => part.trim());
+}
+
 /**
  * Which column a filter belongs to, so a header can show it and its menu can replace it.
- * This includes filters typed in the filter box, like status>=500.
+ * This includes filters typed in the filter box, like status>=500, and an or() of values
+ * that are all in the same column.
  */
 export function getFilterColumn(filter: Filter): FilterColumn | undefined {
     const text = filter.serialize();
+    const orParts = getOrParts(text);
+    if (!orParts) return getTextColumn(text);
 
-    if (/^method(=|!=)/.test(text)) return 'method';
-    if (/^status/.test(text) || text === 'pending' || text === 'aborted') return 'status';
-    if (/^type(=|!=)/.test(text)) return 'type';
-    if (/^app(=|!=|\*=|\^=|\$=)/.test(text)) return 'source';
-    if (/^hostname(=|!=|\*=|\^=|\$=)/.test(text)) return 'host';
-    return undefined;
+    const columns = new Set(orParts.map(getTextColumn));
+    return columns.size === 1 ? Array.from(columns)[0] : undefined;
 }
 
 export function getColumnFilters(filterSet: FilterSet, column: FilterColumn): Filter[] {
@@ -125,6 +134,50 @@ export function toggleColumnFilter(
     if (!newFilter) return filterSet;
 
     return [textFilter, newFilter, ...otherFilters];
+}
+
+/**
+ * The values picked in a column, as the text of each one: a single filter is one value,
+ * and an or() filter holds several.
+ */
+export function getColumnFilterValues(filterSet: FilterSet, column: FilterColumn): string[] {
+    return getColumnFilters(filterSet, column).reduce<string[]>((values, filter) => {
+        const text = filter.serialize();
+        return values.concat(getOrParts(text) ?? [text]);
+    }, []);
+}
+
+// Values that are safe inside an or(): no brackets, parentheses, commas or spaces, which
+// the or() syntax splits and ends on
+const COMBINABLE_VALUE_PATTERN = /^[\w.!=*^$<>+@:-]+$/;
+
+/**
+ * The filter set after adding a value to what the column already has, or taking it out
+ * if it's there. Several values become one or() filter, which keeps a request that
+ * matches any of them. A value that can't go inside an or() replaces the picks instead.
+ */
+export function toggleColumnFilterValue(
+    filterSet: FilterSet,
+    column: FilterColumn,
+    filterString: string
+): FilterSet {
+    const values = getColumnFilterValues(filterSet, column);
+    const newValues = values.includes(filterString)
+        ? values.filter((value) => value !== filterString)
+        : [...values, filterString];
+
+    const [textFilter, ...filters] = filterSet;
+    const otherFilters = filters.filter((filter) => getFilterColumn(filter) !== column);
+    if (newValues.length === 0) return [textFilter, ...otherFilters];
+
+    const canCombine = newValues.every((value) => COMBINABLE_VALUE_PATTERN.test(value));
+    const newFilter = newValues.length === 1
+        ? createColumnFilter(newValues[0])
+        : canCombine ? createColumnFilter(`or(${newValues.join(',')})`) : undefined;
+
+    return newFilter
+        ? [textFilter, newFilter, ...otherFilters]
+        : toggleColumnFilter(filterSet, column, filterString);
 }
 
 export function removeAllColumnFilters(filterSet: FilterSet): FilterSet {

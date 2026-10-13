@@ -77,6 +77,8 @@ describe("Search filter model integration test:", () => {
                 { index: 0, showAs: "errored" },
                 { index: 0, showAs: "pinned" },
                 { index: 0, showAs: "category" },
+                // wirepane: the Type column's filter
+                { index: 0, showAs: "type" },
                 { index: 0, showAs: "port" },
                 { index: 0, showAs: "protocol" },
                 { index: 0, showAs: "httpVersion" },
@@ -112,6 +114,8 @@ describe("Search filter model integration test:", () => {
                 "requests that weren't transmitted successfully",
                 "exchanges that are pinned",
                 "exchanges by their general category",
+                // wirepane: the Type column's filter
+                "requests of a given type, like image or fetch/XHR",
                 "requests sent to a given port",
                 "traffic using a specific protocol like HTTPS, or WebSockets",
                 "exchanges using a given version of HTTP",
@@ -292,6 +296,213 @@ describe("Search filter model integration test:", () => {
             expect(filter.filterDescription).to.equal(
                 "responses with status 201 (Created)"
             );
+        });
+
+        // wirepane: status=4xx, the Status column menu's classes, in the filter box too
+        describe("status classes", () => {
+            it("should list status once, not once for the numbers and once for the classes", () => {
+                for (const input of ["", "s", "sta", "status", "or(", "or(sta", "not(sta"]) {
+                    const names = getFilterSuggestions(FilterClasses, input).map(s => s.showAs);
+
+                    expect(names.filter(name => name.startsWith("status")).length, input)
+                        .to.be.at.most(6);
+                    expect(_.uniq(names).length, input).to.equal(names.length);
+                }
+            });
+
+            const CLASS_SUGGESTIONS = (operator: string) => [
+                { index: 6, showAs: `${operator}{3-digit number}` },
+                ...['1xx', '2xx', '3xx', '4xx', '5xx'].map((statusClass) =>
+                    ({ index: 6, showAs: `${operator}${statusClass}` })
+                )
+            ];
+
+            it("should suggest the classes next to the number after = and !=", () => {
+                for (const operator of ['=', '!=']) {
+                    const suggestions = getFilterSuggestions(FilterClasses, `status${operator}`);
+
+                    expect(suggestions.map(s => _.pick(s, 'showAs', 'index')))
+                        .to.deep.equal(CLASS_SUGGESTIONS(operator));
+                }
+            });
+
+            it("should not suggest classes after the other operators", () => {
+                for (const operator of ['>=', '>', '<=', '<']) {
+                    const suggestions = getFilterSuggestions(FilterClasses, `status${operator}`);
+
+                    expect(suggestions.map(s => _.pick(s, 'showAs', 'index'))).to.deep.equal([
+                        { index: 6, showAs: `${operator}{3-digit number}` }
+                    ]);
+                }
+            });
+
+            it("should suggest the class and the number together as a digit is typed", () => {
+                const suggestions = getFilterSuggestions(FilterClasses, "status=4");
+
+                expect(suggestions.map(s => _.pick(s, 'showAs', 'index'))).to.deep.equal([
+                    { index: 7, showAs: "400" },
+                    { index: 7, showAs: "4xx" }
+                ]);
+            });
+
+            it("should suggest only the class once the x is typed", () => {
+                const suggestions = getFilterSuggestions(FilterClasses, "status=4x");
+
+                expect(suggestions.map(s => _.pick(s, 'showAs', 'index'))).to.deep.equal([
+                    { index: 7, showAs: "4xx" }
+                ]);
+            });
+
+            it("should list seen status numbers before the classes", () => {
+                const suggestions = getFilterSuggestions(FilterClasses, "status=", [
+                    getExchangeData({ statusCode: 200 }),
+                    getExchangeData({ statusCode: 404 }),
+                ]);
+
+                expect(suggestions.map(s => s.showAs)).to.deep.equal([
+                    "={3-digit number}", "=200", "=404", "=1xx", "=2xx", "=3xx", "=4xx", "=5xx"
+                ]);
+            });
+
+            it("should complete a fully entered class", () => {
+                let filters: FilterSet = [new StringFilter("status=4xx")];
+
+                const suggestions = getFilterSuggestions(FilterClasses, filters[0].filter);
+                expect(suggestions.length).to.equal(1);
+                filters = applySuggestionToFilters(filters, suggestions[0]);
+
+                expect(filters.length).to.equal(2);
+                expect(filters[0].filter).to.equal("");
+                expect(filters[1].toString()).to.equal("Status = 4xx");
+            });
+
+            it("should correctly filter for a class of statuses", () => {
+                const classFilter = createFilter("status=4xx");
+
+                const exampleEvents = [
+                    getExchangeData({ statusCode: 404 }),
+                    getExchangeData({ statusCode: 499 }),
+                    getExchangeData({ statusCode: 200 }),
+                    getExchangeData({ statusCode: 500 }),
+                    getExchangeData({ responseState: 'aborted' }),
+                    getExchangeData({ responseState: 'pending' }),
+                    getFailedTls()
+                ];
+
+                const matchedEvents = exampleEvents.filter(e => classFilter.matches(e));
+                expect(matchedEvents.map(e => (e as SuccessfulExchange).response.statusCode))
+                    .to.deep.equal([404, 499]);
+            });
+
+            it("should correctly exclude a class of statuses", () => {
+                const classFilter = createFilter("status!=2xx");
+
+                expect(classFilter.matches(getExchangeData({ statusCode: 204 }))).to.equal(false);
+                expect(classFilter.matches(getExchangeData({ statusCode: 301 }))).to.equal(true);
+            });
+
+            it("should take the class in any case", () => {
+                const classFilter = createFilter("STATUS=4XX");
+
+                expect(classFilter.matches(getExchangeData({ statusCode: 404 }))).to.equal(true);
+                expect(classFilter.matches(getExchangeData({ statusCode: 200 }))).to.equal(false);
+            });
+
+            it("should show a description for a partial class", () => {
+                const description = getSuggestionDescriptions("status=4x")[0];
+
+                expect(description).to.equal("responses with a status in a given class, like 4xx");
+            });
+
+            it("should show a full description for a class", () => {
+                expect(getSuggestionDescriptions("status=4xx")[0]).to.equal("client error (4xx) responses");
+                expect(createFilter("status!=2xx").filterDescription)
+                    .to.equal("responses that are not successful (2xx)");
+            });
+
+            it("should work inside or and not", () => {
+                const orFilter = createFilter("or(status=4xx,status=5xx)");
+                const notFilter = createFilter("not(status=4xx)");
+
+                const [notFound, serverError, ok] = [404, 503, 200].map((statusCode) =>
+                    getExchangeData({ statusCode })
+                );
+                expect([notFound, serverError, ok].map(e => orFilter.matches(e)))
+                    .to.deep.equal([true, true, false]);
+                expect([notFound, serverError, ok].map(e => notFilter.matches(e)))
+                    .to.deep.equal([false, true, true]);
+            });
+        });
+    });
+
+    // wirepane: type=image, the Type column menu's filter, in the filter box too
+    describe("Type filters", () => {
+        it("should suggest the operators once it's clear you want type", () => {
+            const suggestions = getFilterSuggestions(FilterClasses, "ty");
+
+            expect(suggestions.map(s => _.pick(s, 'showAs', 'index'))).to.deep.equal([
+                { index: 0, showAs: "type=" },
+                { index: 0, showAs: "type!=" }
+            ]);
+        });
+
+        it("should suggest every type once you pick an operator", () => {
+            const suggestions = getFilterSuggestions(FilterClasses, "type=");
+
+            expect(suggestions.map(s => _.pick(s, 'showAs', 'index'))).to.deep.equal([
+                'document', 'fetch', 'script', 'stylesheet', 'image', 'font', 'media',
+                'websocket', 'webrtc', 'other'
+            ].map((type) => ({ index: 4, showAs: `=${type}` })));
+        });
+
+        it("should narrow the types as they're entered", () => {
+            const suggestions = getFilterSuggestions(FilterClasses, "type=im");
+
+            expect(suggestions.map(s => _.pick(s, 'showAs', 'index'))).to.deep.equal([
+                { index: 5, showAs: "image" }
+            ]);
+        });
+
+        it("should correctly filter for a type", () => {
+            const typeFilter = createFilter("type=image");
+
+            const exampleEvents = [
+                getExchangeData({ responseHeaders: { 'content-type': 'image/png' } }),
+                getExchangeData({ responseHeaders: { 'content-type': 'application/json' } }),
+                getExchangeData({ responseHeaders: { 'content-type': 'image/svg+xml' } }),
+                getExchangeData({ responseState: 'pending' })
+            ];
+
+            expect(exampleEvents.map(e => typeFilter.matches(e)))
+                .to.deep.equal([true, false, true, false]);
+        });
+
+        it("should correctly exclude a type", () => {
+            const typeFilter = createFilter("type!=image");
+
+            expect(typeFilter.matches(getExchangeData({ responseHeaders: { 'content-type': 'image/png' } })))
+                .to.equal(false);
+            expect(typeFilter.matches(getExchangeData({ responseHeaders: { 'content-type': 'text/css' } })))
+                .to.equal(true);
+        });
+
+        it("should take the type in any case", () => {
+            const typeFilter = createFilter("TYPE=Image");
+
+            expect(typeFilter.matches(getExchangeData({ responseHeaders: { 'content-type': 'image/png' } })))
+                .to.equal(true);
+            expect(typeFilter.toString()).to.equal("Type = Image");
+        });
+
+        it("should show descriptions as it's entered", () => {
+            expect(getSuggestionDescriptions("type")[0])
+                .to.equal("requests of a given type, like image or fetch/XHR");
+            expect(getSuggestionDescriptions("type=im")[0])
+                .to.equal("requests of a given type, like image or fetch/XHR");
+            expect(getSuggestionDescriptions("type=image")[0])
+                .to.equal("Image requests, as the Type column shows them");
+            expect(createFilter("type!=font").filterDescription)
+                .to.equal("all requests except Font");
         });
     });
 
@@ -1336,6 +1547,8 @@ describe("Search filter model integration test:", () => {
                 { index: 3, showAs: "errored" },
                 { index: 3, showAs: "pinned" },
                 { index: 3, showAs: "category" },
+                // wirepane: the Type column's filter
+                { index: 3, showAs: "type" },
                 { index: 3, showAs: "port" },
                 { index: 3, showAs: "protocol" },
                 { index: 3, showAs: "httpVersion" },
@@ -1395,6 +1608,8 @@ describe("Search filter model integration test:", () => {
                 { index: 14, showAs: "errored)" },
                 { index: 14, showAs: "pinned)" },
                 { index: 14, showAs: "category" },
+                // wirepane: the Type column's filter
+                { index: 14, showAs: "type" },
                 { index: 14, showAs: "port" },
                 { index: 14, showAs: "protocol" },
                 { index: 14, showAs: "httpVersion" },
@@ -1530,6 +1745,8 @@ describe("Search filter model integration test:", () => {
                 { index: 4, showAs: "errored)" },
                 { index: 4, showAs: "pinned)" },
                 { index: 4, showAs: "category" },
+                // wirepane: the Type column's filter
+                { index: 4, showAs: "type" },
                 { index: 4, showAs: "port" },
                 { index: 4, showAs: "protocol" },
                 { index: 4, showAs: "httpVersion" },

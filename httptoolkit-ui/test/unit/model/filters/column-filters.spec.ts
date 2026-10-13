@@ -7,10 +7,12 @@ import {
     createColumnFilter,
     getAppFilterString,
     getColumnFilterOptions,
+    getColumnFilterValues,
     getEventsForColumnMenu,
     getFilterColumn,
     getHostContainsFilterString,
-    toggleColumnFilter
+    toggleColumnFilter,
+    toggleColumnFilterValue
 } from '../../../../src/model/filters/column-filters';
 import { SelectableSearchFilterClasses } from '../../../../src/model/filters/search-filters';
 
@@ -195,6 +197,117 @@ describe('Column filters', () => {
             const forHost = getEventsForColumnMenu(events, filterSet, 'host');
             expect(getColumnFilterOptions('host', forHost).map((o) => `${o.label} ${o.count}`))
                 .to.deep.equal(['api.example.com 2']);
+        });
+    });
+
+    describe('picking several values in a column', () => {
+
+        const pickMethod = (filterSet: FilterSet, method: string) =>
+            toggleColumnFilterValue(filterSet, 'method', `method=${method}`);
+
+        it('keeps a single value as a plain filter', () => {
+            const result = pickMethod(emptyFilterSet(), 'GET');
+            expect(serialized(result)).to.deep.equal(['method=GET']);
+        });
+
+        it('makes one or() filter of the values, in the order they were picked', () => {
+            const two = pickMethod(pickMethod(emptyFilterSet(), 'GET'), 'POST');
+            expect(serialized(two)).to.deep.equal(['or(method=GET,method=POST)']);
+            expect(two[1].toString()).to.equal('Method = GET or Method = POST');
+
+            const three = pickMethod(two, 'PUT');
+            expect(serialized(three)).to.deep.equal(['or(method=GET,method=POST,method=PUT)']);
+        });
+
+        it('keeps a request that matches any of the values', () => {
+            const filter = pickMethod(pickMethod(emptyFilterSet(), 'GET'), 'POST')[1];
+
+            expect(filter.matches(getExchangeData({ method: 'GET' }))).to.equal(true);
+            expect(filter.matches(getExchangeData({ method: 'POST' }))).to.equal(true);
+            expect(filter.matches(getExchangeData({ method: 'PUT' }))).to.equal(false);
+        });
+
+        it('takes a value out, and is a plain filter again with one left', () => {
+            const three = ['GET', 'POST', 'PUT'].reduce(pickMethod, emptyFilterSet());
+
+            const two = pickMethod(three, 'POST');
+            expect(serialized(two)).to.deep.equal(['or(method=GET,method=PUT)']);
+
+            const one = pickMethod(two, 'GET');
+            expect(serialized(one)).to.deep.equal(['method=PUT']);
+        });
+
+        it('removes the filter when the last value is taken out', () => {
+            const result = pickMethod(pickMethod(emptyFilterSet(), 'GET'), 'GET');
+            expect(serialized(result)).to.deep.equal([]);
+        });
+
+        it('keeps the other columns\' filters and the text', () => {
+            const start = matchFilters(SelectableSearchFilterClasses, 'hostname=odtv.uz');
+            const result = pickMethod(pickMethod(start, 'GET'), 'POST');
+
+            expect(serialized(result)).to.have.members(['or(method=GET,method=POST)', 'hostname=odtv.uz']);
+            expect(result[0].filter).to.equal('');
+        });
+
+        it('says an or() belongs to the column when all its values do', () => {
+            const columnOf = (text: string) => getFilterColumn(createColumnFilter(text)!);
+
+            expect(columnOf('or(method=GET,method=POST)')).to.equal('method');
+            expect(columnOf('or(status=4xx,status=5xx)')).to.equal('status');
+            expect(columnOf('or(status=4xx,pending)')).to.equal('status');
+            expect(columnOf('or(method=GET,status=4xx)')).to.equal(undefined);
+            expect(columnOf('or(path=/a,path=/b)')).to.equal(undefined);
+        });
+
+        it('lists the values picked, whichever way they were made', () => {
+            const typed = matchFilters(SelectableSearchFilterClasses, 'or(method=GET, method=POST)');
+            expect(getColumnFilterValues(typed, 'method')).to.deep.equal(['method=GET', 'method=POST']);
+            expect(getColumnFilterValues(typed, 'status')).to.deep.equal([]);
+
+            const single = matchFilters(SelectableSearchFilterClasses, 'status>=500');
+            expect(getColumnFilterValues(single, 'status')).to.deep.equal(['status>=500']);
+        });
+
+        it('adds to an or() typed in the filter box', () => {
+            const typed = matchFilters(SelectableSearchFilterClasses, 'or(method=GET,method=POST)');
+            const result = pickMethod(typed, 'PUT');
+            expect(serialized(result)).to.deep.equal(['or(method=GET,method=POST,method=PUT)']);
+        });
+
+        it('combines status classes, and a class with the pending requests', () => {
+            const classes = toggleColumnFilterValue(
+                toggleColumnFilterValue(emptyFilterSet(), 'status', 'status=4xx'),
+                'status',
+                'status=5xx'
+            );
+            expect(serialized(classes)).to.deep.equal(['or(status=4xx,status=5xx)']);
+            expect(classes[1].matches(getExchangeData({ statusCode: 404 }))).to.equal(true);
+            expect(classes[1].matches(getExchangeData({ statusCode: 503 }))).to.equal(true);
+            expect(classes[1].matches(getExchangeData({ statusCode: 200 }))).to.equal(false);
+
+            const withPending = toggleColumnFilterValue(classes, 'status', 'pending');
+            expect(serialized(withPending)).to.deep.equal(['or(status=4xx,status=5xx,pending)']);
+            expect(withPending[1].matches(getExchangeData({ responseState: 'pending' }))).to.equal(true);
+        });
+
+        it('replaces the picks with a value the or() syntax cannot hold', () => {
+            const start = toggleColumnFilterValue(emptyFilterSet(), 'source', 'app=Safari');
+            const result = toggleColumnFilterValue(start, 'source', 'app=[Road 24]');
+
+            expect(serialized(result)).to.deep.equal(['app=[Road 24]']);
+        });
+
+        it('lets a plain pick replace several values', () => {
+            const two = pickMethod(pickMethod(emptyFilterSet(), 'GET'), 'POST');
+            const result = toggleColumnFilter(two, 'method', 'method=PUT');
+
+            expect(serialized(result)).to.deep.equal(['method=PUT']);
+        });
+
+        it('lets Clear remove all the values', () => {
+            const two = pickMethod(pickMethod(emptyFilterSet(), 'GET'), 'POST');
+            expect(serialized(toggleColumnFilter(two, 'method', undefined))).to.deep.equal([]);
         });
     });
 
