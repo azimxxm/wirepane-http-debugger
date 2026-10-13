@@ -2,6 +2,12 @@
 
 ## 2026-10-13
 
+### Release v1.2.0 (macOS arm64 only)
+
+- **Version** 1.2.0 (`VERSION`, README, CLAUDE.md). **What's new:** per-device Clear and pinned devices in the Devices panel, Clear mentions pinned devices, macOS 13.5 minimum, small accessibility fixes.
+- **Checks:** pkg's Distribution `hostArchitectures="arm64"`, `os-version min="13.5"`, must-close; every Mach-O arm64 except upstream's x86_64 NSS tools (as in 1.1.0); ad-hoc signature valid; `wirepaneVersion` 1.2.0; the new menu items in the UI bundle; hidden run of the pkg's app: HTTP and HTTPS through the proxy in View, 6 s start, no startup timeout, clean quit.
+- **Released:** `Wirepane-1.2.0-mac-arm64.pkg` (SHA-256 `53c82350cf3c5bf3b80e865e54489186e55058e929b1f22d88f8ed0a30952c5f`) with `gh release create`; Intel users are pointed to v1.1.0.
+
 ### Per-device Clear and pinned devices (Devices panel)
 
 - **Built** (workflow: build, then QA, design and code review, then one fix round; the second QA round was skipped and the lead checked instead): Clear this device's traffic and Pin to top / Unpin in a device's right-click menu, pinned placeholders, saved pins, Clear's question mentions pinned devices.

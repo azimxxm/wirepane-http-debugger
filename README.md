@@ -8,14 +8,14 @@ Developerlar va QA uchun bepul, ochiq kodli HTTP(S) debugger. U brauzer, iPhone,
 
 ## O'rnatish
 
-Installer [GitHub Releases](https://github.com/azimxxm/wirepane-http-debugger/releases) sahifasida (birinchi release: [v1.1.0](https://github.com/azimxxm/wirepane-http-debugger/releases/tag/v1.1.0), 2026-10-13). Eng oxirgi versiyani oching va faylni yuklab oling:
+Installer [GitHub Releases](https://github.com/azimxxm/wirepane-http-debugger/releases) sahifasida (birinchi release: [v1.1.0](https://github.com/azimxxm/wirepane-http-debugger/releases/tag/v1.1.0), oxirgisi: [v1.2.0](https://github.com/azimxxm/wirepane-http-debugger/releases/tag/v1.2.0), ikkalasi 2026-10-13). Eng oxirgi versiyani oching va faylni yuklab oling:
 
-| Tizim                                                    | Fayl                               |
-| -------------------------------------------------------- | ---------------------------------- |
-| macOS 13.5 yoki yangiroq, Apple Silicon (M1 va yangiroq) | `Wirepane-<versiya>-mac-arm64.pkg` |
-| macOS 13.5 yoki yangiroq, Intel                          | `Wirepane-<versiya>-mac-x64.pkg`   |
-| Windows 10 va 11, x64                                    | tez orada                          |
-| Linux, x64                                               | tez orada                          |
+| Tizim                                                    | Fayl                                                                                                                                        |
+| -------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| macOS 13.5 yoki yangiroq, Apple Silicon (M1 va yangiroq) | `Wirepane-<versiya>-mac-arm64.pkg`                                                                                                          |
+| macOS 13.5 yoki yangiroq, Intel                          | `Wirepane-1.1.0-mac-x64.pkg` ([v1.1.0](https://github.com/azimxxm/wirepane-http-debugger/releases/tag/v1.1.0)da; 1.2.0'da Intel build yo'q) |
+| Windows 10 va 11, x64                                    | tez orada                                                                                                                                   |
+| Linux, x64                                               | tez orada                                                                                                                                   |
 
 Qaysi Mac ekanini Apple menyusi → **About This Mac** ko'rsatadi: "Chip: Apple M…" — Apple Silicon, "Processor: … Intel …" — Intel. Intel build Apple Silicon'da ham Rosetta orqali ishlaydi, lekin bir necha baravar sekin ochiladi, shuning uchun u yerda arm64 faylini oling.
 
@@ -168,6 +168,7 @@ O'zgartirgan kodingiz saqlanib qoladi. Conflict chiqsa, uni oddiy `git merge`dag
   3. UI app ichida va `wirepane://app` manzilidan ochiladi. Release server faqat shu origin'ga ruxsat beradi. Sozlamalar va Send tab'lari app qayta ochilganda ham saqlanadi.
   4. App ad-hoc imzolanadi, `.pkg` imzosiz, notarize yo'q. Build sertifikatsiz Mac'da ishlaydi.
   - [x] Birinchi release **v1.1.0** (2026-10-13): macOS arm64 `.pkg`, VPN rejimi va Phone network tool'lari bilan. O'sha kuni Intel Mac'lar uchun `x64` `.pkg` ham qo'shildi.
+  - [x] **v1.2.0** (2026-10-13): faqat macOS arm64 `.pkg`. Devices panelida bitta qurilmani tozalash va qurilmani tepaga pin qilish; endi macOS 13.5 yoki yangiroq kerak.
   - [ ] Windows (setup `.exe`, `.zip`) va Linux (`.AppImage`, `.deb`, `.rpm`): **tez orada**, egasi aytganda chiqariladi. Hammasi imzosiz; `./scripts/build-release.sh <mac|win|linux>` va GitHub Actions'dagi `release.yml` tayyor. Birinchi CI run'da mac build o'tdi, Windows va Linux build'lari tugashidan oldin to'xtatildi.
   - Akkaunt kelgach: Developer ID imzosi, hardened runtime va notarize. Ular `ENABLE_SIGNING=true` bilan yoqiladigan yo'lga qo'shiladi, imzosiz yo'l zaxira bo'lib qoladi.
 - [x] Barcha Pro feature'lar hamma uchun bepul. Akkaunt, login va to'lov yo'q. Map Local, Map Remote, mock, rewrite, delay, block, Settings (proxy, connection, API, themes), saqlanadigan rules, HAR import/export va MCP/CLI cheklovsiz ishlaydi.

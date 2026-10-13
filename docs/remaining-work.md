@@ -2,7 +2,7 @@
 
 > **Bu fayl keyingi sessiyalar uchun asosiy ish ro'yxati.** Qisqa holat va navbatdagi ishlar: [`docs/next-steps.md`](next-steps.md).
 >
-> **Holat:** `feature/rebrand` `main`ga merge qilingan va push qilingan (2026-10-12). Release **v1.1.0** chiqdi (2026-10-13, macOS arm64 `.pkg`; o'sha kuni Intel x64 `.pkg` ham qo'shildi). Windows va Linux egasi aytguncha "tez orada" bo'lib turadi.
+> **Holat:** `feature/rebrand` `main`ga merge qilingan va push qilingan (2026-10-12). Release **v1.1.0** chiqdi (2026-10-13, macOS arm64 `.pkg`; o'sha kuni Intel x64 `.pkg` ham qo'shildi). **v1.2.0** (2026-10-13): faqat arm64 `.pkg`. Windows va Linux egasi aytguncha "tez orada" bo'lib turadi.
 >
 > **Har bir ish uchun tartib:**
 >

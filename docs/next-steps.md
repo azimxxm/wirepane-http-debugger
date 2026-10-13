@@ -4,6 +4,11 @@ Last updated 2026-10-13 (evening). A new session (or one after /clear or /compac
 
 **Qisqacha (o'zbekcha):** iPhone sinovidagi UI xatolari tuzatildi, VPN rejimining 1-bosqichi (WireGuard) qurildi va `main`ga push qilindi. Egasining iPhone'i Wirepane'ning o'z VPN'iga ulandi. Endi egasidan ilovalar bo'yicha natija va packaged app sinovi kutilyapti, kod tomonda esa quyidagi ro'yxat qoldi. Release faqat egasi aytganda.
 
+## Done on 2026-10-13 (evening): release v1.2.0, macOS arm64 only
+
+- `VERSION` 1.2.0; `./scripts/build-mac-arm64.sh` → `Wirepane-1.2.0-mac-arm64.pkg` (SHA-256 `53c82350…`), published with `gh release create v1.2.0 --target main` after the hidden check (UI from `wirepane://app`, proxy, HTTP and HTTPS in View, 6 s start, clean quit). The notes send Intel users to v1.1.0's x64 `.pkg`.
+- Next Intel build, when the owner wants one: `./scripts/build-mac-x64.sh`, checked through Rosetta, then `gh release upload`.
+
 ## Done on 2026-10-13 (evening): per-device Clear and pinned devices
 
 - Devices panel, a device row's right-click menu: **Clear this device's traffic** (no question; pinned requests stay; one batch removal in `EventsStore`) and **Pin to top / Unpin**. Pinned devices sit right under All devices with a pin icon, are saved, stay as muted placeholders (count 0) after Clear, and keep the panel open after a restart. Clear's question now says how much of the traffic the pinned devices sent.
@@ -41,7 +46,7 @@ Plan: `docs/plans/2026-10-13-rust-network-tools.md`. Three workflows (build 10 a
 
 ## State
 
-- `main` holds everything and is pushed. **Release v1.1.0** (2026-10-13) is on GitHub with the macOS arm64 and Intel (x64) `.pkg`s; Windows and Linux stay "coming soon" until the owner says.
+- `main` holds everything and is pushed. **Release v1.2.0** (2026-10-13) is the latest, with the macOS arm64 `.pkg` only; v1.1.0 keeps the arm64 and Intel (x64) `.pkg`s; Windows and Linux stay "coming soon" until the owner says.
 - Nothing is running. Start the dev instance for checks with `./start.sh --no-window` (UI http://localhost:45458, API :45457, Mockttp admin :45456), in the background.
 - Test pkg with VPN mode for the owner: `~/Downloads/Wirepane-1.0.0-vpn-test-mac-arm64.pkg` (built 2026-10-12 from `57ce4b2e1`'s code).
 - The sidecar's dev build lives in `wirepane-tunnel/target/release/wirepane-tunnel` (gitignored; `cd wirepane-tunnel && cargo build --release --locked`). The dev server's `wireguard-vpn` interceptor finds it there.
