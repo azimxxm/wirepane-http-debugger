@@ -160,6 +160,13 @@ export function parsePeerConfig(raw: unknown): VpnPeerConfig | undefined {
     };
 }
 
+// The Android page names its devices "Android", "Android 2" and so on (see android-vpn.ts)
+export const ANDROID_PEER_NAME = 'Android';
+const ANDROID_PEER_NAME_PATTERN = /^Android( \d+)?$/;
+
+export const isAndroidPeer = (peer: Pick<VpnPeer, 'name'>) =>
+    ANDROID_PEER_NAME_PATTERN.test(peer.name);
+
 // "iPhone", then "iPhone 2" and so on, so a second phone doesn't clash with the first one
 export function nextPeerName(existing: ReadonlyArray<Pick<VpnPeer, 'name'>>): string {
     const taken = new Set(existing.map((peer) => peer.name));
@@ -254,14 +261,17 @@ export class VpnModeStore {
         return this.metadata?.peers ?? [];
     }
 
-    // The phone this page is about: the one just added, else the most recently seen one
+    // The phone this page is about: the one just added, else the most recently seen one. Never an
+    // Android phone, whatever its handshake says: the Android page follows those (pickAndroidPeer).
     @computed get trackedPeer(): VpnPeer | undefined {
         const justAdded = this.peerConfig
             ? this.peers.find((peer) => peer.peer === this.peerConfig!.peer)
             : undefined;
         if (justAdded) return justAdded;
 
-        return [...this.peers].sort((a, b) => (b.lastHandshake ?? 0) - (a.lastHandshake ?? 0))[0];
+        return this.peers
+            .filter((peer) => !isAndroidPeer(peer))
+            .sort((a, b) => (b.lastHandshake ?? 0) - (a.lastHandshake ?? 0))[0];
     }
 
     @computed get handshakeAgeMs(): number | undefined {
@@ -450,6 +460,18 @@ export class VpnModeStore {
             runInAction(() => { this.busy = undefined; });
         }
     }
+}
+
+/**
+ * The iPhone page's Start: starts the tunnel and, when no iPhone is set up yet, makes the QR code
+ * for one. The store's own start only adds a device to an empty tunnel, and an Android phone may
+ * be in it already (the Android page's startAndroidVpn does the same the other way round).
+ */
+export async function startIPhoneVpn(store: VpnModeStore) {
+    await store.start();
+    if (!store.running || store.setupError) return;
+
+    if (!store.peers.some((peer) => !isAndroidPeer(peer)) && !store.peerConfig) await store.addDevice();
 }
 
 // One store for the whole app, so the QR code and the tunnel's state survive leaving the page

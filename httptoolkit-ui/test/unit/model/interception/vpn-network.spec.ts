@@ -3,6 +3,7 @@ import { expect } from '../../../test-setup';
 import {
     DEFAULT_VPN_SETTINGS,
     MAX_DNS_QUERIES,
+    RELAYED_QUIC_TTL_MS,
     VpnNetworkApi,
     VpnNetworkStore,
     parseCaptureState,
@@ -130,6 +131,95 @@ describe("The VPN network store", () => {
         expect(relayed.closedAt).to.equal(undefined);
     });
 
+    describe("pairing a relayed QUIC flow with its UDP flow", () => {
+
+        const SRC_A = '10.73.0.2:40001';
+        const SRC_B = '10.73.0.2:40002';
+        const DST = '9.9.9.9:443';
+
+        const quic = { event: 'quic', peer: 'p1', dst: DST, action: 'relayed' };
+        const open = (flow: number, src: string, overrides: any = {}) =>
+            ({ event: 'udp-open', flow, peer: 'p1', src, dst: DST, ...overrides });
+        const marks = () => store.udpFlows.map((flow) => [flow.flow, flow.quic]);
+
+        it("marks both flows when two QUIC flows from one phone go to the same place", async () => {
+            server.push(
+                { ...quic, src: SRC_A },
+                { ...quic, src: SRC_B },
+                open(1, SRC_B),
+                open(2, SRC_A)
+            );
+            await store.poll();
+
+            expect(marks()).to.deep.equal([['1', 'relayed'], ['2', 'relayed']]);
+        });
+
+        it("does not mark a UDP flow that came from another port", async () => {
+            server.push({ ...quic, src: SRC_A }, open(1, SRC_B), open(2, SRC_A));
+            await store.poll();
+
+            expect(marks()).to.deep.equal([['1', undefined], ['2', 'relayed']]);
+        });
+
+        it("marks a flow once, and the next flow from that port is plain UDP", async () => {
+            server.push({ ...quic, src: SRC_A }, open(1, SRC_A), open(2, SRC_A));
+            await store.poll();
+
+            expect(marks()).to.deep.equal([['1', 'relayed'], ['2', undefined]]);
+        });
+
+        it("still pairs by phone and place when the QUIC event says nothing about the source", async () => {
+            server.push(quic, open(1, SRC_A), open(2, SRC_B));
+            await store.poll();
+
+            expect(marks()).to.deep.equal([['1', 'relayed'], ['2', undefined]]);
+        });
+
+        it("gives a blocked or decrypted QUIC flow the source the helper reports, if it does", async () => {
+            server.push(
+                { event: 'quic', peer: 'p1', src: SRC_A, dst: DST, action: 'blocked' },
+                { event: 'quic', peer: 'p1', src: SRC_B, dst: DST, action: 'decrypted' },
+                { event: 'quic', peer: 'p1', dst: '1.1.1.1:443', action: 'blocked' }
+            );
+            await store.poll();
+
+            expect(store.udpFlows.map((flow) => [flow.src, flow.quic])).to.deep.equal([
+                [SRC_A, 'blocked'], [SRC_B, 'decrypted'], ['', 'blocked']
+            ]);
+        });
+
+        it("keeps the phones apart", async () => {
+            server.push({ ...quic, peer: 'p2', src: SRC_A }, open(1, SRC_A));
+            await store.poll();
+
+            expect(marks()).to.deep.equal([['1', undefined]]);
+        });
+
+        it("forgets a QUIC event whose UDP flow never opened", () => {
+            store.addEvents([{ ...quic, src: SRC_A, at: NOW }], 1);
+            store.addEvents([{ ...open(1, SRC_A), at: NOW + RELAYED_QUIC_TTL_MS + 1 }], 2);
+            store.addEvents([{ ...quic, src: SRC_B, at: NOW + RELAYED_QUIC_TTL_MS + 2 }], 3);
+            store.addEvents([{ ...open(2, SRC_B), at: NOW + RELAYED_QUIC_TTL_MS + 3 }], 4);
+
+            expect(marks()).to.deep.equal([['1', undefined], ['2', 'relayed']]);
+        });
+
+        it("keeps a QUIC event that waits a little for its UDP flow", () => {
+            store.addEvents([{ ...quic, src: SRC_A, at: NOW }], 1);
+            store.addEvents([{ ...open(1, SRC_A), at: NOW + RELAYED_QUIC_TTL_MS - 1 }], 2);
+
+            expect(marks()).to.deep.equal([['1', 'relayed']]);
+        });
+
+        it("starts again when the server does", () => {
+            store.addEvents([{ ...quic, src: SRC_A, at: NOW }], 5);
+            // The server restarted: its numbers start again, and the old QUIC event is gone
+            store.addEvents([open(1, SRC_A)], 1);
+
+            expect(marks()).to.deep.equal([['1', undefined]]);
+        });
+    });
+
     it("keeps TLS hellos and the latest stats", async () => {
         server.push(
             { event: 'tls-hello', peer: 'p1', dst: '93.184.216.34:443', sni: 'example.com', alpn: ['h2', 'http/1.1'], ja4: 't13d1516h2_8daaf6152771_02713d6af862' },
@@ -152,6 +242,107 @@ describe("The VPN network store", () => {
         ], 2);
         expect(store.dnsQueries[0].at).to.equal(NOW - 60_000);
         expect(store.stats).to.deep.equal({ uptimeMs: 5 });
+    });
+
+    describe("stats", () => {
+
+        // The event as wirepane-tunnel/README.md shows it, with the number and time the server adds
+        const README_STATS = {
+            event: 'stats',
+            uptimeMs: 812345,
+            peers: [{
+                peer: 'p1', name: 'iPhone', tunnelIp: '10.73.0.2', endpoint: '192.168.0.199:61234',
+                lastHandshake: 1791809205206, bytesUp: 48213, bytesDown: 902114
+            }],
+            tcp: { flowsOpened: 41, flowsActive: 3, bytesUp: 30211, bytesDown: 881200 },
+            udp: { flowsOpened: 2, flowsActive: 1, packetsUp: 5, packetsDown: 4, bytesUp: 410, bytesDown: 380 },
+            dns: { queries: 57 },
+            quic: { blocked: 6, icmpSent: 6 }
+        };
+        const { event: _event, ...README_STATS_FIELDS } = README_STATS;
+
+        it("are empty until the helper reports some", async () => {
+            server.push({ event: 'dns', peer: 'p1', name: 'a.test', qtype: 'A', rcode: 'NOERROR', answers: [], ms: 1 });
+            await store.poll();
+
+            expect(store.stats).to.equal(undefined);
+            store.clear();
+            expect(store.stats).to.equal(undefined);
+        });
+
+        it("keep what the helper reports: uptime, devices and the counters", async () => {
+            server.push({ ...README_STATS });
+            await store.poll();
+
+            expect(store.stats).to.deep.equal(README_STATS_FIELDS);
+            expect(store.stats!.uptimeMs).to.equal(812345);
+            expect(store.stats!.peers![0]).to.deep.include({ peer: 'p1', name: 'iPhone', bytesUp: 48213, bytesDown: 902114 });
+            expect(store.stats!.quic).to.deep.equal({ blocked: 6, icmpSent: 6 });
+        });
+
+        it("are replaced by the next report, and keep fields added later", () => {
+            store.addEvents([{ ...README_STATS, at: NOW - 2000, seq: 1 }], 1);
+            store.addEvents([{
+                ...README_STATS,
+                uptimeMs: 814345,
+                peers: [],
+                capture: { packets: 3 },
+                futureCounters: { something: 1 },
+                at: NOW,
+                seq: 2
+            }], 2);
+
+            expect(store.stats).to.deep.equal({
+                ...README_STATS_FIELDS,
+                uptimeMs: 814345,
+                peers: [],
+                capture: { packets: 3 },
+                futureCounters: { something: 1 }
+            });
+        });
+
+        it("leave out what a phone that has not connected yet has no value for", () => {
+            store.addEvents([{
+                event: 'stats',
+                uptimeMs: 5,
+                peers: [{
+                    peer: 'p2', name: 'iPad', tunnelIp: '10.73.0.3', endpoint: null, lastHandshake: null,
+                    bytesUp: 0, bytesDown: 0
+                }]
+            }], 1);
+
+            expect(store.stats).to.deep.equal({
+                uptimeMs: 5,
+                peers: [{ peer: 'p2', name: 'iPad', tunnelIp: '10.73.0.3', bytesUp: 0, bytesDown: 0 }]
+            });
+        });
+
+        it("cope with a report of an odd shape", () => {
+            store.addEvents([{
+                event: 'stats',
+                uptimeMs: 'soon',
+                peers: [{ peer: 'p1', name: 'iPhone', bytesUp: 'lots', bytesDown: 7 }, { name: 'no id' }, 5, null],
+                tcp: [],
+                udp: { packetsUp: -1, bytesUp: 5, junk: 'x', packetsDown: NaN },
+                dns: 12,
+                quic: null
+            }], 1);
+
+            expect(store.stats).to.deep.equal({
+                peers: [{ peer: 'p1', name: 'iPhone', bytesDown: 7 }],
+                udp: { bytesUp: 5 }
+            });
+        });
+
+        it("do not stop the other events being read", () => {
+            store.addEvents([
+                { event: 'stats', peers: 'nope' },
+                { event: 'dns', peer: 'p1', name: 'a.test', qtype: 'A', rcode: 'NOERROR', answers: [], ms: 1 }
+            ], 2);
+
+            expect(store.dnsQueries).to.have.length(1);
+            expect(store.stats).to.deep.equal({});
+        });
     });
 
     it("keeps only the newest entries", async () => {

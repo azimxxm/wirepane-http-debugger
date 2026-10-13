@@ -13,7 +13,8 @@ import {
     nextPeerName,
     parseConnectionMode,
     parsePeerConfig,
-    parseVpnMetadata
+    parseVpnMetadata,
+    startIPhoneVpn
 } from '../../../../src/model/interception/vpn-mode';
 import { answerDialog, dialogQueue, getCurrentDialog } from '../../../../src/model/ui/dialogs';
 
@@ -292,6 +293,17 @@ describe('VPN mode', () => {
             expect(store.errorMessage).to.equal(undefined);
         });
 
+        it("the iPhone page's start adds the iPhone when only an Android phone is set up", async () => {
+            server.peers = [{ peer: 'p1', name: 'Android', tunnelIp: '10.73.0.2' }];
+            await store.refresh();
+            await startIPhoneVpn(store);
+
+            expect(server.calls).to.deep.equal([
+                { action: 'start' },
+                { action: 'add-peer', name: 'iPhone' }
+            ]);
+        });
+
         it("doesn't add another device when one was set up before", async () => {
             server.peers = [{ peer: 'p1', name: 'iPhone', tunnelIp: '10.73.0.2' }];
             await store.refresh();
@@ -407,6 +419,45 @@ describe('VPN mode', () => {
 
             expect(store.trackedPeer!.peer).to.equal('p2');
             expect(store.phoneState).to.equal('waiting');
+        });
+
+        // The Android page shares the tunnel; its phones must not show up as "the iPhone"
+        it('does not follow an Android phone, even when its handshake is newer', async () => {
+            server.running = true;
+            server.peers = [
+                { peer: 'p1', name: 'iPhone', tunnelIp: '10.73.0.2', lastHandshake: NOW - 30_000 },
+                { peer: 'p2', name: 'Android', tunnelIp: '10.73.0.3', lastHandshake: NOW - 1_000 },
+                { peer: 'p3', name: 'Android 2', tunnelIp: '10.73.0.4', lastHandshake: NOW - 500 }
+            ];
+            await store.refresh();
+
+            expect(store.trackedPeer!.peer).to.equal('p1');
+            expect(store.handshakeAgeMs).to.equal(30_000);
+            expect(store.phoneState).to.equal('connected');
+        });
+
+        it('keeps waiting for the iPhone while only Android phones are on the tunnel', async () => {
+            server.running = true;
+            server.peers = [
+                { peer: 'p1', name: 'Android', tunnelIp: '10.73.0.2', lastHandshake: NOW - 1_000 }
+            ];
+            await store.refresh();
+
+            expect(store.trackedPeer).to.equal(undefined);
+            expect(store.phoneState).to.equal('waiting');
+            expect(store.handshakeAgeMs).to.equal(undefined);
+        });
+
+        it('still follows the newest of the other devices, like an iPad', async () => {
+            server.running = true;
+            server.peers = [
+                { peer: 'p1', name: 'iPhone', tunnelIp: '10.73.0.2', lastHandshake: NOW - 20_000 },
+                { peer: 'p2', name: 'Old iPad', tunnelIp: '10.73.0.3', lastHandshake: NOW - 4_000 },
+                { peer: 'p3', name: 'Android', tunnelIp: '10.73.0.4', lastHandshake: NOW - 1_000 }
+            ];
+            await store.refresh();
+
+            expect(store.trackedPeer!.peer).to.equal('p2');
         });
 
         describe('removing a device', () => {

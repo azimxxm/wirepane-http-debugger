@@ -7,8 +7,9 @@ import type { VpnTlsHello } from './vpn-network';
  *
  * The VPN sidecar reads the TLS ClientHello that every app sends before any certificate is
  * checked, so it can fingerprint pinned apps too. It reports each one as a `tls-hello` event
- * (the Network page's TLS tab groups those) and tags the connection, so the request or the
- * failed TLS row carries it: `wirepane-vpn-ja4:t13d1516h2_8daaf6152771_02713d6af862`.
+ * (the Network page's TLS tab groups those) and tags the connection, so its requests carry
+ * it: `wirepane-vpn-ja4:t13d1516h2_8daaf6152771_02713d6af862`. A failed TLS row doesn't get the
+ * tag (Mockttp leaves it off those events), so findJa4ForFailure looks the hello up instead.
  */
 
 // Mockttp puts this in front of every tag a SOCKS client sends as metadata when it connects, so
@@ -103,6 +104,62 @@ export function getJa4FromTags(tags: readonly string[] | undefined): string | un
         if (JA4_PATTERN.test(value)) return value;
     }
     return undefined;
+}
+
+// The tunnel reports a hello just before it connects to Mockttp, so a failed connection and its
+// hello are normally well under a second apart
+export const HELLO_MATCH_WINDOW_MS = 5_000;
+
+/** The parts of a failed TLS connection (a FailedTlsConnection has them all) that point to its hello. */
+export interface Ja4Failure {
+    tags?: readonly string[];
+    // The name the client asked for (its SNI), or the address it was connecting to
+    upstreamHostname?: string;
+    timingEvents?: { startTime?: number };
+}
+
+const isSameName = (a: string, b: string) => a.toLowerCase() === b.toLowerCase();
+
+// "93.184.216.34:443" -> "93.184.216.34"
+const hostOfAddress = (address: string) => address.replace(/:\d+$/, '');
+
+// A hello with a name is for the connection that asked for that name. One without a name was sent
+// to an address, so it is for a connection that only knows its address, or knows nothing.
+function isHelloForName(hello: VpnTlsHello, name: string | undefined): boolean {
+    if (hello.sni) return name !== undefined && isSameName(hello.sni, name);
+    return name === undefined || isSameName(name, hostOfAddress(hello.dst));
+}
+
+/**
+ * The JA4 of a failed TLS connection. Mockttp's failure events carry no SOCKS tags (its requests
+ * do), so when the connection has none, the hello the tunnel reported for it is found by the name
+ * it asked for and by time. A pinned app's connection fails before any request, so this is the
+ * only way to see its fingerprint.
+ */
+export function findJa4ForFailure(failure: Ja4Failure, hellos: readonly VpnTlsHello[]): string | undefined {
+    const tagged = getJa4FromTags(failure.tags);
+    if (tagged) return tagged;
+
+    const startTime = failure.timingEvents?.startTime;
+    if (typeof startTime !== 'number' || !Number.isFinite(startTime)) return undefined;
+
+    const name = failure.upstreamHostname?.trim() || undefined;
+
+    let closest: VpnTlsHello | undefined;
+    let closestGap = Infinity;
+    for (const hello of hellos) {
+        const gap = Math.abs(hello.at - startTime);
+        // Written so that a hello with no usable time (NaN) is out too
+        if (!(gap <= HELLO_MATCH_WINDOW_MS) || !JA4_PATTERN.test(hello.ja4) || !isHelloForName(hello, name)) continue;
+
+        // The same app can try the same name again and again: take the hello closest in time, and
+        // the later one if two are equally close
+        if (!closest || gap < closestGap || (gap === closestGap && hello.at > closest.at)) {
+            closest = hello;
+            closestGap = gap;
+        }
+    }
+    return closest?.ja4;
 }
 
 export interface Ja4Count {

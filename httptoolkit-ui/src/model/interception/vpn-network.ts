@@ -80,7 +80,33 @@ export interface VpnTlsHello {
     at: number;
 }
 
-export type VpnStats = { [key: string]: unknown };
+// One phone in the helper's `stats` event: the plaintext bytes through its tunnel
+export interface VpnPeerStats {
+    peer: string;
+    name?: string;
+    tunnelIp?: string;
+    endpoint?: string;
+    lastHandshake?: number; // ms since the epoch
+    bytesUp?: number; // from the phone
+    bytesDown?: number; // to the phone
+}
+
+// One section of the stats ("tcp", "udp", "dns", "quic"): counter name -> value
+export type VpnStatsCounters = { [counter: string]: number };
+
+/*
+ * The helper's `stats` event (wirepane-tunnel/README.md): totals since it started. The helper only
+ * sends it when asked, so everything is optional, and fields it adds later are kept as they came.
+ */
+export interface VpnStats {
+    uptimeMs?: number;
+    peers?: VpnPeerStats[];
+    tcp?: VpnStatsCounters;
+    udp?: VpnStatsCounters;
+    dns?: VpnStatsCounters;
+    quic?: VpnStatsCounters;
+    [field: string]: unknown;
+}
 
 // What this build of the VPN helper can do (from its ready event)
 export interface VpnCapabilities {
@@ -97,6 +123,9 @@ export const MAX_UDP_FLOWS = 2000;
 export const MAX_TLS_HELLOS = 2000;
 // While the VPN runs, its metadata (settings, capture) is read again every this many polls
 const METADATA_EVERY_POLLS = 5;
+// A relayed QUIC flow's udp-open follows its quic event within moments. If it never does (the
+// relay failed), the quic event is forgotten after this long, so it can't mark a later flow.
+export const RELAYED_QUIC_TTL_MS = 30_000;
 
 // The server calls the store needs, so tests can fake the server
 export interface VpnNetworkApi {
@@ -169,8 +198,65 @@ export function parseCaptureState(raw: unknown): VpnCaptureState {
     };
 }
 
+const optionalCount = (value: unknown) =>
+    typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : undefined;
+
+function parseStatsPeer(raw: unknown): VpnPeerStats | undefined {
+    if (!isRecord(raw) || !text(raw.peer)) return undefined;
+
+    // Fields the helper adds later stay; the ones we know are dropped unless they have the right type
+    // (`endpoint` and `lastHandshake` are null until the phone has connected)
+    const peer: Raw = { ...raw };
+    for (const field of ['name', 'tunnelIp', 'endpoint']) {
+        if (!text(peer[field])) delete peer[field];
+    }
+    for (const field of ['lastHandshake', 'bytesUp', 'bytesDown']) {
+        if (optionalCount(peer[field]) === undefined) delete peer[field];
+    }
+    return peer as unknown as VpnPeerStats;
+}
+
+function parseStatsCounters(raw: unknown): VpnStatsCounters | undefined {
+    if (!isRecord(raw)) return undefined;
+
+    const counters: VpnStatsCounters = {};
+    for (const [counter, value] of Object.entries(raw)) {
+        const parsed = optionalCount(value);
+        if (parsed !== undefined) counters[counter] = parsed;
+    }
+    return counters;
+}
+
+/** The stats out of a `stats` event, without the event's own name, number and time. */
+export function parseVpnStats(event: Raw): VpnStats {
+    const { event: _event, seq: _seq, at: _at, ...fields } = event;
+    const stats: VpnStats = { ...fields };
+
+    if (optionalCount(fields.uptimeMs) === undefined) delete stats.uptimeMs;
+
+    if (Array.isArray(fields.peers)) {
+        stats.peers = fields.peers
+            .map(parseStatsPeer)
+            .filter((peer): peer is VpnPeerStats => !!peer);
+    } else {
+        delete stats.peers;
+    }
+
+    for (const section of ['tcp', 'udp', 'dns', 'quic'] as const) {
+        const counters = parseStatsCounters(fields[section]);
+        if (counters) {
+            stats[section] = counters;
+        } else {
+            delete stats[section];
+        }
+    }
+    return stats;
+}
+
 const quicMark = (action: unknown): VpnUdpFlow['quic'] =>
     action === 'blocked' || action === 'relayed' || action === 'decrypted' ? action : undefined;
+
+const relayedQuicKey = (peer: string, src: string, dst: string) => `${peer} ${src} ${dst}`;
 
 // Keeps the newest `max` entries
 function trimmed<T>(list: T[], max: number) {
@@ -201,8 +287,10 @@ export class VpnNetworkStore {
     private pollers = 0;
     private timer: ReturnType<typeof setTimeout> | undefined;
     private pollInFlight = false;
-    // A QUIC flow the helper relays shows up as a quic event, then a udp-open for it
-    private relayedQuic = new Set<string>();
+    // A QUIC flow the helper relays shows up as a quic event, then a udp-open for it. They are
+    // paired by phone, place and the phone's port (an older helper doesn't say which port, and
+    // pairs by phone and place only). The value is when the quic event came.
+    private relayedQuic = new Map<string, number>();
 
     constructor(
         private readonly api: VpnNetworkApi = createServerVpnNetworkApi(() => 0),
@@ -306,13 +394,13 @@ export class VpnNetworkStore {
 
                 case 'udp-open': {
                     const peer = text(event.peer) ?? '';
+                    const src = text(event.src) ?? '';
                     const dst = text(event.dst) ?? '';
-                    const relayKey = `${peer} ${dst}`;
-                    const relayed = this.relayedQuic.delete(relayKey);
+                    const relayed = this.takeRelayedQuic(peer, src, dst, at);
                     this.udpFlows.push({
                         flow: String(event.flow ?? ''),
                         peer,
-                        src: text(event.src) ?? '',
+                        src,
                         dst,
                         ...(text(event.name) ? { name: text(event.name) } : {}),
                         bytesUp: 0,
@@ -336,14 +424,14 @@ export class VpnNetworkStore {
                     const dst = text(event.dst) ?? '';
                     if (mark === 'relayed') {
                         // Its udp-open follows and carries the counters
-                        this.relayedQuic.add(`${peer} ${dst}`);
+                        this.expectRelayedQuic(peer, text(event.src) ?? '', dst, at);
                     } else if (mark) {
                         // Blocked and decrypted QUIC never becomes a relayed UDP flow, so it
                         // gets a row of its own
                         this.udpFlows.push({
                             flow: `quic-${seq}-${this.udpFlows.length}`,
                             peer,
-                            src: '',
+                            src: text(event.src) ?? '',
                             dst,
                             bytesUp: 0,
                             bytesDown: 0,
@@ -367,20 +455,41 @@ export class VpnNetworkStore {
                     });
                     break;
 
-                case 'stats': {
-                    const stats: VpnStats = { ...event };
-                    delete stats.event;
-                    delete stats.seq;
-                    delete stats.at;
-                    this.stats = stats;
+                case 'stats':
+                    this.stats = parseVpnStats(event);
                     break;
-                }
             }
         }
 
         trimmed(this.dnsQueries, MAX_DNS_QUERIES);
         trimmed(this.udpFlows, MAX_UDP_FLOWS);
         trimmed(this.tlsHellos, MAX_TLS_HELLOS);
+    }
+
+    private expectRelayedQuic(peer: string, src: string, dst: string, at: number) {
+        this.forgetOldRelayedQuic(at);
+
+        // Deleting first moves a repeated key to the end, which keeps the map in time order
+        const key = relayedQuicKey(peer, src, dst);
+        this.relayedQuic.delete(key);
+        this.relayedQuic.set(key, at);
+    }
+
+    // Whether this UDP flow is the one a quic event announced. Each quic event pairs with one flow.
+    private takeRelayedQuic(peer: string, src: string, dst: string, at: number): boolean {
+        this.forgetOldRelayedQuic(at);
+
+        return (src !== '' && this.relayedQuic.delete(relayedQuicKey(peer, src, dst)))
+            // From an older helper, whose quic events don't say where the flow came from
+            || this.relayedQuic.delete(relayedQuicKey(peer, '', dst));
+    }
+
+    private forgetOldRelayedQuic(now: number) {
+        for (const [key, since] of this.relayedQuic) {
+            // The oldest comes first
+            if (now - since <= RELAYED_QUIC_TTL_MS) break;
+            this.relayedQuic.delete(key);
+        }
     }
 
     private updateFlow(event: Raw, at: number) {

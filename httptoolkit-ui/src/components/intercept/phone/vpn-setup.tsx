@@ -3,7 +3,7 @@ import { observer } from 'mobx-react-lite';
 import { Info, Power } from '@phosphor-icons/react';
 
 import { styled } from '../../../styles';
-import { VpnModeStore } from '../../../model/interception/vpn-mode';
+import { isAndroidPeer, startIPhoneVpn, VpnModeStore } from '../../../model/interception/vpn-mode';
 
 import { ActionButton } from '../../common/action-button';
 import {
@@ -71,7 +71,7 @@ const StartStepContent = observer((props: { store: VpnModeStore }) => {
                     variant='primary'
                     icon='Play'
                     disabled={!!busy}
-                    onClick={() => { store.start(); }}
+                    onClick={() => { startIPhoneVpn(store); }}
                 >
                     { busy === 'starting' ? 'Starting…' : 'Start VPN capture' }
                 </ActionButton>
@@ -92,7 +92,7 @@ const StartStepContent = observer((props: { store: VpnModeStore }) => {
         { store.running && !peerConfig && <>
             <p>
                 The VPN is running.
-                { store.peers.length > 0
+                { store.peers.some((peer) => !isAndroidPeer(peer))
                     ? ' Your iPhone was set up before, so the tunnel in WireGuard still works: just turn it on (step 3). To set up another device, make a new QR code.'
                     : ' No device is set up yet.'
                 }

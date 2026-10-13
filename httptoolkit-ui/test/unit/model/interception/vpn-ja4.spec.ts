@@ -2,7 +2,9 @@ import { expect } from '../../../test-setup';
 
 import { VpnTlsHello } from '../../../../src/model/interception/vpn-network';
 import {
+    HELLO_MATCH_WINDOW_MS,
     describeJa4,
+    findJa4ForFailure,
     getJa4FromTags,
     groupTlsHellosByJa4,
     parseJa4
@@ -112,6 +114,132 @@ describe('JA4 fingerprints', () => {
             expect(getJa4FromTags(['other-ja4:' + CHROME])).to.equal(undefined);
             // A good one later in the list still counts
             expect(getJa4FromTags(['wirepane-vpn-ja4:nope', `wirepane-vpn-ja4:${CHROME}`])).to.equal(CHROME);
+        });
+    });
+
+    describe('finding the JA4 of a failed connection', () => {
+
+        // Mockttp's TLS failure events carry no SOCKS tags, so the hellos the tunnel reported are
+        // matched by the name the client asked for, and by time
+        const STARTED = 1_760_000_000_000;
+
+        const failure = (overrides: Partial<Parameters<typeof findJa4ForFailure>[0]> = {}) => ({
+            tags: [] as string[],
+            upstreamHostname: 'pinned.example.org' as string | undefined,
+            timingEvents: { startTime: STARTED },
+            ...overrides
+        });
+
+        it('uses the tag when the connection has one', () => {
+            const tagged = failure({ tags: [`socket-metadata:wirepane-vpn-ja4:${CURL}`] });
+
+            // Even when a hello for the same name says something else
+            expect(findJa4ForFailure(tagged, [
+                hello(CHROME, { sni: 'pinned.example.org', at: STARTED })
+            ])).to.equal(CURL);
+            expect(findJa4ForFailure(tagged, [])).to.equal(CURL);
+        });
+
+        it('finds the hello for the same name that was sent just before', () => {
+            expect(findJa4ForFailure(failure(), [
+                hello(CHROME, { sni: 'other.example.org', at: STARTED - 20 }),
+                hello(PYTHON, { sni: 'pinned.example.org', at: STARTED - 20 })
+            ])).to.equal(PYTHON);
+        });
+
+        it('does not care about the case of the name', () => {
+            expect(findJa4ForFailure(failure({ upstreamHostname: 'Pinned.Example.ORG' }), [
+                hello(PYTHON, { sni: 'pinned.example.org', at: STARTED })
+            ])).to.equal(PYTHON);
+        });
+
+        it('says nothing when no hello was for that name', () => {
+            expect(findJa4ForFailure(failure(), [
+                hello(CHROME, { sni: 'other.example.org', at: STARTED }),
+                hello(CURL, { sni: 'pinned.example.org.evil.test', at: STARTED }),
+                hello(CURL, { sni: undefined, at: STARTED })
+            ])).to.equal(undefined);
+            expect(findJa4ForFailure(failure(), [])).to.equal(undefined);
+        });
+
+        it('only looks at hellos from around the time of the connection', () => {
+            const near = HELLO_MATCH_WINDOW_MS - 1;
+            const far = HELLO_MATCH_WINDOW_MS + 1;
+            const named = { sni: 'pinned.example.org' };
+
+            expect(findJa4ForFailure(failure(), [hello(CURL, { ...named, at: STARTED - near })])).to.equal(CURL);
+            expect(findJa4ForFailure(failure(), [hello(CURL, { ...named, at: STARTED + near })])).to.equal(CURL);
+            expect(findJa4ForFailure(failure(), [hello(CURL, { ...named, at: STARTED - far })])).to.equal(undefined);
+            expect(findJa4ForFailure(failure(), [hello(CURL, { ...named, at: STARTED + far })])).to.equal(undefined);
+        });
+
+        it('takes the hello closest in time when the app tried the same name more than once', () => {
+            const tries = [
+                hello(CHROME, { sni: 'pinned.example.org', at: STARTED - 3_000 }),
+                hello(CURL, { sni: 'pinned.example.org', at: STARTED - 40 }),
+                hello(PYTHON, { sni: 'pinned.example.org', at: STARTED + 2_500 })
+            ];
+
+            expect(findJa4ForFailure(failure(), tries)).to.equal(CURL);
+            expect(findJa4ForFailure(failure({ timingEvents: { startTime: STARTED + 2_450 } }), tries))
+                .to.equal(PYTHON);
+        });
+
+        it('takes the later hello when two are equally close', () => {
+            expect(findJa4ForFailure(failure(), [
+                hello(CHROME, { sni: 'pinned.example.org', at: STARTED - 100 }),
+                hello(CURL, { sni: 'pinned.example.org', at: STARTED + 100 })
+            ])).to.equal(CURL);
+        });
+
+        it('pairs a connection that had no name with a hello that had none', () => {
+            const unnamed = failure({ upstreamHostname: undefined });
+
+            expect(findJa4ForFailure(unnamed, [
+                hello(CHROME, { sni: 'a.example.org', at: STARTED }),
+                hello(PYTHON, { sni: undefined, at: STARTED - 30 })
+            ])).to.equal(PYTHON);
+            expect(findJa4ForFailure(unnamed, [hello(CHROME, { sni: 'a.example.org', at: STARTED })]))
+                .to.equal(undefined);
+        });
+
+        it('pairs a connection that only knows its address with the hello sent to it', () => {
+            const toAddress = failure({ upstreamHostname: '93.184.216.34' });
+
+            expect(findJa4ForFailure(toAddress, [
+                hello(CHROME, { sni: undefined, dst: '203.0.113.9:443', at: STARTED }),
+                hello(PYTHON, { sni: undefined, dst: '93.184.216.34:443', at: STARTED - 10 })
+            ])).to.equal(PYTHON);
+            expect(findJa4ForFailure(toAddress, [
+                hello(CHROME, { sni: undefined, dst: '203.0.113.9:443', at: STARTED })
+            ])).to.equal(undefined);
+        });
+
+        it('has no answer without a start time to compare with', () => {
+            const hellos = [hello(CURL, { sni: 'pinned.example.org', at: STARTED })];
+
+            expect(findJa4ForFailure(failure({ timingEvents: undefined }), hellos)).to.equal(undefined);
+            expect(findJa4ForFailure(failure({ timingEvents: {} }), hellos)).to.equal(undefined);
+            expect(findJa4ForFailure(failure({ timingEvents: { startTime: NaN } }), hellos)).to.equal(undefined);
+        });
+
+        it('ignores a hello that has no usable time', () => {
+            expect(findJa4ForFailure(failure(), [
+                hello(CURL, { sni: 'pinned.example.org', at: NaN })
+            ])).to.equal(undefined);
+        });
+
+        it('never returns something that is not a JA4', () => {
+            expect(findJa4ForFailure(failure(), [
+                hello('', { sni: 'pinned.example.org', at: STARTED }),
+                hello('<script>', { sni: 'pinned.example.org', at: STARTED - 1 })
+            ])).to.equal(undefined);
+
+            // A good hello a little further away still counts
+            expect(findJa4ForFailure(failure(), [
+                hello('<script>', { sni: 'pinned.example.org', at: STARTED }),
+                hello(CHROME, { sni: 'pinned.example.org', at: STARTED - 900 })
+            ])).to.equal(CHROME);
         });
     });
 

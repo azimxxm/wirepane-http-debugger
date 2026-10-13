@@ -1,10 +1,12 @@
 import {
+    ANDROID_PEER_NAME,
     ModeStorage,
     VpnModeStore,
     VpnPeer,
     VpnServerApi,
     createServerVpnApi,
     getBrowserModeStorage,
+    isAndroidPeer,
     parseVpnMetadata
 } from './vpn-mode';
 
@@ -13,9 +15,6 @@ import {
  * one UDP port), with its own device name and its own idea of "the phone this page is about",
  * so the iPhone connected next door never shows up as the Android phone.
  */
-
-const ANDROID_PEER_NAME = 'Android';
-const ANDROID_PEER_NAME_PATTERN = /^Android( \d+)?$/;
 
 // --- Which way the Android page connects: the VPN or the existing ways ---
 
@@ -50,8 +49,8 @@ export function saveAndroidMode(
 
 // --- Android devices among the tunnel's devices ---
 
-export const isAndroidPeer = (peer: Pick<VpnPeer, 'name'>) =>
-    ANDROID_PEER_NAME_PATTERN.test(peer.name);
+// The rule is in vpn-mode.ts, because the iPhone page leaves these devices out too
+export { isAndroidPeer };
 
 // "Android", then "Android 2" and so on, so a second phone doesn't clash with the first one
 export function nextAndroidPeerName(existing: ReadonlyArray<Pick<VpnPeer, 'name'>>): string {

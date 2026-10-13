@@ -1,12 +1,14 @@
 import * as _ from 'lodash';
 import * as React from 'react';
+import { inject, observer } from 'mobx-react'; // wirepane
 
 import { styled } from '../../../styles';
 import { Icon, SourceIcons } from '../../../icons';
 
 import { getReadableIP } from '../../../model/network';
 import { FailedTlsConnection } from '../../../model/tls/failed-tls-connection';
-import { describeJa4, getJa4FromTags } from '../../../model/interception/vpn-ja4'; // wirepane: JA4 from the VPN
+import { describeJa4, findJa4ForFailure } from '../../../model/interception/vpn-ja4'; // wirepane: JA4 from the VPN
+import type { VpnNetworkStore } from '../../../model/interception/vpn-network'; // wirepane
 
 import { MediumCard } from '../../common/card';
 import { ContentLabelBlock, Content, CopyableMonoValue } from '../../common/text-content';
@@ -21,12 +23,28 @@ const AndroidIcon = styled(Icon).attrs({
     color: ${SourceIcons.Android.color};
 `;
 
+@inject('vpnNetworkStore') // wirepane: the VPN's TLS hellos
+@observer
 export class TlsFailureDetailsPane extends React.Component<{
     failure: FailedTlsConnection,
-    certPath: string
+    certPath: string,
+    vpnNetworkStore?: VpnNetworkStore
 }> {
+
+    private stopReadingHellos: (() => void) | undefined;
+
+    componentDidMount() {
+        // wirepane: the store only reads the VPN's events while someone needs them. Mockttp gives a
+        // failed connection no JA4 tag, so this pane looks it up in the hellos, and needs them here.
+        this.stopReadingHellos = this.props.vpnNetworkStore?.startPolling();
+    }
+
+    componentWillUnmount() {
+        this.stopReadingHellos?.();
+    }
+
     render() {
-        const { failure, certPath } = this.props;
+        const { failure, certPath, vpnNetworkStore } = this.props;
 
         // This _should_ always be available, but due to some awkward & unclear Node issues it isn't,
         // so we need to be a little careful here.
@@ -37,7 +55,7 @@ export class TlsFailureDetailsPane extends React.Component<{
         const sourceDetails = sourceDetailParts?.slice(1).join(' ');
 
         // wirepane: the JA4 fingerprint of the client's hello, when it came through the VPN
-        const ja4 = getJa4FromTags(failure.tags);
+        const ja4 = findJa4ForFailure(failure, vpnNetworkStore?.tlsHellos ?? []);
 
         return <PaneScrollContainer>
             <MediumCard>
