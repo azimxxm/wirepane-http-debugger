@@ -6,6 +6,7 @@ import { Icon, SourceIcons } from '../../../icons';
 
 import { getReadableIP } from '../../../model/network';
 import { FailedTlsConnection } from '../../../model/tls/failed-tls-connection';
+import { describeJa4, getJa4FromTags } from '../../../model/interception/vpn-ja4'; // wirepane: JA4 from the VPN
 
 import { MediumCard } from '../../common/card';
 import { ContentLabelBlock, Content, CopyableMonoValue } from '../../common/text-content';
@@ -34,6 +35,9 @@ export class TlsFailureDetailsPane extends React.Component<{
             : undefined;
         const sourceIp = sourceDetailParts?.[0];
         const sourceDetails = sourceDetailParts?.slice(1).join(' ');
+
+        // wirepane: the JA4 fingerprint of the client's hello, when it came through the VPN
+        const ja4 = getJa4FromTags(failure.tags);
 
         return <PaneScrollContainer>
             <MediumCard>
@@ -69,6 +73,12 @@ export class TlsFailureDetailsPane extends React.Component<{
                         The request was sent by <CopyableMonoValue>
                             { sourceIp }
                         </CopyableMonoValue> { sourceDetails }.
+                    </p> }
+                    { ja4 && <p>
+                        { /* wirepane: JA4 */ }
+                        The client's TLS fingerprint (JA4) is <CopyableMonoValue title={describeJa4(ja4)}>
+                            { ja4 }
+                        </CopyableMonoValue>. It is the same for every connection of that app.
                     </p> }
                 </Content>
 

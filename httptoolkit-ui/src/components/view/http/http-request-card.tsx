@@ -21,9 +21,12 @@ import {
 import {
     ContentLabel,
     ContentLabelBlock,
+    ContentMonoValue,
     ContentMonoValueInline,
+    CopyableMonoValue, // wirepane: JA4
     Markdown
 } from '../../common/text-content';
+import { describeJa4, getJa4FromTags } from '../../../model/interception/vpn-ja4'; // wirepane: JA4 from the VPN
 import { DocsLink } from '../../common/docs-link';
 import { SourceIcon } from '../../common/source-icon';
 import { HttpVersionPill } from '../../common/http-version-pill';
@@ -46,6 +49,9 @@ const RawRequestDetails = (p: {
             <DocsLink href={methodDocs.url}>Find out more</DocsLink>
         </p>
     ].filter(d => !!d);
+
+    // wirepane: the JA4 fingerprint of the client's TLS hello, when it came through the VPN
+    const ja4 = getJa4FromTags(p.request.tags);
 
     return <div>
         <CollapsibleSection contentName={`${p.request.method} method documentation`}>
@@ -82,6 +88,14 @@ const RawRequestDetails = (p: {
                 </CollapsibleSectionBody>
             }
         </CollapsibleSection>
+
+        { ja4 && <>
+            { /* wirepane: JA4 */ }
+            <ContentLabelBlock>TLS fingerprint (JA4)</ContentLabelBlock>
+            <ContentMonoValue>
+                <CopyableMonoValue title={describeJa4(ja4)}>{ ja4 }</CopyableMonoValue>
+            </ContentMonoValue>
+        </> }
 
         <CollapsibleSection
             contentName='Headers'
