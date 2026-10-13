@@ -6,9 +6,9 @@ import { observer, inject } from "mobx-react";
 import { styled } from '../../styles';
 import { isWindows } from '../../util/ui';
 import { WarningIcon } from '../../icons';
-import { FloppyDisk, FolderOpen, ToggleLeft, ToggleRight, Trash } from '@phosphor-icons/react'; // wirepane
+import { FloppyDisk, FolderOpen, LockSimple, ToggleLeft, ToggleRight, Trash } from '@phosphor-icons/react'; // wirepane
 
-import { isValidPortConfiguration, ProxyStore } from '../../model/proxy-store';
+import { DEFAULT_TLS_PASSTHROUGH_HOSTNAMES, isValidPortConfiguration, ProxyStore } from '../../model/proxy-store'; // wirepane
 import { isValidHostnamePattern } from '../../model/network';
 import {
     serverVersion,
@@ -107,6 +107,44 @@ const TlsPassthroughModeToggle = styled.button.attrs(() => ({
     color: ${p => p.theme.mainColor};
     font-family: ${p => p.theme.fontFamily};
     font-size: ${p => p.theme.textSize};
+`;
+
+// wirepane: the hostnames Wirepane always passes through (DEFAULT_TLS_PASSTHROUGH_HOSTNAMES),
+// shown read-only below the user's own list
+const BuiltInHostnamesHeading = styled.p`
+    margin-top: 16px;
+    font-size: ${p => p.theme.textInputFontSize};
+    font-weight: 600;
+    color: ${p => p.theme.mainColor};
+`;
+
+const BuiltInHostnames = styled.ul`
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 8px;
+    margin: 8px 0 0;
+    padding: 0;
+    list-style: none;
+`;
+
+const BuiltInHostname = styled.li`
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 2px 8px;
+
+    border: 1px solid ${p => p.theme.containerBorder};
+    border-radius: 4px;
+    background-color: ${p => p.theme.mainLowlightBackground};
+
+    font-family: ${p => p.theme.monoFontFamily};
+    font-size: ${p => p.theme.textInputFontSize};
+    color: ${p => p.theme.mainColor};
+
+    > svg {
+        flex-shrink: 0;
+        color: ${p => p.theme.mainLowlightColor};
+    }
 `;
 
 const TlsKeyLogInputContainer = styled.div`
@@ -400,6 +438,23 @@ export class ProxySettingsCard extends React.Component<
                             </>
                         }
                     </SettingsExplanation>
+
+                    { /* wirepane: in intercept-only mode everything else is left alone anyway */ }
+                    { tlsMode === 'passthrough' && <>
+                        <BuiltInHostnamesHeading>Always passed through</BuiltInHostnamesHeading>
+                        <BuiltInHostnames aria-label='Hostnames that are always passed through'>
+                            { DEFAULT_TLS_PASSTHROUGH_HOSTNAMES.map((hostname) =>
+                                <BuiltInHostname key={hostname}>
+                                    <LockSimple size={14} aria-hidden={true} />
+                                    { hostname }
+                                </BuiltInHostname>
+                            ) }
+                        </BuiltInHostnames>
+                        <SettingsExplanation>
+                            Built in, so they can't be changed: pinned Apple services, so the
+                            phone keeps working in VPN mode.
+                        </SettingsExplanation>
+                    </> }
                 </>
             }
 

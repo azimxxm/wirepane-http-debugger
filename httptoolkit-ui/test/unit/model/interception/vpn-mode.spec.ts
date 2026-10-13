@@ -1,15 +1,21 @@
 import { expect } from '../../../test-setup';
 
 import {
+    CONNECTION_MODE_STORAGE_KEY,
     FRESH_HANDSHAKE_MS,
+    ModeStorage,
     VpnActivateOptions,
     VpnModeStore,
     VpnServerApi,
+    describePeerActivity,
     formatHandshakeAge,
+    getPeerState,
     nextPeerName,
+    parseConnectionMode,
     parsePeerConfig,
     parseVpnMetadata
 } from '../../../../src/model/interception/vpn-mode';
+import { answerDialog, dialogQueue, getCurrentDialog } from '../../../../src/model/ui/dialogs';
 
 const WG_CONFIG = [
     '[Interface]',
@@ -90,6 +96,23 @@ class FakeVpnServer implements VpnServerApi {
     }
 }
 
+// An in-memory stand-in for localStorage
+class MemoryStorage implements ModeStorage {
+
+    items = new Map<string, string>();
+
+    getItem(key: string) {
+        return this.items.get(key) ?? null;
+    }
+
+    setItem(key: string, value: string) {
+        this.items.set(key, value);
+    }
+}
+
+// Dismisses any dialog left open, as the queue is shared by the whole app
+const clearDialogs = () => dialogQueue.slice().forEach((request) => answerDialog(request, false));
+
 const NOW = 1_800_000_000_000;
 const waitFor = async (condition: () => boolean) => {
     for (let i = 0; i < 200 && !condition(); i++) {
@@ -166,6 +189,35 @@ describe('VPN mode', () => {
             expect(nextPeerName([{ name: 'iPhone' }, { name: 'iPhone 2' }])).to.equal('iPhone 3');
         });
 
+        it('tells whether a device is connected from its last handshake', () => {
+            expect(getPeerState(undefined, NOW)).to.equal('waiting');
+            expect(getPeerState({ lastHandshake: undefined }, NOW)).to.equal('waiting');
+            expect(getPeerState({ lastHandshake: NOW - 3_000 }, NOW)).to.equal('connected');
+            expect(getPeerState({ lastHandshake: NOW - FRESH_HANDSHAKE_MS }, NOW)).to.equal('connected');
+            expect(getPeerState({ lastHandshake: NOW - FRESH_HANDSHAKE_MS - 1 }, NOW)).to.equal('quiet');
+        });
+
+        it('describes a device in the list from its last handshake', () => {
+            expect(describePeerActivity({ lastHandshake: undefined }, NOW)).to.equal('Not connected yet');
+            expect(describePeerActivity({ lastHandshake: NOW - 3_000 }, NOW))
+                .to.equal('Connected, last handshake 3 s ago');
+            expect(describePeerActivity({ lastHandshake: NOW - 12 * 60_000 }, NOW))
+                .to.equal('Quiet, last handshake 12 min ago');
+        });
+
+        it('counts a handshake from a few seconds in the future as fresh', () => {
+            // The phone's clock and ours can differ a little
+            expect(getPeerState({ lastHandshake: NOW + 5_000 }, NOW)).to.equal('connected');
+        });
+
+        it('only knows the two ways to connect', () => {
+            expect(parseConnectionMode('vpn')).to.equal('vpn');
+            expect(parseConnectionMode('proxy')).to.equal('proxy');
+            expect(parseConnectionMode('tor')).to.equal(undefined);
+            expect(parseConnectionMode(null)).to.equal(undefined);
+            expect(parseConnectionMode(undefined)).to.equal(undefined);
+        });
+
         it('says how long ago a handshake was', () => {
             expect(formatHandshakeAge(3_000)).to.equal('3 s ago');
             expect(formatHandshakeAge(-5)).to.equal('0 s ago');
@@ -185,6 +237,8 @@ describe('VPN mode', () => {
             now = NOW;
             store = new VpnModeStore(server, () => now, 5);
         });
+
+        afterEach(clearDialogs);
 
         it('is checking until the server answers', () => {
             expect(store.availability).to.equal('checking');
@@ -353,6 +407,177 @@ describe('VPN mode', () => {
 
             expect(store.trackedPeer!.peer).to.equal('p2');
             expect(store.phoneState).to.equal('waiting');
+        });
+
+        describe('removing a device', () => {
+
+            const OLD_IPAD: FakePeer = { peer: 'p2', name: 'Old iPad', tunnelIp: '10.73.0.3' };
+
+            beforeEach(async () => {
+                server.running = true;
+                server.peers = [{ peer: 'p1', name: 'iPhone', tunnelIp: '10.73.0.2' }, OLD_IPAD];
+                await store.refresh();
+            });
+
+            const deviceById = (id: string) => store.peers.find((peer) => peer.peer === id)!;
+
+            it('asks first, and removes the device once that is confirmed', async () => {
+                const removing = store.removeDevice(deviceById('p2'));
+
+                await waitFor(() => getCurrentDialog() !== undefined);
+                const dialog = getCurrentDialog()!;
+                if (dialog.kind !== 'confirm') throw new Error('Expected a question with two answers');
+
+                // Removing a device can't be undone, so the button is the red one
+                expect(dialog.options).to.include({
+                    title: 'Remove Old iPad?',
+                    confirmLabel: 'Remove',
+                    destructive: true
+                });
+                expect(dialog.options.message).to.contain('10.73.0.3');
+                expect(server.calls).to.deep.equal([]);
+
+                answerDialog(dialog, true);
+
+                expect(await removing).to.equal(true);
+                expect(server.calls).to.deep.equal([{ action: 'remove-peer', peer: 'p2' }]);
+                expect(store.peers.map((peer) => peer.name)).to.deep.equal(['iPhone']);
+                expect(store.busy).to.equal(undefined);
+                expect(store.errorMessage).to.equal(undefined);
+            });
+
+            it('keeps the device when the question is cancelled', async () => {
+                const removing = store.removeDevice(deviceById('p2'));
+
+                await waitFor(() => getCurrentDialog() !== undefined);
+                answerDialog(getCurrentDialog()!, false);
+
+                expect(await removing).to.equal(false);
+                expect(server.calls).to.deep.equal([]);
+                expect(store.peers).to.have.lengthOf(2);
+            });
+
+            it('only ever removes the device it was asked about', async () => {
+                const removing = store.removeDevice(deviceById('p2'));
+
+                await waitFor(() => getCurrentDialog() !== undefined);
+                answerDialog(getCurrentDialog()!, true);
+                await removing;
+
+                expect(store.peers.map((peer) => peer.peer)).to.deep.equal(['p1']);
+                expect(server.peers.map((peer) => peer.name)).to.deep.equal(['iPhone']);
+            });
+
+            it('drops the QR code of the device that was removed', async () => {
+                await store.addDevice();
+                expect(store.peerConfig!.peer).to.equal('p3');
+
+                const removing = store.removeDevice(deviceById('p3'));
+                await waitFor(() => getCurrentDialog() !== undefined);
+                answerDialog(getCurrentDialog()!, true);
+                await removing;
+
+                expect(store.peerConfig).to.equal(undefined);
+            });
+
+            it('keeps the QR code on show when another device is removed', async () => {
+                await store.addDevice();
+
+                const removing = store.removeDevice(deviceById('p2'));
+                await waitFor(() => getCurrentDialog() !== undefined);
+                answerDialog(getCurrentDialog()!, true);
+                await removing;
+
+                expect(store.peerConfig!.peer).to.equal('p3');
+            });
+
+            it('shows a failed removal with the device list, not with the setup steps', async () => {
+                server.activateError = new Error('The VPN helper stopped');
+
+                const removing = store.removeDevice(deviceById('p2'));
+                await waitFor(() => getCurrentDialog() !== undefined);
+                answerDialog(getCurrentDialog()!, true);
+
+                expect(await removing).to.equal(false);
+                expect(store.deviceError).to.equal('The VPN helper stopped');
+                expect(store.setupError).to.equal(undefined);
+                expect(store.busy).to.equal(undefined);
+                expect(store.peers).to.have.lengthOf(2);
+            });
+
+            it('shows a failed start with the setup steps, and clears the old removal error', async () => {
+                server.activateError = new Error('The VPN helper stopped');
+                const removing = store.removeDevice(deviceById('p2'));
+                await waitFor(() => getCurrentDialog() !== undefined);
+                answerDialog(getCurrentDialog()!, true);
+                await removing;
+                expect(store.deviceError).to.equal('The VPN helper stopped');
+
+                server.activateError = new Error('UDP port 51873 is already in use');
+                await store.start();
+
+                expect(store.setupError).to.equal('UDP port 51873 is already in use');
+                expect(store.deviceError).to.equal(undefined);
+            });
+        });
+
+        describe('remembering how the iPhone connects', () => {
+
+            let storage: MemoryStorage;
+            const storeWith = (modeStorage: ModeStorage | undefined) =>
+                new VpnModeStore(server, () => now, 5, modeStorage);
+
+            beforeEach(() => {
+                storage = new MemoryStorage();
+            });
+
+            it('has no choice until one is made', () => {
+                expect(storeWith(storage).chosenMode).to.equal(undefined);
+            });
+
+            it('saves the choice', () => {
+                const first = storeWith(storage);
+                first.chooseMode('proxy');
+
+                expect(first.chosenMode).to.equal('proxy');
+                expect(storage.getItem(CONNECTION_MODE_STORAGE_KEY)).to.equal('proxy');
+            });
+
+            it('starts the next visit with the saved choice, and the latest choice wins', () => {
+                storeWith(storage).chooseMode('proxy');
+
+                const second = storeWith(storage);
+                expect(second.chosenMode).to.equal('proxy');
+
+                second.chooseMode('vpn');
+                expect(storeWith(storage).chosenMode).to.equal('vpn');
+            });
+
+            it('ignores a saved value that is not one of the two ways', () => {
+                storage.setItem(CONNECTION_MODE_STORAGE_KEY, 'carrier-pigeon');
+
+                expect(storeWith(storage).chosenMode).to.equal(undefined);
+            });
+
+            it('keeps the choice for this visit when the storage is blocked', () => {
+                const blocked: ModeStorage = {
+                    getItem: () => { throw new Error('Blocked'); },
+                    setItem: () => { throw new Error('Blocked'); }
+                };
+
+                const blockedStore = storeWith(blocked);
+                expect(blockedStore.chosenMode).to.equal(undefined);
+
+                blockedStore.chooseMode('proxy');
+                expect(blockedStore.chosenMode).to.equal('proxy');
+            });
+
+            it('works without any storage', () => {
+                const unsaved = storeWith(undefined);
+                unsaved.chooseMode('vpn');
+
+                expect(unsaved.chosenMode).to.equal('vpn');
+            });
         });
 
         it('polls until it is stopped', async () => {

@@ -1,6 +1,7 @@
 import { action, computed, observable, runInAction } from 'mobx';
 
 import { activateInterceptor, getDetailedInterceptorMetadata } from '../../services/server-api';
+import { confirmDialog } from '../ui/dialogs';
 
 // The server interceptor that runs the WireGuard tunnel (see docs/plans/2026-10-12-iphone-fixes-and-vpn.md)
 export const VPN_INTERCEPTOR_ID = 'wireguard-vpn';
@@ -10,6 +11,48 @@ const POLL_INTERVAL_MS = 2000;
 // WireGuard repeats its handshake about every 2 minutes while traffic flows, so a newer
 // handshake than this means the phone's tunnel is up.
 export const FRESH_HANDSHAKE_MS = 3 * 60 * 1000;
+
+// --- Which way the iPhone page connects: the VPN or the Wi-Fi proxy ---
+
+export type IPhoneConnectionMode = 'vpn' | 'proxy';
+
+// localStorage, like the other things the UI remembers (see proxy-port-memory.ts)
+export const CONNECTION_MODE_STORAGE_KEY = 'wirepane:iphone-connection-mode';
+
+// The part of localStorage the store needs, so tests can pass an in-memory one
+export interface ModeStorage {
+    getItem(key: string): string | null;
+    setItem(key: string, value: string): void;
+}
+
+export const parseConnectionMode = (value: unknown): IPhoneConnectionMode | undefined =>
+    value === 'vpn' || value === 'proxy' ? value : undefined;
+
+// Reading `localStorage` itself throws when site data is blocked. Then nothing is remembered.
+export function getBrowserModeStorage(): ModeStorage | undefined {
+    try {
+        return window.localStorage;
+    } catch (e) {
+        return undefined;
+    }
+}
+
+function readStoredMode(storage: ModeStorage | undefined): IPhoneConnectionMode | undefined {
+    try {
+        return parseConnectionMode(storage?.getItem(CONNECTION_MODE_STORAGE_KEY));
+    } catch (e) {
+        return undefined;
+    }
+}
+
+function saveStoredMode(storage: ModeStorage | undefined, mode: IPhoneConnectionMode) {
+    try {
+        storage?.setItem(CONNECTION_MODE_STORAGE_KEY, mode);
+    } catch (e) {
+        // A full or blocked storage only means the choice isn't there next time
+        console.warn("Couldn't remember how the iPhone connects", e);
+    }
+}
 
 // --- What the server tells us ---
 
@@ -137,6 +180,30 @@ export function formatHandshakeAge(ageMs: number): string {
     return `${Math.floor(minutes / 60)} h ago`;
 }
 
+/**
+ * Whether a device's tunnel is up, from how long ago its last handshake was. 'waiting' means
+ * it never did one.
+ */
+export function getPeerState(
+    peer: Pick<VpnPeer, 'lastHandshake'> | undefined,
+    observedAt: number
+): PhoneVpnState {
+    if (peer?.lastHandshake === undefined) return 'waiting';
+    return Math.max(0, observedAt - peer.lastHandshake) <= FRESH_HANDSHAKE_MS
+        ? 'connected'
+        : 'quiet';
+}
+
+/** What the device list says about a device, like "Connected, last handshake 3 s ago". */
+export function describePeerActivity(peer: Pick<VpnPeer, 'lastHandshake'>, observedAt: number): string {
+    if (peer.lastHandshake === undefined) return 'Not connected yet';
+
+    const lastHandshake = `last handshake ${formatHandshakeAge(observedAt - peer.lastHandshake)}`;
+    return getPeerState(peer, observedAt) === 'connected'
+        ? `Connected, ${lastHandshake}`
+        : `Quiet, ${lastHandshake}`;
+}
+
 const describeError = (error: unknown) =>
     error instanceof Error && error.message
         ? error.message
@@ -145,7 +212,7 @@ const describeError = (error: unknown) =>
 // --- The store ---
 
 export type VpnAvailability = 'checking' | 'available' | 'unavailable';
-export type VpnBusy = 'starting' | 'adding-device' | 'stopping';
+export type VpnBusy = 'starting' | 'adding-device' | 'removing-device' | 'stopping';
 export type PhoneVpnState = 'waiting' | 'connected' | 'quiet';
 
 /**
@@ -160,6 +227,10 @@ export class VpnModeStore {
     @observable.ref peerConfig: VpnPeerConfig | undefined = undefined;
     @observable busy: VpnBusy | undefined = undefined;
     @observable errorMessage: string | undefined = undefined;
+    // What failed, so the page shows the error next to it
+    @observable errorSource: VpnBusy | undefined = undefined;
+    // The way the user last picked on the iPhone page, kept between visits
+    @observable chosenMode: IPhoneConnectionMode | undefined;
     // When the metadata was read, so "last handshake 3 s ago" is measured from then
     @observable observedAt: number;
 
@@ -168,9 +239,11 @@ export class VpnModeStore {
     constructor(
         private readonly api: VpnServerApi,
         private readonly now: () => number = Date.now,
-        private readonly pollIntervalMs: number = POLL_INTERVAL_MS
+        private readonly pollIntervalMs: number = POLL_INTERVAL_MS,
+        private readonly modeStorage?: ModeStorage
     ) {
         this.observedAt = now();
+        this.chosenMode = readStoredMode(modeStorage);
     }
 
     @computed get running() {
@@ -197,14 +270,28 @@ export class VpnModeStore {
     }
 
     @computed get phoneState(): PhoneVpnState {
-        const age = this.handshakeAgeMs;
-        if (age === undefined) return 'waiting';
-        return age <= FRESH_HANDSHAKE_MS ? 'connected' : 'quiet';
+        return getPeerState(this.trackedPeer, this.observedAt);
     }
 
     // The server found the tunnel can't run, e.g. its UDP port is taken
     @computed get serverProblem() {
         return this.metadata?.error;
+    }
+
+    // Starting, stopping or adding a device fails next to the setup steps; removing one fails
+    // next to the device list
+    @computed get setupError() {
+        return this.errorSource === 'removing-device' ? undefined : this.errorMessage;
+    }
+
+    @computed get deviceError() {
+        return this.errorSource === 'removing-device' ? this.errorMessage : undefined;
+    }
+
+    @action.bound
+    chooseMode(mode: IPhoneConnectionMode) {
+        this.chosenMode = mode;
+        saveStoredMode(this.modeStorage, mode);
     }
 
     refresh(): Promise<void> {
@@ -284,6 +371,38 @@ export class VpnModeStore {
         await this.runBusy('adding-device', () => this.addPeer());
     }
 
+    /**
+     * Takes a device off the VPN, after asking: its WireGuard tunnel stops working for good.
+     * Resolves true if it was removed.
+     */
+    @action.bound
+    async removeDevice(device: Pick<VpnPeer, 'peer' | 'name' | 'tunnelIp'>): Promise<boolean> {
+        if (this.busy) return false;
+
+        const confirmed = await confirmDialog({
+            title: `Remove ${device.name}?`,
+            message: `${device.name}${device.tunnelIp ? ` (${device.tunnelIp})` : ''} can't use the VPN `
+                + "any more: its tunnel in the WireGuard app stops working. To connect it again, "
+                + 'set it up with a new QR code.',
+            confirmLabel: 'Remove',
+            destructive: true
+        });
+        if (!confirmed) return false;
+
+        let removed = false;
+        await this.runBusy('removing-device', async () => {
+            await this.api.activate({ action: 'remove-peer', peer: device.peer });
+            removed = true;
+
+            runInAction(() => {
+                // The QR code on show was for this device, and no longer works
+                if (this.peerConfig?.peer === device.peer) this.peerConfig = undefined;
+            });
+            await this.refreshAfterChange();
+        });
+        return removed;
+    }
+
     @action.bound
     async stop() {
         await this.runBusy('stopping', async () => {
@@ -317,12 +436,16 @@ export class VpnModeStore {
         runInAction(() => {
             this.busy = busy;
             this.errorMessage = undefined;
+            this.errorSource = undefined;
         });
 
         try {
             await task();
         } catch (e) {
-            runInAction(() => { this.errorMessage = describeError(e); });
+            runInAction(() => {
+                this.errorMessage = describeError(e);
+                this.errorSource = busy;
+            });
         } finally {
             runInAction(() => { this.busy = undefined; });
         }
@@ -333,5 +456,10 @@ export class VpnModeStore {
 let sharedStore: VpnModeStore | undefined;
 
 export function getVpnModeStore(getProxyPort: () => number): VpnModeStore {
-    return sharedStore ??= new VpnModeStore(createServerVpnApi(getProxyPort));
+    return sharedStore ??= new VpnModeStore(
+        createServerVpnApi(getProxyPort),
+        Date.now,
+        POLL_INTERVAL_MS,
+        getBrowserModeStorage()
+    );
 }

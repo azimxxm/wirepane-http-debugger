@@ -32,7 +32,6 @@ import {
     useLanAddresses
 } from './phone-setup-parts';
 import { VpnModeChoice } from './vpn-mode-choice';
-import type { IPhoneConnectionMode } from './vpn-mode-choice';
 import { VPN_STEPS_BEFORE_CERTIFICATE, VpnChecking, VpnSetup, VpnUnavailableNote } from './vpn-setup';
 
 // Wirepane's own CA, separate from the official app's ca.pem (see CLAUDE.md, Branding)
@@ -173,9 +172,9 @@ export const ConnectIPhonePage = inject('proxyStore', 'eventsStore')(observer((p
     const vpnStore = getVpnModeStore(() => proxyStore.httpProxyPort);
     React.useEffect(() => vpnStore.startPolling(), [vpnStore]);
 
-    const [chosenMode, setChosenMode] = React.useState<IPhoneConnectionMode | undefined>();
-    const { availability } = vpnStore;
-    // VPN is the recommended way when this build has it, the proxy when it doesn't
+    // The way picked last time is remembered. Until one is picked, VPN is the recommended way
+    // when this build has it, and the proxy when it doesn't.
+    const { availability, chosenMode } = vpnStore;
     const mode = chosenMode ?? (
         availability === 'available' ? 'vpn' :
         availability === 'unavailable' ? 'proxy' :
@@ -277,7 +276,7 @@ export const ConnectIPhonePage = inject('proxyStore', 'eventsStore')(observer((p
         <VpnModeChoice
             mode={mode}
             vpnAvailable={availability === 'checking' ? undefined : availability === 'available'}
-            onChange={setChosenMode}
+            onChange={vpnStore.chooseMode}
         />
 
         { mode === 'proxy' && proxySetup }
@@ -291,7 +290,7 @@ export const ConnectIPhonePage = inject('proxyStore', 'eventsStore')(observer((p
             onViewRequests={() => navigate('/view')}
         /> }
         { mode === 'vpn' && availability === 'unavailable' &&
-            <VpnUnavailableNote onUseProxy={() => setChosenMode('proxy')} />
+            <VpnUnavailableNote onUseProxy={() => vpnStore.chooseMode('proxy')} />
         }
         { (mode === undefined || (mode === 'vpn' && availability === 'checking')) && <VpnChecking /> }
     </PhoneSetupLayout>;

@@ -2,8 +2,7 @@ import * as React from 'react';
 import { ShieldCheck, WifiHigh } from '@phosphor-icons/react';
 
 import { styled } from '../../../styles';
-
-export type IPhoneConnectionMode = 'vpn' | 'proxy';
+import type { IPhoneConnectionMode } from '../../../model/interception/vpn-mode';
 
 const Group = styled.div`
     display: grid;

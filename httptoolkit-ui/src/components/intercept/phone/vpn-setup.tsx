@@ -1,6 +1,6 @@
 import * as React from 'react';
 import { observer } from 'mobx-react-lite';
-import { Info, Power, Warning } from '@phosphor-icons/react';
+import { Info, Power } from '@phosphor-icons/react';
 
 import { styled } from '../../../styles';
 import { VpnModeStore } from '../../../model/interception/vpn-mode';
@@ -17,6 +17,8 @@ import {
     SetupSteps
 } from './phone-setup-parts';
 import { VpnConfigQrCode, VpnConfigText } from './vpn-config-qr';
+import { VpnDevices } from './vpn-devices';
+import { VpnProblem } from './vpn-problem';
 import { VpnStatus } from './vpn-status';
 
 // WireGuard's own iOS app, published by the WireGuard project
@@ -42,24 +44,6 @@ const QrSide = styled.div`
     }
 `;
 
-const Problem = styled.p`
-    display: flex;
-    gap: 8px;
-    align-items: flex-start;
-    padding: 8px 12px;
-
-    border: 1px solid ${p => p.theme.warningColor};
-    border-radius: 6px;
-    background-color: ${p => p.theme.warningBackground};
-    color: ${p => p.theme.mainColor};
-
-    > svg {
-        flex-shrink: 0;
-        margin-top: 2px;
-        color: ${p => p.theme.warningColor};
-    }
-`;
-
 const ButtonRow = styled.div`
     padding-top: 4px;
     display: flex;
@@ -77,7 +61,7 @@ const portOf = (listen: string | undefined) => listen?.match(/:(\d+)$/)?.[1];
 const StartStepContent = observer((props: { store: VpnModeStore }) => {
     const { store } = props;
     const { busy, peerConfig } = store;
-    const problem = store.errorMessage ?? store.serverProblem;
+    const problem = store.setupError ?? store.serverProblem;
 
     return <>
         { !store.running && <>
@@ -124,10 +108,7 @@ const StartStepContent = observer((props: { store: VpnModeStore }) => {
             </ButtonRow>
         </> }
 
-        { problem && <Problem role='alert'>
-            <Warning size={16} aria-hidden={true} />
-            <span>{ problem }</span>
-        </Problem> }
+        { problem && <VpnProblem message={problem} /> }
     </>;
 });
 
@@ -193,6 +174,8 @@ export const VpnSetup = observer((props: {
                 { props.certificateSteps }
             </SetupSteps>
         </Card>
+
+        <VpnDevices store={store} />
 
         <Note
             icon={<Power size={18} aria-hidden={true} />}
