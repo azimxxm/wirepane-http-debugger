@@ -14,7 +14,7 @@ use std::collections::HashMap;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use anyhow::{Result, anyhow};
 use boringtun::noise::errors::WireGuardError;
@@ -34,7 +34,10 @@ use tokio::task::JoinHandle;
 use tokio::time::{MissedTickBehavior, interval};
 
 use super::{InjectedPacket, PeerDirectory, PeerView};
+use crate::core::hooks::{DelayQueue, Hooks, MAX_DELAYED_PACKETS};
 use crate::events::EventSink;
+use crate::features::Direction;
+use crate::features::conditions::Verdict;
 
 /// WireGuard adds up to 80 bytes (IPv6 outer header) to every packet.
 const WG_HEADER_SIZE: usize = 80;
@@ -86,8 +89,8 @@ pub struct PeerSummary {
 struct Outcome {
     /// Datagrams to send back to the sender (handshake replies, queued packets).
     replies: Vec<Vec<u8>>,
-    /// A decrypted packet for the network layer.
-    inbound: Option<SmolPacket>,
+    /// A decrypted, checked IPv4 packet for the network layer, and the peer that sent it.
+    inbound: Option<(String, Vec<u8>)>,
     /// A `peer` event to emit.
     peer_event: Option<Value>,
 }
@@ -272,7 +275,7 @@ impl WgPeers {
                 }
                 TunnResult::WriteToTunnelV4(plain, _) => {
                     authenticated = true;
-                    outcome.inbound = accept_inbound(peer.tunnel_ip, plain);
+                    outcome.inbound = accept_inbound(peer.tunnel_ip, plain).map(|packet| (peer.id.clone(), packet));
                     break;
                 }
                 TunnResult::WriteToTunnelV6(_, _) => {
@@ -359,6 +362,12 @@ impl WgPeers {
         }
     }
 
+    /// The id of the peer that owns a tunnel address.
+    fn peer_id(&self, tunnel_ip: Ipv4Addr) -> Option<String> {
+        let index = self.by_ip.get(&tunnel_ip)?;
+        self.by_index.get(index).map(|peer| peer.id.clone())
+    }
+
     fn view(&self, tunnel_ip: Ipv4Addr) -> Option<PeerView> {
         let index = self.by_ip.get(&tunnel_ip)?;
         let peer = self.by_index.get(index)?;
@@ -372,7 +381,7 @@ impl WgPeers {
 }
 
 /// Checks a decrypted IPv4 packet before the smoltcp network task sees it.
-fn accept_inbound(peer_ip: Ipv4Addr, plain: &[u8]) -> Option<SmolPacket> {
+fn accept_inbound(peer_ip: Ipv4Addr, plain: &[u8]) -> Option<Vec<u8>> {
     let packet = Ipv4Packet::new_checked(plain).ok()?;
     // Like WireGuard's AllowedIPs: a phone may only send from its own tunnel address.
     if packet.src_addr() != peer_ip {
@@ -399,7 +408,7 @@ fn accept_inbound(peer_ip: Ipv4Addr, plain: &[u8]) -> Option<SmolPacket> {
         IpProtocol::Icmp => {}
         _ => return None,
     }
-    Some(SmolPacket::from(Ipv4Packet::new_checked(plain.to_vec()).ok()?))
+    Some(plain.to_vec())
 }
 
 /// The core's view of the WireGuard peers.
@@ -423,6 +432,8 @@ pub struct WireGuardParams {
     pub events: EventSink,
     /// Packets from the core that go straight to a phone (ICMP errors).
     pub injected: mpsc::Receiver<InjectedPacket>,
+    /// Network conditions and the capture: every IP packet both ways goes through them.
+    pub hooks: Arc<Hooks>,
 }
 
 /// Binds the UDP socket and starts the packet task plus mitmproxy's smoltcp network task.
@@ -449,6 +460,8 @@ pub async fn start(
         peers: params.peers,
         events: params.events,
         injected: params.injected,
+        hooks: params.hooks,
+        delayed: DelayQueue::new(MAX_DELAYED_PACKETS),
         net_tx,
         net_rx,
         network_task,
@@ -461,6 +474,12 @@ pub async fn start(
     })
 }
 
+/// A packet the shaper delayed: from a phone (to the network layer) or to a phone.
+enum Held {
+    FromPhone(Vec<u8>, SocketAddr),
+    ToPhone(Ipv4Addr, Vec<u8>),
+}
+
 struct WgTask {
     socket: UdpSocket,
     local_addr: SocketAddr,
@@ -469,6 +488,9 @@ struct WgTask {
     peers: Arc<Mutex<WgPeers>>,
     events: EventSink,
     injected: mpsc::Receiver<InjectedPacket>,
+    hooks: Arc<Hooks>,
+    /// Packets a phone's network conditions hold back, until they are due.
+    delayed: DelayQueue<Held>,
     net_tx: mpsc::Sender<NetworkEvent>,
     net_rx: mpsc::Receiver<NetworkCommand>,
     network_task: JoinHandle<Result<()>>,
@@ -483,9 +505,11 @@ impl WgTask {
         // After a stall one tick is enough; a burst of catch-up ticks would only repeat itself.
         timer.set_missed_tick_behavior(MissedTickBehavior::Skip);
         loop {
+            let next_due = self.delayed.next_due();
             tokio::select! {
                 _ = self.shutdown.recv() => return Ok(()),
                 _ = timer.tick() => self.on_tick().await,
+                _ = sleep_until_due(next_due), if next_due.is_some() => self.release_due().await,
                 exit = &mut self.network_task => {
                     return match exit {
                         Ok(Ok(())) => Ok(()),
@@ -536,16 +560,43 @@ impl WgTask {
         if let Some(event) = outcome.peer_event {
             self.events.emit(event);
         }
-        if let Some(packet) = outcome.inbound {
-            let event = NetworkEvent::ReceivePacket {
-                packet,
-                tunnel_info: TunnelInfo::WireGuard {
-                    src_addr: src,
-                    dst_addr: self.local_addr,
-                },
-            };
-            if self.net_tx.try_send(event).is_err() {
-                log::warn!("dropping an incoming packet, the network task is behind");
+        if let Some((peer, packet)) = outcome.inbound {
+            match self.hooks.on_packet(&peer, Direction::FromPhone, &packet, Instant::now()) {
+                Verdict::Now => self.deliver_inbound(packet, src),
+                Verdict::At(due) => {
+                    if !self.delayed.push(due, Held::FromPhone(packet, src)) {
+                        log::debug!("the delay queue is full, dropping a packet from {peer}");
+                    }
+                }
+                Verdict::Drop => {}
+            }
+        }
+    }
+
+    /// Hands a phone's packet to the smoltcp network task.
+    fn deliver_inbound(&mut self, packet: Vec<u8>, src: SocketAddr) {
+        let Ok(packet) = Ipv4Packet::new_checked(packet) else {
+            return;
+        };
+        let event = NetworkEvent::ReceivePacket {
+            packet: SmolPacket::from(packet),
+            tunnel_info: TunnelInfo::WireGuard {
+                src_addr: src,
+                dst_addr: self.local_addr,
+            },
+        };
+        if self.net_tx.try_send(event).is_err() {
+            log::warn!("dropping an incoming packet, the network task is behind");
+        }
+    }
+
+    /// Sends on every delayed packet whose time has come.
+    async fn release_due(&mut self) {
+        let now = Instant::now();
+        while let Some(held) = self.delayed.pop_due(now) {
+            match held {
+                Held::FromPhone(packet, src) => self.deliver_inbound(packet, src),
+                Held::ToPhone(dst, packet) => self.seal_and_send(dst, &packet).await,
             }
         }
     }
@@ -573,8 +624,27 @@ impl WgTask {
         self.send_to_phone(dst, &packet.into_inner()).await;
     }
 
-    /// Encrypts one IPv4 packet for the peer that owns `dst` and sends it to that peer's address.
+    /// One IPv4 packet for the peer that owns `dst`, through its network conditions and the capture.
     async fn send_to_phone(&mut self, dst: Ipv4Addr, bytes: &[u8]) {
+        if !self.hooks.packets_hooked() {
+            return self.seal_and_send(dst, bytes).await;
+        }
+        let Some(peer) = lock(&self.peers).peer_id(dst) else {
+            return;
+        };
+        match self.hooks.on_packet(&peer, Direction::ToPhone, bytes, Instant::now()) {
+            Verdict::Now => self.seal_and_send(dst, bytes).await,
+            Verdict::At(due) => {
+                if !self.delayed.push(due, Held::ToPhone(dst, bytes.to_vec())) {
+                    log::debug!("the delay queue is full, dropping a packet for {peer}");
+                }
+            }
+            Verdict::Drop => {}
+        }
+    }
+
+    /// Encrypts one IPv4 packet for the peer that owns `dst` and sends it to that peer's address.
+    async fn seal_and_send(&mut self, dst: Ipv4Addr, bytes: &[u8]) {
         // Tunn::encapsulate panics when the packet doesn't fit the buffer.
         if bytes.len() > MAX_PACKET_SIZE - WG_HEADER_SIZE {
             log::error!("dropping a {} byte packet for {dst}: too large", bytes.len());
@@ -592,5 +662,13 @@ impl WgTask {
         {
             log::debug!("cannot send to {endpoint}: {error}");
         }
+    }
+}
+
+/// Waits until the first delayed packet is due (never, without one; the select guards that).
+async fn sleep_until_due(due: Option<Instant>) {
+    match due {
+        Some(due) => tokio::time::sleep_until(tokio::time::Instant::from_std(due)).await,
+        None => std::future::pending().await,
     }
 }

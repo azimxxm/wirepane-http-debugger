@@ -12,8 +12,9 @@ use wirepane_tunnel::{PEER_KIND_WIREGUARD, Tunnel, TunnelConfig};
 
 const USAGE: &str = "usage: wirepane-tunnel --wireguard <ip:port> --state <file> --socks <host:port>
                        [--endpoint-host <LAN IPv4 the phone dials>] [--tunnel-net 10.73.0.0/24]
-                       [--quic block|relay]
-commands (JSON lines on stdin): add-peer, remove-peer, list-peers, set-socks, stats. EOF on stdin exits.";
+                       [--quic block|relay|decrypt] [--ca-cert <pem> --ca-key <pem>] [--ikev2 <ip:port>]
+commands (JSON lines on stdin): add-peer, remove-peer, list-peers, set-socks, stats, set-conditions,
+set-dns-rules, set-quic, capture-start, capture-stop. EOF on stdin exits.";
 
 /// Logs go to stderr (stdout is for events). Level comes from WIREPANE_TUNNEL_LOG (default warn).
 struct StderrLogger(log::LevelFilter);
@@ -54,6 +55,9 @@ fn parse_args(args: Vec<String>) -> Result<TunnelConfig> {
     let mut tunnel_net = TunnelNet::parse("10.73.0.0/24")?;
     let mut quic = QuicMode::Block;
     let mut allow_loopback = false;
+    let mut ca_cert: Option<PathBuf> = None;
+    let mut ca_key: Option<PathBuf> = None;
+    let mut ikev2: Option<SocketAddr> = None;
 
     let mut iter = args.into_iter();
     while let Some(arg) = iter.next() {
@@ -80,12 +84,12 @@ fn parse_args(args: Vec<String>) -> Result<TunnelConfig> {
             "--endpoint-host" => endpoint_host = Some(value),
             "--tunnel-net" => tunnel_net = TunnelNet::parse(&value)?,
             "--quic" => {
-                quic = match value.as_str() {
-                    "block" => QuicMode::Block,
-                    "relay" => QuicMode::Relay,
-                    other => bail!("--quic must be block or relay, got {other:?}"),
-                }
+                quic = QuicMode::parse(&value)
+                    .ok_or_else(|| anyhow!("--quic must be block, relay or decrypt, got {value:?}"))?
             }
+            "--ca-cert" => ca_cert = Some(PathBuf::from(value)),
+            "--ca-key" => ca_key = Some(PathBuf::from(value)),
+            "--ikev2" => ikev2 = Some(value.parse().with_context(|| format!("bad --ikev2 {value:?}"))?),
             other => bail!("unknown option {other}"),
         }
     }
@@ -98,6 +102,9 @@ fn parse_args(args: Vec<String>) -> Result<TunnelConfig> {
         tunnel_net,
         quic,
         allow_loopback,
+        ca_cert,
+        ca_key,
+        ikev2,
     })
 }
 
@@ -107,6 +114,13 @@ fn handle_command(tunnel: &Tunnel, events: &EventSink, line: &str) {
         Err(error) => return events.error(format!("bad command JSON: {error}")),
     };
     let text = |key: &str| command.get(key).and_then(Value::as_str);
+
+    // The network tools' commands (set-conditions, set-dns-rules, set-quic, capture-*).
+    match tunnel.handle_tool_command(&command) {
+        Some(Ok(reply)) => return events.emit(reply),
+        Some(Err(error)) => return events.error(format!("{} failed: {error:#}", text("cmd").unwrap_or("command"))),
+        None => {}
+    }
 
     match text("cmd") {
         Some("add-peer") => {

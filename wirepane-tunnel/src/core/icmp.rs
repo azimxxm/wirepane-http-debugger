@@ -75,6 +75,17 @@ fn udp_header(from: SocketAddrV4, to: SocketAddrV4, payload: &[u8]) -> [u8; UDP_
     header
 }
 
+/// A plain IPv4 UDP datagram from `from` to `to`, checksums included: what the QUIC gateway's
+/// answers become before the front-end encrypts them for the phone.
+pub fn udp_datagram(from: SocketAddrV4, to: SocketAddrV4, payload: &[u8]) -> Vec<u8> {
+    let total = IPV4_HEADER_SIZE + UDP_HEADER_SIZE + payload.len();
+    let mut packet = Vec::with_capacity(total);
+    packet.extend_from_slice(&ipv4_header(total, PROTOCOL_UDP, 0, *from.ip(), *to.ip()));
+    packet.extend_from_slice(&udp_header(from, to, payload));
+    packet.extend_from_slice(payload);
+    packet
+}
+
 /// The IPv4 packet a host sends when nothing listens on the UDP port a datagram was addressed to
 /// (RFC 792, type 3 code 3). `from` is the phone, `to` the server it tried to reach and `payload`
 /// the datagram's data. The error is sent as `to` and quotes the datagram's IPv4 header plus its
@@ -148,6 +159,23 @@ mod tests {
         assert_eq!(u16::from_be_bytes([udp[0], udp[1]]), 40123, "source port");
         assert_eq!(u16::from_be_bytes([udp[2], udp[3]]), 443, "destination port");
         assert_eq!(u16::from_be_bytes([udp[4], udp[5]]), 8 + 7, "UDP length");
+    }
+
+    #[test]
+    fn a_udp_datagram_is_a_valid_ipv4_udp_packet() {
+        use smoltcp::wire::{IpAddress, UdpPacket};
+        let from = SocketAddrV4::new(Ipv4Addr::new(1, 1, 1, 1), 443);
+        let to = SocketAddrV4::new(Ipv4Addr::new(10, 73, 0, 2), 50000);
+        let packet = udp_datagram(from, to, b"quic answer");
+        let ip = Ipv4Packet::new_checked(&packet[..]).unwrap();
+        assert!(ip.verify_checksum());
+        assert_eq!(ip.src_addr(), *from.ip());
+        assert_eq!(ip.dst_addr(), *to.ip());
+        let udp = UdpPacket::new_checked(ip.payload()).unwrap();
+        assert_eq!(udp.src_port(), 443);
+        assert_eq!(udp.dst_port(), 50000);
+        assert_eq!(udp.payload(), b"quic answer");
+        assert!(udp.verify_checksum(&IpAddress::Ipv4(*from.ip()), &IpAddress::Ipv4(*to.ip())));
     }
 
     #[test]

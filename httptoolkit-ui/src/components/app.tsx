@@ -40,6 +40,7 @@ import { ViewPage } from './view/view-page';
 import { ModifyPage } from './modify/modify-page';
 import { SendPage } from './send/send-page';
 import { SettingsPage } from './settings/settings-page';
+import { NetworkPage, NETWORK_PATH } from './network/network-page'; // wirepane
 
 import { HtmlContextMenu } from './html-context-menu';
 import { DisconnectedWarning } from './disconnected-warning';
@@ -237,6 +238,8 @@ class App extends React.Component<{
                             <Route path={'/modify/:initialRuleId'} pageComponent={ModifyPage} />
                             <Route path={'/send'} pageComponent={SendPage} />
                             <Route path={'/settings'} pageComponent={SettingsPage} />
+                            {/* wirepane: the VPN's network tools */}
+                            <Route path={NETWORK_PATH} pageComponent={NetworkPage} />
                         </Router>
                     </PageSlot>
                     <StatusBar />

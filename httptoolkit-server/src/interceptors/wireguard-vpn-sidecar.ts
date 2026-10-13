@@ -28,6 +28,32 @@ export interface SidecarOptions {
     statePath: string;
     socksAddr: string; // host:port of the proxy
     endpointHost?: string; // the address phones dial, written into their configs
+    // The Wirepane CA, for the helper's HTTP/3 leaf certificates
+    caCertPath?: string;
+    caKeyPath?: string;
+    // Where the IKEv2 front-end listens (ip:port), when it's on
+    ikev2?: string;
+    // Every event the network tools show (dns, udp-*, quic, tls-hello, stats)
+    onToolEvent?: (event: TunnelEvent) => void;
+}
+
+// What this build of the helper can do, from its ready event
+export interface TunnelCapabilities {
+    quicDecrypt: boolean;
+    ikev2: boolean;
+}
+
+export const NO_CAPABILITIES: TunnelCapabilities = { quicDecrypt: false, ikev2: false };
+
+// The events the UI's network tools read (docs/plans/2026-10-13-rust-network-tools.md)
+export const TOOL_EVENTS: ReadonlySet<string> = new Set([
+    'dns', 'udp-open', 'udp-update', 'udp-close', 'quic', 'tls-hello', 'stats'
+]);
+
+export interface CaptureSummary {
+    path: string;
+    packets: number;
+    bytes: number;
 }
 
 const READY_TIMEOUT_MS = 10_000;
@@ -42,7 +68,7 @@ const STDERR_LINES_KEPT = 20;
 // real reply doesn't follow within this time.
 const ERROR_GRACE_MS = 150;
 
-type TunnelEvent = { event: string, [key: string]: unknown };
+export type TunnelEvent = { event: string, [key: string]: unknown };
 
 interface PendingCommand {
     replyEvent: string;
@@ -108,6 +134,9 @@ export class TunnelSidecar {
     socksAddr: string;
     // The latest problem the helper reported while running, cleared when it's fixed
     lastError: string | undefined;
+    capabilities: TunnelCapabilities = NO_CAPABILITIES;
+
+    private onToolEvent: ((event: TunnelEvent) => void) | undefined;
 
     private child: ChildProcess;
     private peers = new Map<string, TunnelPeer>();
@@ -132,6 +161,7 @@ export class TunnelSidecar {
         this.listenPort = options.listenPort;
         this.listen = `0.0.0.0:${options.listenPort}`;
         this.socksAddr = options.socksAddr;
+        this.onToolEvent = options.onToolEvent;
 
         this.readyEvent = new Promise<void>((resolve, reject) => {
             this.markReady = resolve;
@@ -145,7 +175,11 @@ export class TunnelSidecar {
             '--wireguard', this.listen,
             '--state', options.statePath,
             '--socks', options.socksAddr,
-            ...(options.endpointHost ? ['--endpoint-host', options.endpointHost] : [])
+            ...(options.endpointHost ? ['--endpoint-host', options.endpointHost] : []),
+            ...(options.caCertPath && options.caKeyPath
+                ? ['--ca-cert', options.caCertPath, '--ca-key', options.caKeyPath]
+                : []),
+            ...(options.ikev2 ? ['--ikev2', options.ikev2] : [])
         ];
 
         // stdin stays an open pipe for as long as this server lives. When the server dies,
@@ -224,6 +258,37 @@ export class TunnelSidecar {
         await this.sendCommand({ cmd: 'set-socks', addr }, 'socks-set');
     }
 
+    // --- The network tools' commands ---
+
+    async setConditions(peer: string, conditions: object | null): Promise<void> {
+        await this.sendCommand(
+            { cmd: 'set-conditions', peer, conditions },
+            'conditions-set',
+            (event) => event.peer === peer
+        );
+    }
+
+    async setDnsRules(rules: object[]): Promise<void> {
+        await this.sendCommand({ cmd: 'set-dns-rules', rules }, 'dns-rules-set');
+    }
+
+    async setQuic(mode: string): Promise<void> {
+        await this.sendCommand({ cmd: 'set-quic', mode }, 'quic-mode');
+    }
+
+    async captureStart(path: string): Promise<void> {
+        await this.sendCommand({ cmd: 'capture-start', path }, 'capture-started');
+    }
+
+    async captureStop(): Promise<CaptureSummary> {
+        const reply = await this.sendCommand({ cmd: 'capture-stop' }, 'capture-stopped');
+        return {
+            path: typeof reply.path === 'string' ? reply.path : '',
+            packets: typeof reply.packets === 'number' ? reply.packets : 0,
+            bytes: typeof reply.bytes === 'number' ? reply.bytes : 0
+        };
+    }
+
     private sendCommand(
         command: { cmd: string, [key: string]: unknown },
         replyEvent: string,
@@ -280,10 +345,16 @@ export class TunnelSidecar {
 
     private handleEvent(event: TunnelEvent) {
         switch (event.event) {
-            case 'ready':
+            case 'ready': {
                 if (typeof event.listen === 'string' && event.listen) this.listen = event.listen;
+                const capabilities = event.capabilities as Record<string, unknown> | undefined;
+                this.capabilities = {
+                    quicDecrypt: capabilities?.quicDecrypt === true,
+                    ikev2: capabilities?.ikev2 === true
+                };
                 this.markReady();
                 break;
+            }
 
             case 'peer-added': {
                 const peer = toPeer(event);
@@ -320,10 +391,21 @@ export class TunnelSidecar {
                 return; // An error event isn't a reply, see handleErrorEvent
 
             default:
-                return; // dns, udp-open, udp-close, quic: nothing here needs them
+                // dns, udp-*, quic, tls-hello, stats go to the network tools; replies like
+                // conditions-set and capture-stopped only answer their command
+                if (TOOL_EVENTS.has(event.event)) this.relayToolEvent(event);
+                break;
         }
 
         this.resolvePending(event);
+    }
+
+    private relayToolEvent(event: TunnelEvent) {
+        try {
+            this.onToolEvent?.(event);
+        } catch (e: any) {
+            console.warn(`wireguard-vpn: a network tools listener failed (${e?.message})`);
+        }
     }
 
     private resolvePending(event: TunnelEvent) {

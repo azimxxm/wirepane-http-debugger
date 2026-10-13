@@ -16,6 +16,7 @@ import { MAX_DEVICE_NAME_LENGTH } from '../../model/devices/device-names';
 
 import { DeviceIcon } from './device-icon';
 import { VpnBadge } from './vpn-badge';
+import { VpnNetworkLink } from './vpn-network-link'; // wirepane
 import {
     DeviceTreeRow,
     SelectableRow,
@@ -531,6 +532,7 @@ export const DeviceTree = observer((props: {
                             : <RowNameLine>
                                 <RowLabel isMuted={row.device.eventCount === 0}>{ row.device.name }</RowLabel>
                                 { row.device.viaVpn && <VpnBadge title={`Connected ${store.describeDeviceVpn(row.device)}`}>VPN</VpnBadge> }
+                                { row.device.viaVpn && <VpnNetworkLink deviceName={row.device.name} /> /* wirepane */ }
                             </RowNameLine>
                         }
                         <RowAddress className='row-secondary'>{ row.device.address ?? 'localhost' }</RowAddress>

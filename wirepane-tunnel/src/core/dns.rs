@@ -14,6 +14,7 @@ use serde_json::json;
 use tokio::time::timeout;
 
 use super::{Core, Flow};
+use crate::features::dns_rules::DnsAction;
 use crate::frontend::PeerView;
 
 const RCODE_NOERROR: u8 = 0;
@@ -219,11 +220,17 @@ pub async fn answer(core: &Core, peer: &PeerView, src_ip: Ipv4Addr, query: &[u8]
         Parsed::Ignore => return None,
     };
     core.stats.dns_queries.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-    let resolution = resolve(&question.name, &question, core.cfg.net.cert_ip()).await;
+    // The user's DNS rules come first: a blocked name doesn't exist, an answered one gets the
+    // rule's address, and neither is looked up for real.
+    let rule = core.hooks.dns_decide(&question.name);
+    let resolution = match &rule {
+        Some(action) => resolve_by_rule(action, &question),
+        None => resolve(&question.name, &question, core.cfg.net.cert_ip()).await,
+    };
     if question.qtype == TYPE_A && !resolution.answers.is_empty() {
         core.remember_name(src_ip, &question.name, &resolution.answers);
     }
-    core.events.emit(json!({
+    let mut event = json!({
         "event": "dns",
         "peer": peer.id,
         "name": question.name,
@@ -231,8 +238,29 @@ pub async fn answer(core: &Core, peer: &PeerView, src_ip: Ipv4Addr, query: &[u8]
         "rcode": rcode_name(resolution.rcode),
         "answers": resolution.answers.iter().map(|ip| ip.to_string()).collect::<Vec<_>>(),
         "ms": started.elapsed().as_millis() as u64,
-    }));
+    });
+    if let (Some(action), Some(object)) = (&rule, event.as_object_mut()) {
+        let mark = match action {
+            DnsAction::Block => "blocked",
+            DnsAction::Answer(_) => "answered",
+        };
+        object.insert("rule".into(), mark.into());
+    }
+    core.events.emit(event);
     Some(build_response(query, &question, resolution.rcode, &resolution.answers))
+}
+
+/// The answer a DNS rule gives: NXDOMAIN for a blocked name (every type), the rule's address for
+/// an A question, and an empty answer for other types, so the real address can't leak through
+/// AAAA or HTTPS records.
+fn resolve_by_rule(action: &DnsAction, q: &Question) -> Resolution {
+    match action {
+        DnsAction::Block => Resolution { rcode: RCODE_NXDOMAIN, answers: Vec::new() },
+        DnsAction::Answer(ip) if q.qtype == TYPE_A && q.qclass == CLASS_IN => {
+            Resolution { rcode: RCODE_NOERROR, answers: vec![*ip] }
+        }
+        DnsAction::Answer(_) => Resolution { rcode: RCODE_NOERROR, answers: Vec::new() },
+    }
 }
 
 /// UDP flow to the DNS address: one datagram in, one datagram out.
@@ -340,6 +368,25 @@ mod tests {
         assert_eq!(response[3] & 0x0F, 0);
         assert_eq!(u16::from_be_bytes([response[6], response[7]]), 1);
         assert_eq!(&response[response.len() - 4..], &[1, 2, 3, 4]);
+    }
+
+    #[test]
+    fn rules_block_with_nxdomain_and_answer_only_a_questions() {
+        let a = query("api.test", 1);
+        let Parsed::Ok(a) = parse_query(&a) else { panic!("should parse") };
+        let aaaa = query("api.test", 28);
+        let Parsed::Ok(aaaa) = parse_query(&aaaa) else { panic!("should parse") };
+        let ip = Ipv4Addr::new(192, 168, 0, 10);
+
+        let blocked = resolve_by_rule(&DnsAction::Block, &a);
+        assert_eq!((blocked.rcode, blocked.answers.len()), (RCODE_NXDOMAIN, 0));
+        let blocked = resolve_by_rule(&DnsAction::Block, &aaaa);
+        assert_eq!(blocked.rcode, RCODE_NXDOMAIN, "a blocked name doesn't exist for any type");
+
+        let answered = resolve_by_rule(&DnsAction::Answer(ip), &a);
+        assert_eq!((answered.rcode, answered.answers), (RCODE_NOERROR, vec![ip]));
+        let answered = resolve_by_rule(&DnsAction::Answer(ip), &aaaa);
+        assert_eq!((answered.rcode, answered.answers.len()), (RCODE_NOERROR, 0));
     }
 
     #[test]

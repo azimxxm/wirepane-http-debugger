@@ -20,6 +20,13 @@ import {
     WIREGUARD_FIRST_PORT,
     WIREGUARD_LAST_PORT
 } from '../../src/interceptors/wireguard-vpn-env';
+import {
+    applySettingsPatch,
+    capturePath,
+    DEFAULT_VPN_SETTINGS,
+    parseSettingsPatch,
+    ToolEventLog
+} from '../../src/interceptors/wireguard-vpn-tools';
 
 // A stand-in for the wirepane-tunnel binary that speaks its JSON-lines protocol
 const FIXTURES = path.join(__dirname, '..', 'fixtures');
@@ -217,7 +224,7 @@ describe("The WireGuard VPN helpers", () => {
         const stubEnvKeys = [
             'WIREPANE_TUNNEL_BINPATH', 'STUB_LOG', 'STUB_HANDSHAKE_MS', 'STUB_NO_SET_SOCKS',
             'STUB_FAIL_START', 'STUB_IGNORE_STDIN_EOF', 'STUB_NOISY_ERROR', 'STUB_LIST_PEERS_ERROR',
-            'STUB_LATE_PEER'
+            'STUB_LATE_PEER', 'STUB_CAPABILITIES'
         ];
 
         beforeEach(() => {
@@ -267,7 +274,10 @@ describe("The WireGuard VPN helpers", () => {
                 running: false,
                 listen: '',
                 endpointHost: getLanIPv4() ?? '',
-                peers: []
+                peers: [],
+                settings: DEFAULT_VPN_SETTINGS,
+                capture: { running: false },
+                capabilities: { quicDecrypt: false, ikev2: false }
             });
             expect(startsOf()).to.have.length(0);
         });
@@ -294,6 +304,155 @@ describe("The WireGuard VPN helpers", () => {
             } else {
                 expect(started.args).not.to.include('--endpoint-host');
             }
+        });
+
+        // --- The network tools (docs/plans/2026-10-13-rust-network-tools.md) ---
+
+        const configure = (settings: unknown) =>
+            interceptor.activate(PROXY_PORT, { action: 'configure', settings }) as Promise<any>;
+        const settingsFile = () => path.join(configPath, 'wirepane-vpn-settings.json');
+        const lastCommand = (name: string) => commandsOf(name).slice(-1)[0]?.cmd;
+
+        const patch = {
+            dnsRules: [
+                { pattern: '*.Example.com', action: 'block' },
+                { pattern: 'api.test', action: 'answer', ipv4: '192.168.0.10' }
+            ],
+            quic: 'relay',
+            conditions: { p1: { latencyMs: 100, jitterMs: 10, downKbps: 750, upKbps: 250, lossPct: 1.5 } }
+        };
+
+        it("saves the network tools' settings and sends them to the helper now and after a restart", async () => {
+            await start();
+            const saved = await configure(patch);
+
+            expect(saved.dnsRules[0]).to.deep.equal({ pattern: '*.example.com', action: 'block' });
+            expect(saved.quic).to.equal('relay');
+            expect(JSON.parse(fs.readFileSync(settingsFile(), 'utf8'))).to.deep.equal(saved);
+            expect(lastCommand('set-dns-rules').rules).to.deep.equal(saved.dnsRules);
+            expect(lastCommand('set-quic').mode).to.equal('relay');
+            expect(lastCommand('set-conditions')).to.deep.include({ peer: 'p1', conditions: patch.conditions.p1 });
+            expect((await metadata()).settings).to.deep.equal(saved);
+
+            // A new helper gets everything again
+            const before = commandsOf('set-dns-rules').length;
+            await interceptor.deactivate(PROXY_PORT);
+            await start();
+            expect(startsOf()).to.have.length(2);
+            expect(commandsOf('set-dns-rules')).to.have.length(before + 1);
+            expect(lastCommand('set-quic').mode).to.equal('relay');
+            expect(lastCommand('set-conditions').peer).to.equal('p1');
+
+            // A fresh server reads them back from the file
+            const reloaded = makeInterceptor();
+            expect((await reloaded.getMetadata()).settings).to.deep.equal(saved);
+
+            // null takes a phone's conditions off
+            const cleared = await configure({ conditions: { p1: null } });
+            expect(cleared.conditions).to.deep.equal({});
+            expect(cleared.dnsRules).to.deep.equal(saved.dnsRules);
+            expect(lastCommand('set-conditions')).to.deep.include({ peer: 'p1', conditions: null });
+        });
+
+        it("drops a removed device's network conditions", async () => {
+            const added = await addPeer('iPhone');
+            await configure({ conditions: { [added.peer]: { latencyMs: 300 } } });
+            await interceptor.activate(PROXY_PORT, { action: 'remove-peer', peer: added.peer });
+            expect((await metadata()).settings.conditions).to.deep.equal({});
+        });
+
+        it("only saves the settings while the VPN is stopped", async () => {
+            const saved = await configure({ quic: 'decrypt' });
+            expect(saved.quic).to.equal('decrypt');
+            expect(startsOf()).to.have.length(0);
+            expect((await metadata()).settings.quic).to.equal('decrypt');
+
+            await start();
+            expect(lastCommand('set-quic').mode).to.equal('decrypt');
+        });
+
+        it("rejects bad settings and saves nothing", async () => {
+            for (const bad of [
+                { dnsRules: [{ pattern: '', action: 'block' }] },
+                { dnsRules: [{ pattern: 'a.test', action: 'answer', ipv4: '300.1.1.1' }] },
+                { dnsRules: [{ pattern: 'a b', action: 'block' }] },
+                { dnsRules: 'all' },
+                { quic: 'fast' },
+                { conditions: { p1: { latencyMs: -1 } } },
+                { conditions: { p1: { lossPct: 101 } } },
+                { conditions: { '../p1': null } },
+                'nothing'
+            ]) {
+                const message = await rejectionOf(configure(bad));
+                expect(message, JSON.stringify(bad)).to.be.a('string');
+            }
+            expect(fs.existsSync(settingsFile())).to.equal(false);
+        });
+
+        it("captures to a pcapng file in the captures folder", async () => {
+            expect(await rejectionOf(interceptor.activate(PROXY_PORT, { action: 'capture-start' })))
+                .to.include('Start the VPN');
+
+            await start();
+            const started = await interceptor.activate(PROXY_PORT, { action: 'capture-start' }) as any;
+            expect(started.running).to.equal(true);
+            expect(path.dirname(started.path)).to.equal(path.join(configPath, 'captures'));
+            expect(path.basename(started.path)).to.match(/^wirepane-\d{4}-\d\d-\d\d_\d\d-\d\d-\d\d\.pcapng$/);
+            expect(fs.existsSync(started.path)).to.equal(true);
+            expect((await metadata()).capture).to.deep.equal({ running: true, path: started.path });
+
+            // A second start while one runs changes nothing
+            const again = await interceptor.activate(PROXY_PORT, { action: 'capture-start' }) as any;
+            expect(again.path).to.equal(started.path);
+            expect(commandsOf('capture-start')).to.have.length(1);
+
+            const stopped = await interceptor.activate(PROXY_PORT, { action: 'capture-stop' }) as any;
+            expect(stopped).to.deep.equal({ running: false, path: started.path, packets: 12, bytes: 3456 });
+            expect((await metadata()).capture.running).to.equal(false);
+        });
+
+        it("ends the capture state when the helper stops", async () => {
+            await start();
+            await interceptor.activate(PROXY_PORT, { action: 'capture-start' });
+            await interceptor.deactivate(PROXY_PORT);
+            expect((await metadata()).capture.running).to.equal(false);
+        });
+
+        it("relays the helper's events to a numbered log for the UI", async () => {
+            await start();
+            // The stub sends a dns and a quic event right after ready
+            const all = await interceptor.getSubMetadata('events-0');
+            expect(all.seq).to.equal(2);
+            expect(all.events.map((event) => event.event)).to.deep.equal(['dns', 'quic']);
+            expect(all.events[0]).to.deep.include({ name: 'example.com', seq: 1 });
+            expect(all.events[0].at).to.be.a('number').within(Date.now() - 60_000, Date.now());
+
+            expect((await interceptor.getSubMetadata('events-2')).events).to.deep.equal([]);
+            expect((await interceptor.getSubMetadata('events-1')).events.map((e) => e.event)).to.deep.equal(['quic']);
+            // A number from before a server restart gets everything there is
+            expect((await interceptor.getSubMetadata('events-999')).events).to.have.length(2);
+            expect(await rejectionOf(interceptor.getSubMetadata('events-x'))).to.include('Unknown');
+            expect(await rejectionOf(interceptor.getSubMetadata('peers'))).to.include('Unknown');
+        });
+
+        it("reports the helper's capabilities", async () => {
+            process.env.STUB_CAPABILITIES = JSON.stringify({ quicDecrypt: true, ikev2: false });
+            expect((await metadata()).capabilities).to.deep.equal({ quicDecrypt: false, ikev2: false });
+            await start();
+            expect((await metadata()).capabilities).to.deep.equal({ quicDecrypt: true, ikev2: false });
+        });
+
+        it("hands the Wirepane CA to the helper when it exists", async () => {
+            await start();
+            expect(startsOf()[0].args).not.to.include('--ca-cert');
+            await interceptor.deactivate(PROXY_PORT);
+
+            fs.writeFileSync(path.join(configPath, 'wirepane-ca.pem'), 'cert');
+            fs.writeFileSync(path.join(configPath, 'wirepane-ca.key'), 'key');
+            await start();
+            const args = startsOf()[1].args;
+            expect(argValue(args, '--ca-cert')).to.equal(path.join(configPath, 'wirepane-ca.pem'));
+            expect(argValue(args, '--ca-key')).to.equal(path.join(configPath, 'wirepane-ca.key'));
         });
 
         it("keeps the same port the next time it starts", async () => {
@@ -500,7 +659,10 @@ describe("The WireGuard VPN helpers", () => {
                 running: false,
                 listen: '',
                 endpointHost: getLanIPv4() ?? '',
-                peers: []
+                peers: [],
+                settings: DEFAULT_VPN_SETTINGS,
+                capture: { running: false },
+                capabilities: { quicDecrypt: false, ikev2: false }
             });
             expect(result).to.deep.equal(await metadata());
             expect(isAlive(pid)).to.equal(false);
@@ -689,6 +851,35 @@ describe("The WireGuard VPN helpers", () => {
             }
         });
 
+    });
+
+});
+
+describe("the VPN network tools' settings", () => {
+
+    it("merges patches and drops conditions set to null", () => {
+        const one = applySettingsPatch(DEFAULT_VPN_SETTINGS, parseSettingsPatch({
+            conditions: { p1: { latencyMs: 50 }, p2: { downKbps: 100 } }
+        }));
+        expect(one.conditions.p1).to.deep.equal({ latencyMs: 50, jitterMs: 0, downKbps: 0, upKbps: 0, lossPct: 0 });
+        const two = applySettingsPatch(one, parseSettingsPatch({ conditions: { p1: null }, quic: 'block' }));
+        expect(Object.keys(two.conditions)).to.deep.equal(['p2']);
+        expect(two.dnsRules).to.deep.equal([]);
+        expect(DEFAULT_VPN_SETTINGS.conditions).to.deep.equal({});
+    });
+
+    it("names captures by the local time", () => {
+        const file = capturePath('/config', new Date(2026, 9, 13, 9, 5, 7));
+        expect(file).to.equal(path.join('/config', 'captures', 'wirepane-2026-10-13_09-05-07.pcapng'));
+    });
+
+    it("keeps only the newest events", () => {
+        const log = new ToolEventLog(3);
+        for (let i = 1; i <= 10; i++) log.push({ event: 'dns', n: i });
+        const { seq, events } = log.since(0);
+        expect(seq).to.equal(10);
+        expect(events.map((event) => event.n)).to.deep.equal([8, 9, 10]);
+        expect(log.since(9).events.map((event) => event.n)).to.deep.equal([10]);
     });
 
 });

@@ -25,9 +25,15 @@ use serde_json::{Value, json};
 use tokio::sync::{mpsc, watch};
 use tokio::task::JoinHandle;
 
+use crate::core::hooks::Hooks;
+use crate::core::quic::QuicDriver;
 use crate::core::stats::CoreStats;
 use crate::core::{Core, CoreConfig, QuicMode};
 use crate::events::EventSink;
+use crate::features::capture::CaptureSummary;
+use crate::features::conditions::Conditions;
+use crate::features::dns_rules::{DnsAction, DnsRule, DnsRules};
+use crate::features::quic::QuicGateway;
 use crate::frontend::wireguard::{self, WgDirectory, WgPeers, WireGuardParams, lock};
 use crate::net::TunnelNet;
 use crate::state::{StateFile, StoredPeer};
@@ -35,6 +41,12 @@ use crate::state::{StateFile, StoredPeer};
 pub const PEER_KIND_WIREGUARD: &str = "wireguard";
 const KEEPALIVE_SECONDS: u16 = 25;
 const MAX_NAME_CHARS: usize = 64;
+/// Limits for what `set-conditions` and `set-dns-rules` accept, so a bad command can't ask for
+/// something silly (a day of latency, a million rules).
+const MAX_DELAY_MS: u64 = 60_000;
+const MAX_KBPS: u64 = 10_000_000;
+const MAX_DNS_RULES: usize = 10_000;
+const MAX_PEER_ID_CHARS: usize = 64;
 
 #[derive(Debug, Clone)]
 pub struct TunnelConfig {
@@ -47,6 +59,12 @@ pub struct TunnelConfig {
     pub tunnel_net: TunnelNet,
     pub quic: QuicMode,
     pub allow_loopback: bool,
+    /// The Wirepane CA (PEM files): the QUIC gateway signs its leaf certificates with it.
+    pub ca_cert: Option<PathBuf>,
+    pub ca_key: Option<PathBuf>,
+    /// Where the IKEv2 front-end listens. Only stored for now: T1 starts its listener here when
+    /// `frontend::ikev2::supported()`.
+    pub ikev2: Option<SocketAddr>,
 }
 
 #[derive(Debug, Clone)]
@@ -81,6 +99,7 @@ pub struct Tunnel {
     peers: Arc<Mutex<WgPeers>>,
     socks: Arc<Mutex<String>>,
     core_stats: Arc<CoreStats>,
+    hooks: Arc<Hooks>,
     started: Instant,
     shutdown_tx: watch::Sender<()>,
     frontend_task: Option<JoinHandle<Result<()>>>,
@@ -162,6 +181,10 @@ impl Tunnel {
         let (injector_tx, injector_rx) = mpsc::channel(256);
         let (shutdown_tx, shutdown_rx) = shutdown::channel();
 
+        let hooks = Arc::new(Hooks::new(config.quic));
+        let socks = Arc::new(Mutex::new(config.socks.clone()));
+        let quic_driver = start_quic_gateway(&config, socks.clone(), &events, injector_tx.clone());
+
         let frontend = wireguard::start(
             WireGuardParams {
                 listen: config.wireguard,
@@ -169,6 +192,7 @@ impl Tunnel {
                 peers: peers.clone(),
                 events: events.clone(),
                 injected: injector_rx,
+                hooks: hooks.clone(),
             },
             flows_tx,
             commands_rx,
@@ -176,7 +200,6 @@ impl Tunnel {
         )
         .await?;
 
-        let socks = Arc::new(Mutex::new(config.socks.clone()));
         let core = Arc::new(Core::new(
             CoreConfig {
                 net: config.tunnel_net,
@@ -188,14 +211,24 @@ impl Tunnel {
             socks.clone(),
             commands_tx,
             injector_tx,
+            hooks.clone(),
+            quic_driver.clone(),
         ));
         let core_stats = core.stats.clone();
-        let core_task = tokio::spawn(core::run(core, flows_rx));
+        let core_task = tokio::spawn(async move {
+            // The gateway's timers live as long as the core does.
+            let timers = quic_driver.map(|driver| tokio::spawn(driver.run()));
+            core::run(core, flows_rx).await;
+            if let Some(timers) = timers {
+                timers.abort();
+            }
+        });
 
         events.emit(json!({
             "event": "ready",
             "listen": frontend.local_addr.to_string(),
             "publicKey": encode_key(server_public.to_bytes()),
+            "capabilities": capabilities(),
         }));
 
         Ok(Tunnel {
@@ -208,6 +241,7 @@ impl Tunnel {
             peers,
             socks,
             core_stats,
+            hooks,
             started: Instant::now(),
             shutdown_tx,
             frontend_task: Some(frontend.task),
@@ -365,6 +399,77 @@ impl Tunnel {
         &self.events
     }
 
+    // --- The network tools' commands (see `handle_tool_command`) ---
+
+    pub fn set_conditions(&self, peer: &str, conditions: Option<Conditions>) {
+        self.hooks.set_conditions(peer, conditions);
+    }
+
+    pub fn set_dns_rules(&self, rules: DnsRules) -> usize {
+        self.hooks.set_dns_rules(rules)
+    }
+
+    pub fn set_quic_mode(&self, mode: QuicMode) {
+        self.hooks.set_quic_mode(mode);
+    }
+
+    pub fn capture_start(&self, path: &std::path::Path) -> Result<()> {
+        self.hooks
+            .capture_start(path)
+            .with_context(|| format!("cannot capture to {}", path.display()))
+    }
+
+    pub fn capture_stop(&self) -> Result<CaptureSummary> {
+        Ok(self.hooks.capture_stop()?)
+    }
+
+    /// The commands of the network tools: `set-conditions`, `set-dns-rules`, `set-quic`,
+    /// `capture-start` and `capture-stop`. Returns the reply event, None for any other command,
+    /// and Err (for an error event) for a bad one, which changes nothing.
+    pub fn handle_tool_command(&self, command: &Value) -> Option<Result<Value>> {
+        let result = match command.get("cmd").and_then(Value::as_str)? {
+            "set-conditions" => (|| -> Result<Value> {
+                let peer = parse_peer_id(command.get("peer"))?;
+                let conditions = parse_conditions(command.get("conditions"))?;
+                self.set_conditions(&peer, conditions);
+                Ok(json!({ "event": "conditions-set", "peer": peer }))
+            })(),
+            "set-dns-rules" => (|| -> Result<Value> {
+                let rules = parse_dns_rules(command.get("rules"))?;
+                let count = self.set_dns_rules(rules);
+                Ok(json!({ "event": "dns-rules-set", "count": count }))
+            })(),
+            "set-quic" => (|| -> Result<Value> {
+                let mode = command
+                    .get("mode")
+                    .and_then(Value::as_str)
+                    .and_then(QuicMode::parse)
+                    .ok_or_else(|| anyhow!("set-quic needs \"mode\": block, relay or decrypt"))?;
+                self.set_quic_mode(mode);
+                Ok(json!({ "event": "quic-mode", "mode": mode.as_str() }))
+            })(),
+            "capture-start" => (|| -> Result<Value> {
+                let path = command
+                    .get("path")
+                    .and_then(Value::as_str)
+                    .filter(|path| !path.is_empty())
+                    .ok_or_else(|| anyhow!("capture-start needs \"path\""))?;
+                self.capture_start(std::path::Path::new(path))?;
+                Ok(json!({ "event": "capture-started", "path": path }))
+            })(),
+            "capture-stop" => self.capture_stop().map(|summary| {
+                json!({
+                    "event": "capture-stopped",
+                    "path": summary.path.to_string_lossy(),
+                    "packets": summary.packets,
+                    "bytes": summary.bytes,
+                })
+            }),
+            _ => return None,
+        };
+        Some(result)
+    }
+
     /// Stops the front-end and the core. Open flows are dropped.
     pub async fn shutdown(self) {
         self.shutdown_tx.send(()).ok();
@@ -373,4 +478,114 @@ impl Tunnel {
         }
         self.core_task.abort();
     }
+}
+
+/// What this build can do, for the server and the UI (sent with `ready`).
+pub fn capabilities() -> Value {
+    json!({
+        "quicDecrypt": features::quic::decrypt_supported(),
+        "ikev2": frontend::ikev2::supported(),
+    })
+}
+
+/// The HTTP/3 gateway for QUIC mode `decrypt`, when this build has one and the CA was given.
+/// Without it, decrypt works like block; a problem is reported but never stops the VPN.
+fn start_quic_gateway(
+    config: &TunnelConfig,
+    socks: Arc<Mutex<String>>,
+    events: &EventSink,
+    injector: frontend::PacketInjector,
+) -> Option<Arc<QuicDriver>> {
+    if !features::quic::decrypt_supported() {
+        return None;
+    }
+    let (Some(cert_path), Some(key_path)) = (&config.ca_cert, &config.ca_key) else {
+        return None;
+    };
+    let pems = std::fs::read_to_string(cert_path)
+        .and_then(|cert| Ok((cert, std::fs::read_to_string(key_path)?)));
+    let gateway = match pems {
+        Ok((cert, key)) => QuicGateway::new(&cert, &key, socks, events.clone()),
+        Err(error) => Err(anyhow!("cannot read the CA files: {error}")),
+    };
+    match gateway {
+        Ok(gateway) => Some(QuicDriver::new(gateway, injector)),
+        Err(error) => {
+            events.error(format!("HTTP/3 decryption is off: {error:#}"));
+            None
+        }
+    }
+}
+
+fn parse_peer_id(value: Option<&Value>) -> Result<String> {
+    let peer = value.and_then(Value::as_str).unwrap_or_default();
+    let ok = !peer.is_empty()
+        && peer.len() <= MAX_PEER_ID_CHARS
+        && peer.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_');
+    if !ok {
+        bail!("set-conditions needs the \"peer\" id");
+    }
+    Ok(peer.to_string())
+}
+
+/// `{"latencyMs", "jitterMs", "downKbps", "upKbps", "lossPct"}` (missing = 0), or null for none.
+pub fn parse_conditions(value: Option<&Value>) -> Result<Option<Conditions>> {
+    let object = match value {
+        None | Some(Value::Null) => return Ok(None),
+        Some(Value::Object(object)) => object,
+        Some(_) => bail!("\"conditions\" must be an object or null"),
+    };
+    let whole = |key: &str, max: u64| -> Result<u32> {
+        match object.get(key) {
+            None | Some(Value::Null) => Ok(0),
+            Some(value) => value
+                .as_u64()
+                .filter(|n| *n <= max)
+                .map(|n| n as u32)
+                .ok_or_else(|| anyhow!("{key} must be a whole number from 0 to {max}")),
+        }
+    };
+    let loss = match object.get("lossPct") {
+        None | Some(Value::Null) => 0.0,
+        Some(value) => value
+            .as_f64()
+            .filter(|pct| (0.0..=100.0).contains(pct))
+            .ok_or_else(|| anyhow!("lossPct must be from 0 to 100"))?,
+    };
+    Ok(Some(Conditions {
+        latency_ms: whole("latencyMs", MAX_DELAY_MS)?,
+        jitter_ms: whole("jitterMs", MAX_DELAY_MS)?,
+        down_kbps: whole("downKbps", MAX_KBPS)?,
+        up_kbps: whole("upKbps", MAX_KBPS)?,
+        loss_pct: loss as f32,
+    }))
+}
+
+/// `[{"pattern", "action": "block"}, {"pattern", "action": "answer", "ipv4"}]`.
+pub fn parse_dns_rules(value: Option<&Value>) -> Result<DnsRules> {
+    let list = value
+        .and_then(Value::as_array)
+        .ok_or_else(|| anyhow!("set-dns-rules needs a \"rules\" list"))?;
+    if list.len() > MAX_DNS_RULES {
+        bail!("at most {MAX_DNS_RULES} DNS rules");
+    }
+    let mut rules = Vec::with_capacity(list.len());
+    for (index, rule) in list.iter().enumerate() {
+        let text = |key: &str| rule.get(key).and_then(Value::as_str);
+        let pattern = text("pattern")
+            .map(str::trim)
+            .filter(|p| !p.is_empty())
+            .ok_or_else(|| anyhow!("DNS rule {index} has no pattern"))?;
+        let action = match text("action") {
+            Some("block") => DnsAction::Block,
+            Some("answer") => DnsAction::Answer(
+                text("ipv4")
+                    .and_then(|ip| ip.parse().ok())
+                    .ok_or_else(|| anyhow!("DNS rule {index} needs an \"ipv4\" address"))?,
+            ),
+            _ => bail!("DNS rule {index}: action must be block or answer"),
+        };
+        rules.push(DnsRule { pattern: pattern.to_ascii_lowercase(), action });
+    }
+    DnsRules::new(rules).map_err(|error| anyhow!("bad DNS rules: {error}"))
 }

@@ -10,6 +10,7 @@ import {
 } from '../../../model/interception/vpn-mode';
 
 import { ActionButton } from '../../common/action-button';
+import { appHistory } from '../../../routing'; // wirepane: the Network tools link
 import { Card, CardTitle, Mono } from './phone-setup-parts';
 import { VpnProblem } from './vpn-problem';
 
@@ -100,5 +101,11 @@ export const VpnDevices = observer((props: { store: VpnModeStore }) => {
             }) }
         </DeviceList>
         { store.deviceError && <VpnProblem message={store.deviceError} /> }
+        {/* wirepane: DNS, UDP, TLS, conditions and captures of these devices */}
+        <p>
+            <ActionButton icon='ArrowRight' onClick={() => { appHistory.navigate('/network'); }}>
+                Network tools
+            </ActionButton>
+        </p>
     </Card>;
 });

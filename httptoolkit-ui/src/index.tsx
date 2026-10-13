@@ -37,6 +37,7 @@ import { SendStore } from './model/send/send-store';
 import { CollectionsStore } from './model/collections/collections-store';
 import { DevicesStore } from './model/devices/devices-store'; // wirepane: View's Devices panel
 import { ListColumnsStore } from './model/ui/list-columns-store'; // wirepane: View's list columns
+import { getVpnNetworkStore } from './model/interception/vpn-network'; // wirepane: the VPN's network tools
 
 import { serverVersion, desktopVersion, lastServerVersion, UI_VERSION } from './services/service-versions';
 import {
@@ -93,6 +94,7 @@ const sendStore = new SendStore(accountStore, eventsStore, rulesStore, proxyStor
 const collectionsStore = new CollectionsStore(sendStore);
 const devicesStore = new DevicesStore(eventsStore); // wirepane
 const listColumnsStore = new ListColumnsStore(); // wirepane
+const vpnNetworkStore = getVpnNetworkStore(() => proxyStore.httpProxyPort); // wirepane
 
 const stores = {
     accountStore,
@@ -105,7 +107,8 @@ const stores = {
     sendStore,
     collectionsStore,
     devicesStore, // wirepane
-    listColumnsStore // wirepane
+    listColumnsStore, // wirepane
+    vpnNetworkStore // wirepane
 };
 
 const appStartupPromise = Promise.all(

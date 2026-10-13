@@ -8,7 +8,9 @@
 //! - Other UDP: relayed from a host socket with an idle timeout.
 
 pub mod dns;
+pub mod hooks;
 pub mod icmp;
+pub mod quic;
 pub mod socks;
 pub mod stats;
 
@@ -24,12 +26,15 @@ use serde_json::json;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpStream, UdpSocket};
 use tokio::sync::{mpsc, oneshot, watch};
-use tokio::time::{MissedTickBehavior, interval_at, sleep};
+use tokio::time::{MissedTickBehavior, interval_at, sleep, timeout_at};
 
 use crate::events::EventSink;
+use crate::features::fingerprint;
 use crate::frontend::wireguard::lock;
 use crate::frontend::{InjectedPacket, PacketInjector, PeerDirectory, PeerView};
 use crate::net::TunnelNet;
+use hooks::Hooks;
+use quic::QuicDriver;
 use socks::Target;
 use stats::{ActiveFlow, CoreStats};
 
@@ -45,15 +50,44 @@ const UDP_UPDATE_INTERVAL: Duration = Duration::from_secs(1);
 /// A blocked QUIC flow gets at most one ICMP error per this long: a client that retries its Initial
 /// packet every few milliseconds needs one error, not a stream of them.
 const ICMP_MIN_GAP: Duration = Duration::from_millis(100);
+/// How long a new TCP flow waits for the phone's first bytes (a TLS ClientHello, for the JA4
+/// fingerprint and the SNI tag) before it goes on without them. Protocols where the server speaks
+/// first wait this long once.
+const FIRST_BYTES_WAIT: Duration = Duration::from_millis(300);
+/// A ClientHello is one TLS record: at most 16 KiB plus its 5-byte header.
+const FIRST_BYTES_MAX: usize = 16 * 1024 + 5;
+const MAX_TAG_VALUE_CHARS: usize = 253;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum QuicMode {
     Block,
     Relay,
+    /// HTTP/3 is terminated by the QUIC gateway (T7). Without one this works like Block.
+    Decrypt,
+}
+
+impl QuicMode {
+    pub fn parse(text: &str) -> Option<QuicMode> {
+        match text {
+            "block" => Some(QuicMode::Block),
+            "relay" => Some(QuicMode::Relay),
+            "decrypt" => Some(QuicMode::Decrypt),
+            _ => None,
+        }
+    }
+
+    pub fn as_str(self) -> &'static str {
+        match self {
+            QuicMode::Block => "block",
+            QuicMode::Relay => "relay",
+            QuicMode::Decrypt => "decrypt",
+        }
+    }
 }
 
 pub struct CoreConfig {
     pub net: TunnelNet,
+    /// The QUIC mode at start; `set-quic` changes it later through `Core::hooks`.
     pub quic: QuicMode,
     /// Test-only: lets flows reach 127.0.0.0/8. Off by default, because a phone must never reach
     /// the Mac's local services (the server API, the Mockttp admin port) through the tunnel.
@@ -76,9 +110,14 @@ pub struct Core {
     /// Raw packets for phones (ICMP errors) go to the front-end through this.
     injector: PacketInjector,
     pub stats: Arc<CoreStats>,
+    /// The network tools' settings and capture, shared with the front-ends.
+    pub hooks: Arc<Hooks>,
+    /// Terminates HTTP/3 in QUIC mode `decrypt`; None when this build or setup can't.
+    quic: Option<Arc<QuicDriver>>,
 }
 
 impl Core {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         cfg: CoreConfig,
         dir: Arc<dyn PeerDirectory>,
@@ -86,6 +125,8 @@ impl Core {
         socks: Arc<Mutex<String>>,
         commands: mpsc::UnboundedSender<TransportCommand>,
         injector: PacketInjector,
+        hooks: Arc<Hooks>,
+        quic: Option<Arc<QuicDriver>>,
     ) -> Self {
         Self {
             cfg,
@@ -97,6 +138,8 @@ impl Core {
             commands,
             injector,
             stats: Arc::new(CoreStats::default()),
+            hooks,
+            quic,
         }
     }
 
@@ -269,9 +312,84 @@ async fn tcp_flow_inner(core: &Arc<Core>, flow: &Flow) -> Result<()> {
         (Target::Ip(flow.dst), core.name_for(phone, dst_ip))
     };
 
+    // The phone's first bytes come before the SOCKS connection, so its TLS fingerprint can be
+    // a tag on it. They are sent upstream first, so nothing is lost.
+    let first = read_first_bytes(flow).await;
+    let mut tags = flow_tags(&peer, name);
+    if let Some(hello) = fingerprint::parse_client_hello(&first.data) {
+        core.events.emit(json!({
+            "event": "tls-hello",
+            "peer": peer.id,
+            "dst": flow.dst.to_string(),
+            "sni": hello.sni,
+            "alpn": hello.alpn,
+            "ja4": hello.ja4,
+        }));
+        if let Some(sni) = hello.sni.as_deref().and_then(tag_value) {
+            tags.push(format!("wirepane-vpn-sni:{sni}"));
+        }
+        if let Some(ja4) = tag_value(&hello.ja4) {
+            tags.push(format!("wirepane-vpn-ja4:{ja4}"));
+        }
+    }
+
     let proxy = lock(&core.socks).clone();
-    let upstream = socks::connect(&proxy, &flow_tags(&peer, name), &target).await?;
-    pipe(&core.stats, flow, upstream, peer.removed.clone()).await
+    let upstream = socks::connect(&proxy, &tags, &target).await?;
+    pipe(&core.stats, flow, upstream, peer.removed.clone(), first).await
+}
+
+/// What a TCP flow's phone sent before the SOCKS connection was made.
+pub struct FirstBytes {
+    pub data: Vec<u8>,
+    /// A read still waiting when time ran out: the pipe takes it over, as only one read may be
+    /// outstanding per flow.
+    pending: Option<oneshot::Receiver<Vec<u8>>>,
+    /// The phone finished (FIN) or went away before sending more.
+    ended: bool,
+}
+
+/// Reads the phone's first bytes for up to `FIRST_BYTES_WAIT`: one chunk, or more while they are
+/// the start of a TLS record that isn't complete yet (a big ClientHello spans several segments).
+async fn read_first_bytes(flow: &Flow) -> FirstBytes {
+    let deadline = tokio::time::Instant::now() + FIRST_BYTES_WAIT;
+    let mut data = Vec::new();
+    loop {
+        let Some(mut read) = flow.read(PIPE_CHUNK) else {
+            return FirstBytes { data, pending: None, ended: true };
+        };
+        match timeout_at(deadline, &mut read).await {
+            Ok(Ok(chunk)) if !chunk.is_empty() => {
+                data.extend_from_slice(&chunk);
+                if !incomplete_tls_record(&data) {
+                    return FirstBytes { data, pending: None, ended: false };
+                }
+            }
+            Ok(_) => return FirstBytes { data, pending: None, ended: true },
+            Err(_) => return FirstBytes { data, pending: Some(read), ended: false },
+        }
+    }
+}
+
+/// True while `data` is the start of a TLS handshake record that has more bytes to come.
+fn incomplete_tls_record(data: &[u8]) -> bool {
+    if data.is_empty() || data[0] != 0x16 || data.len() >= FIRST_BYTES_MAX {
+        return false;
+    }
+    if data.len() < 5 {
+        return true;
+    }
+    if data[1] != 0x03 {
+        return false;
+    }
+    data.len() < 5 + usize::from(u16::from_be_bytes([data[3], data[4]]))
+}
+
+/// A value from the phone's ClientHello, if it is safe to put in a tag (host name and JA4 chars).
+fn tag_value(text: &str) -> Option<&str> {
+    let ok = !text.is_empty()
+        && text.len() <= MAX_TAG_VALUE_CHARS
+        && text.chars().all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '-' | '_'));
+    ok.then_some(text)
 }
 
 /// Copies bytes both ways. A FIN from one side is passed on as a half-close, and the other
@@ -281,11 +399,26 @@ async fn pipe(
     flow: &Flow,
     upstream: TcpStream,
     mut removed: watch::Receiver<bool>,
+    first: FirstBytes,
 ) -> Result<()> {
     let (mut upstream_read, mut upstream_write) = upstream.into_split();
 
     let to_upstream = async {
-        while let Some(read) = flow.read(PIPE_CHUNK) {
+        let FirstBytes { data, pending, mut ended } = first;
+        if !data.is_empty() {
+            CoreStats::add(&stats.tcp_bytes_up, data.len());
+            upstream_write.write_all(&data).await?;
+        }
+        if !ended && let Some(read) = pending {
+            match read.await {
+                Ok(data) if !data.is_empty() => {
+                    CoreStats::add(&stats.tcp_bytes_up, data.len());
+                    upstream_write.write_all(&data).await?
+                }
+                _ => ended = true,
+            }
+        }
+        while !ended && let Some(read) = flow.read(PIPE_CHUNK) {
             match read.await {
                 Ok(data) if !data.is_empty() => {
                     CoreStats::add(&stats.tcp_bytes_up, data.len());
@@ -325,13 +458,26 @@ async fn udp_flow(core: Arc<Core>, flow: Flow) {
     if let (Some(phone), Some(dst_ip)) = (v4(flow.src), v4(flow.dst))
         && let Some(peer) = core.dir.lookup(phone)
     {
+        let quic_mode = if flow.dst.port() == 443 { Some(core.hooks.quic_mode()) } else { None };
+        // Decrypt needs the gateway; a build or setup without one keeps blocking QUIC.
+        let gateway = core.quic.clone().filter(|_| quic_mode == Some(QuicMode::Decrypt));
         if dst_ip == core.cfg.net.dns_ip() && flow.dst.port() == 53 {
             dns::udp_flow(&core, &flow, &peer, phone).await;
-        } else if flow.dst.port() == 443 && core.cfg.quic == QuicMode::Block {
+        } else if quic_mode.is_some() && quic_mode != Some(QuicMode::Relay) && gateway.is_none() {
             quic_blocked(&core, &flow, &peer, phone, dst_ip).await;
         } else if core.is_forbidden(dst_ip) {
             discard(&flow, peer.removed.clone()).await;
+        } else if let Some(gateway) = gateway {
+            quic::decrypted_flow(&core, &gateway, &flow, &peer).await;
         } else {
+            if quic_mode == Some(QuicMode::Relay) {
+                core.events.emit(json!({
+                    "event": "quic",
+                    "peer": peer.id,
+                    "dst": flow.dst.to_string(),
+                    "action": "relayed",
+                }));
+            }
             relay(&core, &flow, &peer, phone, dst_ip).await;
         }
     } else {
@@ -478,4 +624,168 @@ async fn relay(core: &Core, flow: &Flow, peer: &PeerView, phone: Ipv4Addr, dst_i
         "bytesUp": bytes_up,
         "bytesDown": bytes_down,
     }));
+}
+
+#[cfg(test)]
+mod tests {
+    use std::net::Ipv4Addr;
+
+    use mitmproxy::messages::ConnectionIdGenerator;
+    use serde_json::Value;
+
+    use super::*;
+    use crate::features::dns_rules::DnsAction;
+
+    /// A flow whose phone side is played by `chunks`: each read gets the next one, after its
+    /// delay. A read past the end never answers.
+    fn scripted_flow(chunks: Vec<(u64, Vec<u8>)>) -> Flow {
+        let (tx, mut rx) = mpsc::unbounded_channel::<TransportCommand>();
+        tokio::spawn(async move {
+            let mut chunks = chunks.into_iter();
+            let mut parked = Vec::new();
+            while let Some(command) = rx.recv().await {
+                if let TransportCommand::ReadData(_, _, reply) = command {
+                    match chunks.next() {
+                        Some((delay_ms, data)) => {
+                            sleep(Duration::from_millis(delay_ms)).await;
+                            reply.send(data).ok();
+                        }
+                        None => parked.push(reply),
+                    }
+                }
+            }
+        });
+        Flow {
+            id: ConnectionIdGenerator::tcp().next_id(),
+            src: "10.73.0.2:50000".parse().unwrap(),
+            dst: "93.184.216.34:443".parse().unwrap(),
+            commands: tx,
+        }
+    }
+
+    fn tls_record(len: usize) -> Vec<u8> {
+        let mut record = vec![0x16, 0x03, 0x01];
+        record.extend_from_slice(&(len as u16).to_be_bytes());
+        record.extend((0..len).map(|i| i as u8));
+        record
+    }
+
+    #[tokio::test]
+    async fn first_bytes_collect_a_tls_record_that_spans_segments() {
+        let record = tls_record(2000);
+        let flow = scripted_flow(vec![(0, record[..1400].to_vec()), (5, record[1400..].to_vec())]);
+        let first = read_first_bytes(&flow).await;
+        assert_eq!(first.data, record);
+        assert!(first.pending.is_none() && !first.ended);
+    }
+
+    #[tokio::test]
+    async fn first_bytes_stop_after_one_chunk_of_another_protocol() {
+        let flow = scripted_flow(vec![(0, b"GET / HTTP/1.1\r\n".to_vec()), (0, b"more".to_vec())]);
+        let first = read_first_bytes(&flow).await;
+        assert_eq!(first.data, b"GET / HTTP/1.1\r\n");
+        assert!(first.pending.is_none() && !first.ended);
+    }
+
+    #[tokio::test]
+    async fn a_silent_phone_waits_300_ms_and_the_read_is_kept_for_the_pipe() {
+        let flow = scripted_flow(vec![(500, b"late".to_vec())]);
+        let started = Instant::now();
+        let first = read_first_bytes(&flow).await;
+        let waited = started.elapsed();
+        assert!(waited >= Duration::from_millis(290) && waited < Duration::from_millis(450), "{waited:?}");
+        assert!(first.data.is_empty() && !first.ended);
+        let late = first.pending.expect("the read is still pending").await.unwrap();
+        assert_eq!(late, b"late", "nothing the phone sent is lost");
+    }
+
+    #[tokio::test]
+    async fn a_phone_that_closes_at_once_ends_the_first_read() {
+        let flow = scripted_flow(vec![(0, Vec::new())]);
+        let first = read_first_bytes(&flow).await;
+        assert!(first.data.is_empty() && first.ended && first.pending.is_none());
+    }
+
+    #[test]
+    fn tls_record_lengths_and_tag_values() {
+        assert!(incomplete_tls_record(&[0x16]));
+        assert!(incomplete_tls_record(&tls_record(100)[..50]));
+        assert!(!incomplete_tls_record(&tls_record(100)));
+        assert!(!incomplete_tls_record(b"SSH-2.0-OpenSSH"));
+        assert!(!incomplete_tls_record(&[0x16, 0x02, 0, 0, 10]));
+        assert_eq!(tag_value("api.example.com"), Some("api.example.com"));
+        assert_eq!(tag_value("t13d1516h2_8daaf6152771_02713d6af862"), Some("t13d1516h2_8daaf6152771_02713d6af862"));
+        assert_eq!(tag_value("evil\"tag"), None);
+        assert_eq!(tag_value(""), None);
+        assert_eq!(tag_value(&"a".repeat(300)), None);
+    }
+
+    struct OnePeer;
+
+    impl PeerDirectory for OnePeer {
+        fn lookup(&self, _tunnel_ip: Ipv4Addr) -> Option<PeerView> {
+            let (_, removed) = watch::channel(false);
+            Some(PeerView { id: "p1".into(), name: "Test".into(), endpoint_ip: None, removed })
+        }
+    }
+
+    fn test_core(events: Arc<Mutex<Vec<Value>>>) -> Core {
+        let (commands, _) = mpsc::unbounded_channel();
+        let (injector, _) = mpsc::channel(4);
+        Core::new(
+            CoreConfig { net: TunnelNet::parse("10.73.0.0/24").unwrap(), quic: QuicMode::Block, allow_loopback: false },
+            Arc::new(OnePeer),
+            EventSink::from_fn(move |event| lock(&events).push(event)),
+            Arc::new(Mutex::new("127.0.0.1:1".into())),
+            commands,
+            injector,
+            Arc::new(Hooks::new(QuicMode::Block)),
+            None,
+        )
+    }
+
+    fn a_query(name: &str) -> Vec<u8> {
+        let mut query = vec![0x12, 0x34, 0x01, 0x00, 0, 1, 0, 0, 0, 0, 0, 0];
+        for label in name.split('.') {
+            query.push(label.len() as u8);
+            query.extend_from_slice(label.as_bytes());
+        }
+        query.extend_from_slice(&[0, 0, 1, 0, 1]);
+        query
+    }
+
+    #[tokio::test]
+    async fn dns_questions_ask_the_rules_first() {
+        let events = Arc::new(Mutex::new(Vec::new()));
+        let core = test_core(events.clone());
+        let peer = core.dir.lookup(Ipv4Addr::new(10, 73, 0, 2)).unwrap();
+        let phone = Ipv4Addr::new(10, 73, 0, 2);
+
+        core.hooks.force_dns(Some(DnsAction::Block));
+        let blocked = dns::answer(&core, &peer, phone, &a_query("ads.example.com")).await.unwrap();
+        assert_eq!(blocked[3] & 0x0F, 3, "NXDOMAIN");
+
+        let fake = Ipv4Addr::new(192, 168, 0, 10);
+        core.hooks.force_dns(Some(DnsAction::Answer(fake)));
+        let answered = dns::answer(&core, &peer, phone, &a_query("api.test")).await.unwrap();
+        assert_eq!(answered[3] & 0x0F, 0, "NOERROR");
+        assert_eq!(&answered[answered.len() - 4..], &fake.octets());
+        assert_eq!(core.name_for(phone, fake).as_deref(), Some("api.test"), "flows to it get the name tag");
+
+        let events = lock(&events).clone();
+        assert_eq!(events.len(), 2);
+        assert_eq!(events[0]["event"], "dns");
+        assert_eq!(events[0]["rule"], "blocked");
+        assert_eq!(events[0]["rcode"], "NXDOMAIN");
+        assert_eq!(events[1]["rule"], "answered");
+        assert_eq!(events[1]["answers"], serde_json::json!(["192.168.0.10"]));
+    }
+
+    #[test]
+    fn quic_modes_parse_and_print() {
+        for mode in [QuicMode::Block, QuicMode::Relay, QuicMode::Decrypt] {
+            assert_eq!(QuicMode::parse(mode.as_str()), Some(mode));
+        }
+        assert_eq!(QuicMode::parse("BLOCK"), None);
+    }
 }

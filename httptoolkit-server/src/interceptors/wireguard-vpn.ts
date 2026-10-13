@@ -1,3 +1,4 @@
+import * as fs from 'fs';
 import * as path from 'path';
 
 import type { Interceptor } from '.';
@@ -11,7 +12,24 @@ import {
     savePort,
     TunnelBinary
 } from './wireguard-vpn-env';
-import { TunnelPeer, TunnelSidecar } from './wireguard-vpn-sidecar';
+import {
+    CaptureSummary,
+    NO_CAPABILITIES,
+    TunnelCapabilities,
+    TunnelEvent,
+    TunnelPeer,
+    TunnelSidecar
+} from './wireguard-vpn-sidecar';
+import {
+    applySettingsPatch,
+    capturePath,
+    loadSettings,
+    parseSettingsPatch,
+    saveSettings,
+    ToolEventLog,
+    VpnSettings,
+    VpnSettingsPatch
+} from './wireguard-vpn-tools';
 
 // Phone traffic comes into the wirepane-tunnel helper as a WireGuard VPN. The helper
 // turns every TCP flow into a SOCKS connection to the proxy, so the proxy sees (and can
@@ -25,6 +43,17 @@ export interface WireGuardVpnMetadata {
     endpointHost: string; // the address phones dial, empty when this machine has none
     peers: TunnelPeer[];
     error?: string;
+    // The network tools (docs/plans/2026-10-13-rust-network-tools.md)
+    settings: VpnSettings;
+    capture: VpnCaptureState;
+    capabilities: TunnelCapabilities;
+}
+
+export interface VpnCaptureState {
+    running: boolean;
+    path?: string;
+    packets?: number;
+    bytes?: number;
 }
 
 export interface AddPeerResult {
@@ -39,7 +68,13 @@ type WireGuardVpnOptions =
     | { action: 'add-peer', name: string }
     | { action: 'remove-peer', peer: string }
     // The UI's Stop button: the REST API has no deactivate route, so it comes through activate
-    | { action: 'stop' };
+    | { action: 'stop' }
+    // The network tools: a settings patch, and pcap captures of the tunnel
+    | { action: 'configure', settings: VpnSettingsPatch }
+    | { action: 'capture-start' }
+    | { action: 'capture-stop' };
+
+const EVENTS_SUB_ID = /^events-(\d{1,15})$/;
 
 const DEFAULT_PEER_NAME = 'iPhone';
 const MAX_PEER_NAME_LENGTH = 64;
@@ -57,7 +92,7 @@ function parseOptions(options: unknown): WireGuardVpnOptions {
     if (options === undefined || options === null) return { action: 'start' };
     if (typeof options !== 'object') throw new Error('Invalid wireguard-vpn options');
 
-    const { action, name, peer } = options as Record<string, unknown>;
+    const { action, name, peer, settings } = options as Record<string, unknown>;
 
     switch (action) {
         case undefined:
@@ -66,7 +101,11 @@ function parseOptions(options: unknown): WireGuardVpnOptions {
         case 'add-peer':
             return { action, name: cleanPeerName(name) };
         case 'stop':
+        case 'capture-start':
+        case 'capture-stop':
             return { action };
+        case 'configure':
+            return { action, settings: parseSettingsPatch(settings) };
         case 'remove-peer':
             if (typeof peer !== 'string' || !PEER_ID_PATTERN.test(peer)) {
                 throw new Error('remove-peer needs the id of the peer to remove');
@@ -92,6 +131,12 @@ export class WireGuardVpnInterceptor implements Interceptor {
     // Why the helper last stopped by itself, shown until it's started again
     private stoppedError: string | undefined;
 
+    // The network tools' settings (loaded once from the config folder), the running capture
+    // and the helper's events for the UI
+    private settings: VpnSettings | undefined;
+    private capture: VpnCaptureState = { running: false };
+    private readonly toolEvents = new ToolEventLog();
+
     // Start, stop and restart steps run one after another, so two UI calls arriving
     // together can't start two helpers.
     private lifecycle: Promise<unknown> = Promise.resolve();
@@ -103,6 +148,17 @@ export class WireGuardVpnInterceptor implements Interceptor {
 
     private get statePath() {
         return path.join(this.config.configPath, 'wirepane-vpn.json');
+    }
+
+    private async getSettings(): Promise<VpnSettings> {
+        return this.settings ??= await loadSettings(this.config.configPath);
+    }
+
+    // The Wirepane CA that generateHTTPSConfig (src/index.ts) keeps next to the VPN state
+    private caFiles(): { caCertPath: string, caKeyPath: string } | {} {
+        const caCertPath = path.join(this.config.configPath, 'wirepane-ca.pem');
+        const caKeyPath = path.join(this.config.configPath, 'wirepane-ca.key');
+        return fs.existsSync(caCertPath) && fs.existsSync(caKeyPath) ? { caCertPath, caKeyPath } : {};
     }
 
     async isActivable(): Promise<boolean> {
@@ -127,11 +183,24 @@ export class WireGuardVpnInterceptor implements Interceptor {
             listen: sidecar?.listen ?? '',
             endpointHost: sidecar?.endpointHost ?? getLanIPv4() ?? '',
             peers: sidecar?.listPeers() ?? [],
-            ...(error ? { error } : {})
+            ...(error ? { error } : {}),
+            settings: await this.getSettings(),
+            capture: { ...this.capture },
+            capabilities: sidecar?.capabilities ?? NO_CAPABILITIES
         };
     }
 
-    async activate(proxyPort: number, rawOptions?: unknown): Promise<WireGuardVpnMetadata | AddPeerResult | { removed: true }> {
+    // `events-<seq>`: what the helper reported after event number <seq>
+    async getSubMetadata(subId: string): Promise<{ seq: number, events: TunnelEvent[] }> {
+        const match = EVENTS_SUB_ID.exec(subId);
+        if (!match) throw new Error(`Unknown wireguard-vpn metadata: ${subId}`);
+        return this.toolEvents.since(Number(match[1]));
+    }
+
+    async activate(
+        proxyPort: number,
+        rawOptions?: unknown
+    ): Promise<WireGuardVpnMetadata | AddPeerResult | { removed: true } | VpnSettings | VpnCaptureState> {
         if (!Number.isInteger(proxyPort) || proxyPort < 1 || proxyPort > 65535) {
             throw new Error(`Invalid proxy port: ${proxyPort}`);
         }
@@ -140,6 +209,18 @@ export class WireGuardVpnInterceptor implements Interceptor {
         if (options.action === 'stop') {
             await this.deactivate(proxyPort);
             return this.getMetadata();
+        }
+
+        // These never start the VPN: settings are saved for the next start, and a capture
+        // needs a running tunnel
+        if (options.action === 'configure') {
+            return this.serialize(() => this.configure(options.settings));
+        }
+        if (options.action === 'capture-start') {
+            return this.serialize(() => this.startCapture());
+        }
+        if (options.action === 'capture-stop') {
+            return this.serialize(() => this.stopCapture());
         }
 
         return this.serialize(async () => {
@@ -154,6 +235,12 @@ export class WireGuardVpnInterceptor implements Interceptor {
 
                 case 'remove-peer':
                     await sidecar.removePeer(options.peer);
+                    // A removed phone's network conditions go with it
+                    if ((await this.getSettings()).conditions[options.peer]) {
+                        await this.configure({ conditions: { [options.peer]: null } }).catch((e) => {
+                            console.warn(`wireguard-vpn: couldn't drop the removed device's conditions (${e?.message})`);
+                        });
+                    }
                     return { removed: true as const };
             }
         });
@@ -165,6 +252,42 @@ export class WireGuardVpnInterceptor implements Interceptor {
 
     async deactivateAll(): Promise<void> {
         await this.serialize(() => this.stopSidecar());
+    }
+
+    // --- The network tools ---
+
+    private async configure(patch: VpnSettingsPatch): Promise<VpnSettings> {
+        const settings = applySettingsPatch(await this.getSettings(), patch);
+        await saveSettings(this.config.configPath, settings);
+        this.settings = settings;
+
+        const sidecar = this.sidecar;
+        if (sidecar) await sendSettings(sidecar, patch);
+        return settings;
+    }
+
+    private async startCapture(): Promise<VpnCaptureState> {
+        const sidecar = this.sidecar;
+        if (!sidecar) throw new Error('Start the VPN before capturing its packets');
+        if (this.capture.running) return { ...this.capture };
+
+        const file = capturePath(this.config.configPath, new Date());
+        await fs.promises.mkdir(path.dirname(file), { recursive: true });
+        await sidecar.captureStart(file);
+        this.capture = { running: true, path: file };
+        return { ...this.capture };
+    }
+
+    private async stopCapture(): Promise<VpnCaptureState> {
+        const sidecar = this.sidecar;
+        if (!sidecar || !this.capture.running) {
+            this.capture = { ...this.capture, running: false };
+            return { ...this.capture };
+        }
+
+        const summary: CaptureSummary = await sidecar.captureStop();
+        this.capture = { running: false, ...summary, path: summary.path || this.capture.path };
+        return { ...this.capture };
     }
 
     // --- The helper process ---
@@ -203,7 +326,15 @@ export class WireGuardVpnInterceptor implements Interceptor {
             listenPort,
             statePath: this.statePath,
             socksAddr,
-            endpointHost
+            endpointHost,
+            ...this.caFiles(),
+            onToolEvent: (event) => this.toolEvents.push(event)
+        });
+
+        // A new helper knows none of the network tools' settings yet
+        const settings = await this.getSettings();
+        await sendSettings(sidecar, settings).catch((e) => {
+            console.warn(`wireguard-vpn: couldn't apply the network tools' settings (${e?.message})`);
         });
 
         // Remember the port only once it works, so a scanned QR code keeps its port later
@@ -215,6 +346,10 @@ export class WireGuardVpnInterceptor implements Interceptor {
         this.stoppedError = undefined;
 
         sidecar.exited.then(({ unexpected, message }) => {
+            // A capture ends with the helper that wrote it
+            if (this.capture.running && this.sidecar === sidecar) {
+                this.capture = { ...this.capture, running: false };
+            }
             if (this.sidecar !== sidecar) return; // Already replaced or stopped on purpose
             this.sidecar = undefined;
             if (unexpected) this.stoppedError = message;
@@ -227,9 +362,20 @@ export class WireGuardVpnInterceptor implements Interceptor {
         const sidecar = this.sidecar;
         this.sidecar = undefined;
         this.stoppedError = undefined;
+        // Stopping the helper closes its capture file as it exits
+        if (this.capture.running) this.capture = { ...this.capture, running: false };
         await sidecar?.stop();
     }
 
 }
 
 const socksAddress = (proxyPort: number) => `127.0.0.1:${proxyPort}`;
+
+// Sends the parts of the settings that a patch (or a full settings object) has
+async function sendSettings(sidecar: TunnelSidecar, settings: VpnSettingsPatch) {
+    if (settings.dnsRules) await sidecar.setDnsRules(settings.dnsRules);
+    if (settings.quic) await sidecar.setQuic(settings.quic);
+    for (const [peer, conditions] of Object.entries(settings.conditions ?? {})) {
+        await sidecar.setConditions(peer, conditions);
+    }
+}

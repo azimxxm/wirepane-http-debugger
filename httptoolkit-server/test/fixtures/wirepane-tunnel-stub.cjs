@@ -14,6 +14,11 @@
 //   STUB_LIST_PEERS_ERROR     answer list-peers with an error
 //   STUB_LATE_PEER            shortly after ready, add a peer behind the parent's back and
 //                             send a "peer" event for it
+//   STUB_CAPABILITIES         JSON for the ready event's "capabilities"
+//
+// The network tools' commands (set-conditions, set-dns-rules, set-quic, capture-start,
+// capture-stop) answer like the real helper; capture-start writes an empty file, and
+// {"cmd":"emit","event":{...}} makes the stub print that event (to test the relay).
 //
 // A peer named "crash-me" makes it exit with code 3 right after answering add-peer.
 
@@ -55,6 +60,7 @@ const saveState = () => fs.writeFileSync(statePath, JSON.stringify(state), { mod
 
 // Handshakes only live as long as the process
 const activity = new Map();
+let capture;
 
 const describePeer = (peer) => ({
     peer: peer.peer,
@@ -123,6 +129,42 @@ const handlers = {
         emit({ event: 'peers', peers: state.peers.map(describePeer) });
     },
 
+    'set-conditions': (cmd) => {
+        if (typeof cmd.peer !== 'string' || !cmd.peer) {
+            return emit({ event: 'error', message: 'set-conditions failed: no peer' });
+        }
+        emit({ event: 'conditions-set', peer: cmd.peer });
+    },
+
+    'set-dns-rules': (cmd) => {
+        if (!Array.isArray(cmd.rules)) {
+            return emit({ event: 'error', message: 'set-dns-rules failed: no rules' });
+        }
+        emit({ event: 'dns-rules-set', count: cmd.rules.length });
+    },
+
+    'set-quic': (cmd) => {
+        if (!['block', 'relay', 'decrypt'].includes(cmd.mode)) {
+            return emit({ event: 'error', message: 'set-quic failed: bad mode' });
+        }
+        emit({ event: 'quic-mode', mode: cmd.mode });
+    },
+
+    'capture-start': (cmd) => {
+        if (capture) return emit({ event: 'error', message: 'capture-start failed: a capture is already running' });
+        fs.writeFileSync(cmd.path, '');
+        capture = cmd.path;
+        emit({ event: 'capture-started', path: cmd.path });
+    },
+
+    'capture-stop': () => {
+        if (!capture) return emit({ event: 'error', message: 'capture-stop failed: no capture is running' });
+        emit({ event: 'capture-stopped', path: capture, packets: 12, bytes: 3456 });
+        capture = undefined;
+    },
+
+    'emit': (cmd) => emit(cmd.event),
+
     'set-socks': (cmd) => {
         if (process.env.STUB_NO_SET_SOCKS) {
             return emit({ event: 'error', message: 'set-socks is not supported' });
@@ -165,7 +207,14 @@ process.stdin.on('end', () => {
 
 // Things the interceptor has to ignore: stray output, and events it has no use for
 process.stdout.write('this line is not JSON\n');
-emit({ event: 'ready', listen, publicKey: 'STUBPUBLICKEY=' });
+emit({
+    event: 'ready',
+    listen,
+    publicKey: 'STUBPUBLICKEY=',
+    capabilities: process.env.STUB_CAPABILITIES
+        ? JSON.parse(process.env.STUB_CAPABILITIES)
+        : { quicDecrypt: false, ikev2: false }
+});
 emit({ event: 'dns', peer: 'p1', name: 'example.com', qtype: 'A', rcode: 'NOERROR', answers: [], ms: 3 });
 emit({ event: 'quic', peer: 'p1', dst: '1.2.3.4:443', action: 'blocked' });
 
