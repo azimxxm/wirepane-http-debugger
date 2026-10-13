@@ -4,6 +4,12 @@ Last updated 2026-10-13 (evening). A new session (or one after /clear or /compac
 
 **Qisqacha (o'zbekcha):** iPhone sinovidagi UI xatolari tuzatildi, VPN rejimining 1-bosqichi (WireGuard) qurildi va `main`ga push qilindi. Egasining iPhone'i Wirepane'ning o'z VPN'iga ulandi. Endi egasidan ilovalar bo'yicha natija va packaged app sinovi kutilyapti, kod tomonda esa quyidagi ro'yxat qoldi. Release faqat egasi aytganda.
 
+## Done on 2026-10-13 (evening): per-device Clear and pinned devices
+
+- Devices panel, a device row's right-click menu: **Clear this device's traffic** (no question; pinned requests stay; one batch removal in `EventsStore`) and **Pin to top / Unpin**. Pinned devices sit right under All devices with a pin icon, are saved, stay as muted placeholders (count 0) after Clear, and keep the panel open after a restart. Clear's question now says how much of the traffic the pinned devices sent.
+- Checks: UI 2193 unit tests and tsc clean; headless end to end with three devices (This Mac, an iPhone from the LAN address, an Android from the link-local IPv6). Also fixed on the way: `lang="en"` and the list header's columnheader role (axe), View's Shift-range selection after a device clear.
+- Left (P2): no undo or toast after a device clear; no divider between pinned and other devices; pin and clear only in the right-click menu; clearing the device View is filtered to goes back to All devices unless it's pinned; late events of requests in flight during a device clear wait in `orphanedEvents`; showing only the pinned devices' traffic (the "20 devices, I need 2" case) isn't a filter yet.
+
 ## Done on 2026-10-13 (evening): Intel Mac build on the v1.1.0 release
 
 - `./scripts/build-release.sh mac-x64` (or `scripts/build-mac-x64.sh`) builds `Wirepane-<VERSION>-mac-x64.pkg` and `.zip`; on Apple Silicon it needs Rosetta 2, which runs the server and VPN helper checks. CI has a `mac-x64` job on `macos-14` with Rosetta (not run yet).

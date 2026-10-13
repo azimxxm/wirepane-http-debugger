@@ -2,6 +2,12 @@
 
 ## 2026-10-13
 
+### Per-device Clear and pinned devices (Devices panel)
+
+- **Built** (workflow: build, then QA, design and code review, then one fix round; the second QA round was skipped and the lead checked instead): Clear this device's traffic and Pin to top / Unpin in a device's right-click menu, pinned placeholders, saved pins, Clear's question mentions pinned devices.
+- **Fixed after review:** unreadable selected placeholder (1.38:1 → 5.47:1), panel hidden after a restart, a reconnecting phone overwriting its pin's name, View's selection count after a device clear, the right-clicked row unmarked; axe's `html-has-lang` and the list header's `aria-required-children`.
+- **Checks:** 2193 UI unit tests and tsc clean (rerun by the lead), headless end to end with three devices, header before/after screenshots identical.
+
 ### Intel Mac build on the v1.1.0 release
 
 - **Built:** a `darwin-x64` target in `build-server.sh` and `build-tunnel.sh` (`x86_64-apple-darwin`), `mac-x64` in `build-release.sh` (on Apple Silicon it needs Rosetta 2, which runs the server and helper checks), the Mac CPU taken from `WIREPANE_SERVER_TARGET` in the builder config, `minimumSystemVersion` 13.5 (Node.js 24's macOS binary is built for 13.5, so "macOS 12" was wrong for both CPUs), one-line `scripts/build-<platform>.sh` shortcuts, and a `mac-x64` CI job on `macos-14` with Rosetta (linted, not run).
