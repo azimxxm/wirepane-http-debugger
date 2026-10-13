@@ -244,7 +244,7 @@ describe("The WireGuard VPN helpers", () => {
         const stubEnvKeys = [
             'WIREPANE_TUNNEL_BINPATH', 'STUB_LOG', 'STUB_HANDSHAKE_MS', 'STUB_NO_SET_SOCKS',
             'STUB_FAIL_START', 'STUB_IGNORE_STDIN_EOF', 'STUB_NOISY_ERROR', 'STUB_LIST_PEERS_ERROR',
-            'STUB_LATE_PEER', 'STUB_CAPABILITIES', 'STUB_NO_IKEV2_OPTION', 'STUB_IKEV2_BIND_ERROR',
+            'STUB_LATE_PEER', 'STUB_CAPABILITIES', 'STUB_CAPTURE_NUMBERED', 'STUB_CAPTURE_SELF_STOP', 'STUB_NO_IKEV2_OPTION', 'STUB_IKEV2_BIND_ERROR',
             'STUB_IKEV2_BAD_IDENTITY', 'STUB_REFUSE_DNS_PATTERN'
         ];
 
@@ -496,6 +496,25 @@ describe("The WireGuard VPN helpers", () => {
             const stopped = await interceptor.activate(PROXY_PORT, { action: 'capture-stop' }) as any;
             expect(stopped).to.deep.equal({ running: false, path: started.path, packets: 12, bytes: 3456 });
             expect((await metadata()).capture.running).to.equal(false);
+        });
+
+        it("keeps the path the helper actually wrote, when it had to number the file", async () => {
+            process.env.STUB_CAPTURE_NUMBERED = '1';
+            await start();
+            const started = await interceptor.activate(PROXY_PORT, { action: 'capture-start' }) as any;
+            expect(path.basename(started.path)).to.match(/-2\.pcapng$/);
+            expect(fs.existsSync(started.path)).to.equal(true);
+            expect((await metadata()).capture.path).to.equal(started.path);
+        });
+
+        it("records a capture the helper ended by itself, with its reason", async () => {
+            process.env.STUB_CAPTURE_SELF_STOP = '1';
+            await start();
+            const started = await interceptor.activate(PROXY_PORT, { action: 'capture-start' }) as any;
+            await waitFor(async () => !(await metadata()).capture.running, 2000);
+            expect((await metadata()).capture).to.deep.equal({
+                running: false, path: started.path, packets: 99, bytes: 2147483648, reason: 'size limit'
+            });
         });
 
         it("ends the capture state when the helper stops", async () => {

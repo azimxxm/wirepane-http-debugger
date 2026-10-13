@@ -48,6 +48,8 @@ export interface SidecarOptions {
     ikev2?: string;
     // Every event the network tools show (dns, udp-*, quic, tls-hello, stats)
     onToolEvent?: (event: TunnelEvent) => void;
+    // A capture-stopped nobody asked for: the helper hit its size limit or stopped capturing itself
+    onCaptureStopped?: (summary: CaptureSummary) => void;
     // How often the helper is asked for its counters; 0 never asks
     statsIntervalMs?: number;
 }
@@ -69,6 +71,17 @@ export interface CaptureSummary {
     path: string;
     packets: number;
     bytes: number;
+    // wirepane: set when the helper ended the capture itself, e.g. "size limit"
+    reason?: string;
+}
+
+function toCaptureSummary(event: TunnelEvent): CaptureSummary {
+    return {
+        path: typeof event.path === 'string' ? event.path : '',
+        packets: typeof event.packets === 'number' ? event.packets : 0,
+        bytes: typeof event.bytes === 'number' ? event.bytes : 0,
+        ...(typeof event.reason === 'string' && event.reason ? { reason: event.reason } : {})
+    };
 }
 
 const READY_TIMEOUT_MS = 10_000;
@@ -183,6 +196,7 @@ export class TunnelSidecar {
     private ikev2OffReason: string | undefined;
 
     private onToolEvent: ((event: TunnelEvent) => void) | undefined;
+    private onCaptureStopped: ((summary: CaptureSummary) => void) | undefined;
 
     private child: ChildProcess;
     private peers = new Map<string, TunnelPeer>();
@@ -210,6 +224,7 @@ export class TunnelSidecar {
         this.listen = `0.0.0.0:${options.listenPort}`;
         this.socksAddr = options.socksAddr;
         this.onToolEvent = options.onToolEvent;
+        this.onCaptureStopped = options.onCaptureStopped;
 
         this.readyEvent = new Promise<void>((resolve, reject) => {
             this.markReady = resolve;
@@ -331,8 +346,10 @@ export class TunnelSidecar {
         await this.sendCommand({ cmd: 'set-quic', mode }, 'quic-mode');
     }
 
-    async captureStart(path: string): Promise<void> {
-        await this.sendCommand({ cmd: 'capture-start', path }, 'capture-started');
+    // The helper numbers the file (-2, -3…) when the name is taken, so the real path is in its reply
+    async captureStart(path: string): Promise<string> {
+        const reply = await this.sendCommand({ cmd: 'capture-start', path }, 'capture-started');
+        return typeof reply.path === 'string' && reply.path ? reply.path : path;
     }
 
     // The reply is a tool event like the others: it reaches onToolEvent on its way in. A slow
@@ -351,11 +368,7 @@ export class TunnelSidecar {
 
     async captureStop(): Promise<CaptureSummary> {
         const reply = await this.sendCommand({ cmd: 'capture-stop' }, 'capture-stopped');
-        return {
-            path: typeof reply.path === 'string' ? reply.path : '',
-            packets: typeof reply.packets === 'number' ? reply.packets : 0,
-            bytes: typeof reply.bytes === 'number' ? reply.bytes : 0
-        };
+        return toCaptureSummary(reply);
     }
 
     private sendCommand(
@@ -460,6 +473,17 @@ export class TunnelSidecar {
             case 'error':
                 this.handleErrorEvent(event);
                 return; // An error event isn't a reply, see handleErrorEvent
+
+            case 'capture-stopped':
+                // Not the answer to our capture-stop: the helper ended the capture on its own
+                if (this.pending?.replyEvent !== 'capture-stopped') {
+                    try {
+                        this.onCaptureStopped?.(toCaptureSummary(event));
+                    } catch (e: any) {
+                        console.warn(`wireguard-vpn: a capture listener failed (${e?.message})`);
+                    }
+                }
+                break;
 
             default:
                 // dns, udp-*, quic, tls-hello, stats go to the network tools; replies like

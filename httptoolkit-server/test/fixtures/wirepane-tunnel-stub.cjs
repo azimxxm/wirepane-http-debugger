@@ -15,6 +15,8 @@
 //   STUB_LATE_PEER            shortly after ready, add a peer behind the parent's back and
 //                             send a "peer" event for it
 //   STUB_CAPABILITIES         JSON for the ready event's "capabilities"
+//   STUB_CAPTURE_NUMBERED     capture-start writes and reports <name>-2.pcapng, as when the name is taken
+//   STUB_CAPTURE_SELF_STOP    end a capture by itself right after starting it ("size limit")
 //   STUB_NO_IKEV2_OPTION      refuse to start with --ikev2, like a helper built before it
 //   STUB_IKEV2_BIND_ERROR     with --ikev2 and capabilities.ikev2, report UDP 500 as taken:
 //                             IKEv2 stays off (ready's "ikev2" is null), WireGuard works
@@ -204,9 +206,16 @@ const handlers = {
 
     'capture-start': (cmd) => {
         if (capture) return emit({ event: 'error', message: 'capture-start failed: a capture is already running' });
-        fs.writeFileSync(cmd.path, '');
-        capture = cmd.path;
-        emit({ event: 'capture-started', path: cmd.path });
+        const file = process.env.STUB_CAPTURE_NUMBERED ? cmd.path.replace(/\.pcapng$/, '-2.pcapng') : cmd.path;
+        fs.writeFileSync(file, '');
+        capture = file;
+        emit({ event: 'capture-started', path: file });
+        if (process.env.STUB_CAPTURE_SELF_STOP) {
+            setTimeout(() => {
+                emit({ event: 'capture-stopped', path: file, packets: 99, bytes: 2147483648, reason: 'size limit' });
+                capture = undefined;
+            }, 50);
+        }
     },
 
     'capture-stop': () => {

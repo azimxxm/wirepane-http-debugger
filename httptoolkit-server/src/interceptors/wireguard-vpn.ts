@@ -332,8 +332,8 @@ export class WireGuardVpnInterceptor implements Interceptor {
 
         const file = capturePath(this.config.configPath, new Date());
         await fs.promises.mkdir(path.dirname(file), { recursive: true });
-        await sidecar.captureStart(file);
-        this.capture = { running: true, path: file };
+        const started = await sidecar.captureStart(file);
+        this.capture = { running: true, path: started };
         return { ...this.capture };
     }
 
@@ -454,7 +454,10 @@ export class WireGuardVpnInterceptor implements Interceptor {
             // can't be bound, only IKEv2 is off and WireGuard works as before
             ikev2: IKEV2_LISTEN,
             statsIntervalMs: this.environment.statsIntervalMs,
-            onToolEvent: (event) => this.toolEvents.push(event)
+            onToolEvent: (event) => this.toolEvents.push(event),
+            onCaptureStopped: (summary) => {
+                this.capture = { running: false, ...summary, path: summary.path || this.capture.path };
+            }
         });
 
         // A new helper knows none of the network tools' settings yet
