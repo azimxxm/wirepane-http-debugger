@@ -573,7 +573,13 @@ function httpItemToParts(item: BrunoItem, request: BrunoRequest, files: ItemFile
         graphql: toGraphqlBody(body?.graphql),
         // The Params tab shows the disabled query params, and fills in :name path params
         queryParams: tabQueryParamsOf(request.params ?? []),
-        pathTemplate: pathTemplateOf(request.url ?? '')
+        pathTemplate: pathTemplateOf(request.url ?? ''),
+        auth: request.auth as any,
+        scripts: {
+            preRequest: request.script?.req || '',
+            postResponse: request.tests || ''
+        },
+        settings: item.settings as any
     }).toData();
 
     const { text, textMode } = rawTextOf(body, extras.bodyMode);
@@ -677,13 +683,28 @@ function httpPartsToItem(
     addStructuredData(body, parts, baseBody, filePathOf, warnings);
 
     const { url, params } = toUrlAndParams(parts.url, isFromWebSocket ? undefined : baseRequest, parts.extras);
+    const auth = parts.extras?.auth
+        ? parts.extras.auth as any
+        : baseRequest?.auth ?? { mode: defaults.authMode ?? 'inherit' };
+
+    const script = { ...baseRequest?.script };
+    if (parts.extras?.scripts?.preRequest) {
+        script.req = parts.extras.scripts.preRequest;
+    } else {
+        delete script.req;
+    }
+
+    const tests = parts.extras?.scripts?.postResponse
+        ? parts.extras.scripts.postResponse
+        : (baseRequest?.tests ?? '');
+
     const request: BrunoRequest = {
-        auth: { mode: defaults.authMode ?? 'inherit' },
-        script: {},
         vars: {},
         assertions: [],
-        tests: '',
         ...baseRequest,
+        auth,
+        script,
+        tests,
         method: parts.method.toUpperCase(),
         url,
         params,
@@ -696,7 +717,19 @@ function httpPartsToItem(
         : base?.type === 'graphql-request' || isFromWebSocket ? 'http-request'
         : base?.type ?? 'http-request';
 
-    return { item: newItem(base, defaults, type, request), warnings };
+    const item = newItem(base, defaults, type, request);
+    const hasCustomSettings = parts.extras?.settings && (
+        parts.extras.settings.httpVersion !== 'auto' ||
+        !parts.extras.settings.sslVerification ||
+        !parts.extras.settings.followRedirects ||
+        parts.extras.settings.followOriginalMethod ||
+        parts.extras.settings.followAuthorizationHeader
+    );
+    if (hasCustomSettings) {
+        item.settings = { ...item.settings, ...parts.extras?.settings };
+    }
+
+    return { item, warnings };
 }
 
 function webSocketPartsToItem(

@@ -7,12 +7,15 @@ import type { RequestEditorTab } from '../../../model/send/send-extras';
 
 export const TAB_BAR_HEIGHT = '32px';
 
-// ⌘⌥1–4 (Ctrl+Alt+1–4 elsewhere), in the order of the tabs
+// ⌘⌥1–7 (Ctrl+Alt+1–7 elsewhere), in the order of the tabs
 export const EDITOR_TAB_SHORTCUTS: { readonly [tab in RequestEditorTab]: string } = {
     params: 'Cmd+Alt+1',
-    headers: 'Cmd+Alt+2',
-    body: 'Cmd+Alt+3',
-    docs: 'Cmd+Alt+4'
+    authorization: 'Cmd+Alt+2',
+    headers: 'Cmd+Alt+3',
+    body: 'Cmd+Alt+4',
+    scripts: 'Cmd+Alt+5',
+    settings: 'Cmd+Alt+6',
+    docs: 'Cmd+Alt+7'
 };
 
 export interface EditorTabInfo {

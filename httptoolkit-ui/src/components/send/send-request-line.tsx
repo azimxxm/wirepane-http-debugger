@@ -1,5 +1,4 @@
 import * as React from 'react';
-import { Method } from 'mockttp';
 import * as HarFormat from 'har-format';
 import { parseCurlCommand } from 'curl-as-har-request';
 
@@ -15,11 +14,28 @@ import { IconButton } from '../common/icon-button';
 import { WEBSOCKET_OPTION } from '../../model/send/websocket/request-type';
 import { useTypeSwitchFocus } from './websocket/use-type-switch-focus';
 
-type MethodName = keyof typeof Method;
-const validMethods = Object.values(Method)
-    .filter(
-        value => typeof value === 'string'
-    ) as Array<MethodName>;
+const STANDARD_METHODS = [
+    'GET',
+    'POST',
+    'PUT',
+    'PATCH',
+    'DELETE',
+    'HEAD',
+    'OPTIONS'
+];
+
+const EXTENDED_METHODS = [
+    'TRACE',
+    'CONNECT',
+    'PURGE',
+    'PROPFIND',
+    'PROPPATCH',
+    'MKCOL',
+    'COPY',
+    'MOVE',
+    'LOCK',
+    'UNLOCK'
+];
 
 export const SendRequestLineContainer = styled.form`
     background-color: ${p => p.theme.mainBackground};
@@ -61,6 +77,26 @@ export const MethodSelect = styled(Select)<{ httpMethod: string }>`
 
     color: ${p => p.theme.mainColor};
     background-color: ${p => p.theme.mainLowlightBackground};
+
+    optgroup {
+        background-color: ${p => p.theme.mainBackground};
+        color: ${p => p.theme.mainColor};
+    }
+`;
+
+export const MethodInput = styled(TextInput)<{ httpMethod: string }>`
+    border-radius: 5px 0 0 5px;
+    border: none;
+    &:not(:focus-visible) { outline: none; }
+    border-left: 5px solid ${p => getMethodThemeColor(p.httpMethod, p.theme)};
+    padding: 5px 6px 5px 12px;
+    font-size: ${p => p.theme.textInputFontSize};
+    font-weight: bold;
+    height: 100%;
+    width: 100%;
+    color: ${p => p.theme.mainColor};
+    background-color: ${p => p.theme.mainLowlightBackground};
+    text-transform: uppercase;
 `;
 
 export const MethodSelectContainer = styled.div`
@@ -83,11 +119,12 @@ export const MethodSelectContainer = styled.div`
     }
 
     &:has(select:focus-visible),
+    &:has(input:focus-visible),
     form:has(> input:focus-visible) > & {
         box-shadow: 0 0 0 2px ${p => p.theme.focusRing};
         clip-path: inset(-3px 0 -3px -3px);
 
-        > select {
+        > select, > input {
             outline: none;
         }
     }
@@ -183,11 +220,21 @@ export const SendRequestLine = (props: {
     // wirepane: adds a WebSocket entry to the method picker, which switches the tab to WebSocket
     onSelectWebSocket?: () => void;
 }) => {
+    const [isCustomMode, setIsCustomMode] = React.useState(false);
+    const [customMethodText, setCustomMethodText] = React.useState('');
+    const customInputRef = React.useRef<HTMLInputElement>(null);
+
     const updateMethodFromEvent = React.useCallback((changeEvent: React.ChangeEvent<HTMLSelectElement>) => {
+        const value = changeEvent.target.value;
         // wirepane: the WebSocket entry changes the request type, not the method
-        if (changeEvent.target.value === WEBSOCKET_OPTION) return props.onSelectWebSocket?.();
-        props.updateMethod(changeEvent.target.value);
-    }, [props.updateMethod, props.onSelectWebSocket]);
+        if (value === WEBSOCKET_OPTION) return props.onSelectWebSocket?.();
+        if (value === '__CUSTOM__') {
+            setIsCustomMode(true);
+            setCustomMethodText(props.method || '');
+            return;
+        }
+        props.updateMethod(value);
+    }, [props.updateMethod, props.onSelectWebSocket, props.method]);
 
     // wirepane: keeps the focus when the URL or the picker switches the tab to WebSocket and back
     const methodSelectRef = React.useRef<HTMLSelectElement>(null);
@@ -247,23 +294,76 @@ export const SendRequestLine = (props: {
         onSubmit={sendRequest}
     >
         <MethodSelectContainer>
-            <MethodSelect
-                ref={methodSelectRef}
-                value={props.method}
-                onChange={updateMethodFromEvent}
-                httpMethod={props.method}
-            >
-                { validMethods.map((methodOption) =>
-                    <option
-                        key={methodOption}
-                        value={methodOption}
+            { isCustomMode ? (
+                <MethodInput
+                    ref={customInputRef}
+                    autoFocus
+                    httpMethod={customMethodText || props.method}
+                    placeholder="METHOD"
+                    value={customMethodText}
+                    onChange={(e) => {
+                        const val = e.target.value.toUpperCase();
+                        setCustomMethodText(val);
+                        if (val.trim()) {
+                            props.updateMethod(val.trim());
+                        }
+                    }}
+                    onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                            e.preventDefault();
+                            setIsCustomMode(false);
+                        } else if (e.key === 'Escape') {
+                            e.preventDefault();
+                            if (!props.method) props.updateMethod('GET');
+                            setIsCustomMode(false);
+                        }
+                    }}
+                    onBlur={() => {
+                        if (!props.method || !props.method.trim()) {
+                            props.updateMethod('GET');
+                        }
+                        setIsCustomMode(false);
+                    }}
+                />
+            ) : (
+                <>
+                    <MethodSelect
+                        ref={methodSelectRef}
+                        value={props.method}
+                        onChange={updateMethodFromEvent}
+                        httpMethod={props.method}
                     >
-                        { methodOption }
-                    </option>
-                ) }
-                { props.onSelectWebSocket && <option value={WEBSOCKET_OPTION}>WebSocket</option> }
-            </MethodSelect>
-            <MethodSelectArrow />
+                        <optgroup label="Standard">
+                            { STANDARD_METHODS.map((methodOption) =>
+                                <option
+                                    key={methodOption}
+                                    value={methodOption}
+                                >
+                                    { methodOption }
+                                </option>
+                            ) }
+                        </optgroup>
+                        <optgroup label="Extended / WebDAV">
+                            { EXTENDED_METHODS.map((methodOption) =>
+                                <option
+                                    key={methodOption}
+                                    value={methodOption}
+                                >
+                                    { methodOption }
+                                </option>
+                            ) }
+                        </optgroup>
+                        { !STANDARD_METHODS.includes(props.method) && !EXTENDED_METHODS.includes(props.method) && props.method && (
+                            <optgroup label="Custom">
+                                <option value={props.method}>{ props.method }</option>
+                            </optgroup>
+                        ) }
+                        <option value="__CUSTOM__">+ Custom method...</option>
+                        { props.onSelectWebSocket && <option value={WEBSOCKET_OPTION}>WebSocket</option> }
+                    </MethodSelect>
+                    <MethodSelectArrow />
+                </>
+            ) }
         </MethodSelectContainer>
         <UrlInput
             ref={urlInputRef}

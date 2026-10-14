@@ -38,6 +38,7 @@ import {
 } from './send-request-model';
 import { buildRequestForSend } from './build-request';
 import { dropUnusedSendFiles } from './body-modes/file-cleanup';
+import { SendSettingsData } from './send-extras';
 
 export class SendStore {
 
@@ -60,7 +61,7 @@ export class SendStore {
 
     // wirepane: the connection options Send uses (proxy, CAs, client certificates...), so
     // GraphQL schema fetches and WebSocket connections behave like sent requests
-    getRequestOptions(url: URL): RequestOptions {
+    getRequestOptions(url: URL, settings?: SendSettingsData): RequestOptions {
         const passthroughOptions = this.rulesStore.activePassthroughOptions;
 
         const effectivePort = getEffectivePort(url);
@@ -74,14 +75,25 @@ export class SendStore {
             ({ cert: cert.rawPEM })
         );
 
+        let ignoreHostHttpsErrors = passthroughOptions.ignoreHostHttpsErrors;
+        if (settings?.sslVerification !== undefined) {
+            if (!settings.sslVerification) {
+                ignoreHostHttpsErrors = true;
+            }
+        }
+
         return {
-            ignoreHostHttpsErrors: passthroughOptions.ignoreHostHttpsErrors,
+            ignoreHostHttpsErrors,
             additionalTrustedCAs: additionalCACerts,
             trustAdditionalCAs: additionalCACerts, // Deprecated alias, here for backward compat
             clientCertificate,
             proxyConfig: getProxyConfig(this.rulesStore.proxyConfig),
             lookupOptions: passthroughOptions.lookupOptions,
-            keyLogFile: this.proxyStore.keyLogFilePath
+            keyLogFile: this.proxyStore.keyLogFilePath,
+            followRedirects: settings?.followRedirects,
+            maxRedirects: settings?.maxRedirects ?? 5,
+            followOriginalMethod: settings?.followOriginalMethod,
+            followAuthHeader: settings?.followAuthorizationHeader
         };
     }
 
@@ -197,7 +209,10 @@ export class SendStore {
                 sendRequest.pendingSend.promise.then(clearPending, clearPending);
             });
 
-            const requestOptions = this.getRequestOptions(new URL(requestInput.url));
+            const requestOptions = this.getRequestOptions(
+                new URL(requestInput.url),
+                sendRequest.request.extras.settings
+            );
 
             const encodedBody = await requestInput.rawBody.encodingBestEffortPromise;
 

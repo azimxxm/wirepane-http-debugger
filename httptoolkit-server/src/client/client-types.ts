@@ -92,6 +92,26 @@ export interface RequestOptions {
      * required.
      */
     abortSignal?: AbortSignal;
+
+    /**
+     * Whether to automatically follow 3xx HTTP redirects.
+     */
+    followRedirects?: boolean;
+
+    /**
+     * The maximum number of redirects to follow before stopping.
+     */
+    maxRedirects?: number;
+
+    /**
+     * If true, follow 301/302 redirects with the original HTTP method instead of GET.
+     */
+    followOriginalMethod?: boolean;
+
+    /**
+     * If true, keep the Authorization header when redirected to another host/origin.
+     */
+    followAuthHeader?: boolean;
 }
 
 // --- Response types ---

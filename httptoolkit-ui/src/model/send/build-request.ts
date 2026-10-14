@@ -6,6 +6,7 @@ import { getHeaderValue, removeHeader, setHeaderValue } from '../http/headers';
 import { RequestInput } from './send-request-model';
 import { FileRef, FormField, GraphqlBody, MultipartField, SendExtras } from './send-extras';
 import { sendFileStore } from './send-files';
+import { resolveAuthEntries } from './auth/auth-resolver';
 
 /**
  * Turns a Send tab's form, multipart, binary or GraphQL body into the raw request that is
@@ -164,10 +165,30 @@ async function buildBody(input: RequestInput, headers: RawHeaders): Promise<Buil
 }
 
 export async function buildRequestForSend(input: RequestInput): Promise<RequestInput> {
-    if (input.extras.sendsRawBody || input.extras.requestType !== 'http') return input;
+    if (input.extras.requestType !== 'http') return input;
+
+    const hasAuth = input.extras.auth && input.extras.auth.mode !== 'none' && input.extras.auth.mode !== 'inherit';
+    if (input.extras.sendsRawBody && !hasAuth) return input;
 
     const headers: RawHeaders = input.headers.map(([name, value]) => [name, value]);
     const built = await buildBody(input, headers);
+    let url = built.url ?? input.url;
+
+    if (hasAuth) {
+        const authResult = resolveAuthEntries(input.extras.auth, url, input.method);
+        for (const [key, value] of authResult.headers) {
+            setHeaderValue(headers, key, value);
+        }
+        if (authResult.queryParams.length > 0) {
+            try {
+                const parsedUrl = new URL(url);
+                for (const [k, v] of authResult.queryParams) {
+                    parsedUrl.searchParams.append(k, v);
+                }
+                url = parsedUrl.toString();
+            } catch {}
+        }
+    }
 
     if (built.defaultContentType && getHeaderValue(headers, 'content-type') === undefined) {
         setHeaderValue(headers, 'content-type', built.defaultContentType);
@@ -175,7 +196,7 @@ export async function buildRequestForSend(input: RequestInput): Promise<RequestI
 
     const request = new RequestInput({
         method: input.method,
-        url: built.url ?? input.url,
+        url,
         headers,
         requestContentType: input.requestContentType,
         rawBody: built.body,

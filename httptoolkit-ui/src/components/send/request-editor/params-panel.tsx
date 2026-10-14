@@ -19,8 +19,55 @@ import {
 } from '../body/field-table';
 import { PanelNote, PanelScroll, PanelSection, PanelSectionHeading } from './panel-layout';
 
-// The same columns as the body's form table: enabled, name, value, remove
-const PARAM_COLUMNS = '20px minmax(0, 1fr) minmax(0, 2fr) min-content';
+// Grid: [Checkbox 20px] [Name 1fr] [Value 2fr] [Description 1.5fr] [Delete min-content]
+const PARAM_COLUMNS = '20px minmax(0, 1fr) minmax(0, 2fr) minmax(0, 1.5fr) min-content';
+
+const ToolbarRow = styled.div`
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 8px;
+`;
+
+const ToolbarTitle = styled.div`
+    font-size: ${p => p.theme.smallPrintSize};
+    font-weight: 600;
+    color: ${p => p.theme.mainLowlightColor};
+`;
+
+const ToolbarButton = styled.button.attrs(() => ({ type: 'button' }))`
+    background: none;
+    border: none;
+    color: ${p => p.theme.popColor};
+    font-size: ${p => p.theme.smallPrintSize};
+    font-weight: 500;
+    cursor: pointer;
+    padding: 2px 6px;
+    border-radius: 4px;
+
+    &:hover {
+        background-color: ${p => p.theme.rowHover};
+    }
+`;
+
+const BulkTextarea = styled.textarea`
+    width: 100%;
+    min-height: 140px;
+    border-radius: 4px;
+    padding: 10px;
+    box-sizing: border-box;
+    border: 1px solid ${p => p.theme.containerBorder};
+    background-color: ${p => p.theme.mainBackground};
+    color: ${p => p.theme.mainColor};
+    font-family: ${p => p.theme.monoFontFamily};
+    font-size: ${p => p.theme.textInputFontSize};
+    resize: vertical;
+
+    &:focus {
+        outline: none;
+        border-color: ${p => p.theme.popColor};
+    }
+`;
 
 const PathParamName = styled.div`
     height: 30px;
@@ -61,7 +108,6 @@ const QueryParamRow = (props: {
             value={name}
             placeholder='Name'
             aria-label='Query param name'
-            title={param?.description}
             onChange={(event) => props.onChange({ name: event.target.value })}
         />
         <FieldCellInput
@@ -69,6 +115,12 @@ const QueryParamRow = (props: {
             placeholder='Value'
             aria-label={name ? `Value of ${name}` : 'Query param value'}
             onChange={(event) => props.onChange({ value: event.target.value })}
+        />
+        <FieldCellInput
+            value={param?.description ?? ''}
+            placeholder='Description'
+            aria-label={name ? `Description of ${name}` : 'Query param description'}
+            onChange={(event) => props.onChange({ description: event.target.value })}
         />
         <FieldDeleteButton
             fieldName={name}
@@ -93,6 +145,7 @@ const PathParamRow = (props: {
             aria-label={`Value of path param ${name}`}
             onChange={(event) => props.onChange(event.target.value)}
         />
+        <span />
         <FieldDeleteButton fieldName={name} placeholder={true} onClick={() => {}} />
     </FieldRow>;
 };
@@ -105,6 +158,8 @@ export const ParamsPanel = observer((props: { requestInput: RequestInput }) => {
     const { requestInput } = props;
     const tableRef = React.useRef<HTMLDivElement>(null);
     const headingId = React.useId();
+    const [isBulkEdit, setIsBulkEdit] = React.useState(false);
+    const [bulkText, setBulkText] = React.useState('');
 
     const params = getQueryParams(requestInput.url, requestInput.extras.queryParams);
     const pathParams = getPathParams(requestInput.url, requestInput.extras.pathTemplate);
@@ -121,6 +176,37 @@ export const ParamsPanel = observer((props: { requestInput: RequestInput }) => {
         focusRowAfterRemoval(tableRef.current, index);
     };
 
+    const toggleBulkEdit = () => {
+        if (!isBulkEdit) {
+            const text = params
+                .filter(p => p.name.trim() !== '')
+                .map(p => `${p.enabled ? '' : '// '}${p.name}: ${p.value}`)
+                .join('\n');
+            setBulkText(text);
+            setIsBulkEdit(true);
+        } else {
+            const lines = bulkText.split('\n');
+            const newParams: QueryParam[] = [];
+            for (const line of lines) {
+                const trimmed = line.trim();
+                if (!trimmed) continue;
+                const isCommented = trimmed.startsWith('//') || trimmed.startsWith('#');
+                const clean = isCommented ? trimmed.replace(/^(\/\/|#)\s*/, '') : trimmed;
+                const colonIdx = clean.indexOf(':');
+                if (colonIdx > 0) {
+                    newParams.push({
+                        name: clean.slice(0, colonIdx).trim(),
+                        value: clean.slice(colonIdx + 1).trim(),
+                        enabled: !isCommented,
+                        description: ''
+                    });
+                }
+            }
+            setQueryParams(requestInput, newParams);
+            setIsBulkEdit(false);
+        }
+    };
+
     // Rows are keyed by position, so the empty last row keeps its inputs (and the focus)
     // when typing turns it into a param
     const rows = [...params, undefined].map((param, index) =>
@@ -134,10 +220,24 @@ export const ParamsPanel = observer((props: { requestInput: RequestInput }) => {
 
     return <PanelScroll>
         <PanelSection aria-labelledby={`${headingId}-query`}>
-            <PanelSectionHeading id={`${headingId}-query`}>Query params</PanelSectionHeading>
-            <FieldTable ref={tableRef} onKeyDown={onFieldTableKeyDown}>
-                { rows }
-            </FieldTable>
+            <ToolbarRow>
+                <ToolbarTitle id={`${headingId}-query`}>Query params ({params.filter(p => p.enabled && p.name).length})</ToolbarTitle>
+                <ToolbarButton onClick={toggleBulkEdit}>
+                    {isBulkEdit ? 'Key-Value Edit' : 'Bulk Edit'}
+                </ToolbarButton>
+            </ToolbarRow>
+
+            {isBulkEdit ? (
+                <BulkTextarea
+                    placeholder={"param_name: param_value\n// disabled_param: value"}
+                    value={bulkText}
+                    onChange={(e) => setBulkText(e.target.value)}
+                />
+            ) : (
+                <FieldTable ref={tableRef} onKeyDown={onFieldTableKeyDown}>
+                    { rows }
+                </FieldTable>
+            )}
         </PanelSection>
 
         { pathParams.length > 0 && <PanelSection aria-labelledby={`${headingId}-path`}>

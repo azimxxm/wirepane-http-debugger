@@ -216,6 +216,10 @@ export interface RequestOptions {
     proxyConfig?: ClientProxyConfig;
     lookupOptions?: { servers?: string[] };
     keyLogFile?: string;
+    followRedirects?: boolean;
+    maxRedirects?: number;
+    followOriginalMethod?: boolean;
+    followAuthHeader?: boolean;
 }
 
 export const RULE_PARAM_REF_KEY = '__rule_param_reference__';

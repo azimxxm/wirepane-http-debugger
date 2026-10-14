@@ -128,6 +128,46 @@ describe("The HTTP client API", () => {
         ]);
     });
 
+    it("should follow redirects when followRedirects is true", async () => {
+        await mockServer.forGet('/redirect-target').thenReply(200, 'Target reached');
+        await mockServer.forGet('/initial').thenReply(302, 'Redirecting', {
+            'location': '/redirect-target'
+        });
+
+        const client = new HttpClient({});
+        const responseStream = await client.sendRequest({
+            url: mockServer.urlFor('/initial'),
+            method: 'GET',
+            headers: [['host', `localhost:${mockServer.port}`]]
+        }, {
+            followRedirects: true
+        });
+
+        const responseEvents = await streamToArray<any>(responseStream);
+        const head = responseEvents.find(e => e.type === 'response-head');
+        expect(head.statusCode).to.equal(200);
+
+        const bodyPart = responseEvents.find(e => e.type === 'response-body-part');
+        expect(bodyPart.rawBody.toString()).to.equal('Target reached');
+    });
+
+    it("should not follow redirects when followRedirects is false or omitted", async () => {
+        await mockServer.forGet('/initial-no-follow').thenReply(302, 'Redirecting', {
+            'location': '/somewhere-else'
+        });
+
+        const client = new HttpClient({});
+        const responseStream = await client.sendRequest({
+            url: mockServer.urlFor('/initial-no-follow'),
+            method: 'GET',
+            headers: [['host', `localhost:${mockServer.port}`]]
+        }, {});
+
+        const responseEvents = await streamToArray<any>(responseStream);
+        const head = responseEvents.find(e => e.type === 'response-head');
+        expect(head.statusCode).to.equal(302);
+    });
+
     describe("given an upstream proxy", () => {
 
         const proxyServer = mockttp.getLocal();

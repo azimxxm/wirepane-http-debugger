@@ -340,5 +340,30 @@ describe("Send request building", function () {
             expect(built.extras.formFields).not.to.equal(input.extras.formFields);
             expect(built.extras.formFields).to.deep.equal(input.extras.formFields);
         });
+
+        it("injects Authorization header for Bearer auth", async () => {
+            const input = requestWith({
+                auth: { mode: 'bearer', bearer: { token: 'secret-token-123' } }
+            });
+            const built = await buildRequestForSend(input);
+            expect(header(built.headers, 'authorization')).to.equal('Bearer secret-token-123');
+        });
+
+        it("injects Authorization header for Basic auth", async () => {
+            const input = requestWith({
+                auth: { mode: 'basic', basic: { username: 'testuser', password: 'testpass' } }
+            });
+            const built = await buildRequestForSend(input);
+            const expectedBase64 = Buffer.from('testuser:testpass').toString('base64');
+            expect(header(built.headers, 'authorization')).to.equal(`Basic ${expectedBase64}`);
+        });
+
+        it("injects API Key into query param when placement is queryparams", async () => {
+            const input = requestWith({
+                auth: { mode: 'apikey', apikey: { key: 'apiKey', value: 'my-val', placement: 'queryparams' } }
+            });
+            const built = await buildRequestForSend(input);
+            expect(built.url).to.equal('https://example.com/upload?apiKey=my-val');
+        });
     });
 });

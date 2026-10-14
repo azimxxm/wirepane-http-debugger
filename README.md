@@ -8,7 +8,7 @@ Developerlar va QA uchun bepul, ochiq kodli HTTP(S) debugger. U brauzer, iPhone,
 
 ## O'rnatish
 
-Installer [GitHub Releases](https://github.com/azimxxm/wirepane-http-debugger/releases) sahifasida (birinchi release: [v1.1.0](https://github.com/azimxxm/wirepane-http-debugger/releases/tag/v1.1.0), oxirgisi: [v1.2.0](https://github.com/azimxxm/wirepane-http-debugger/releases/tag/v1.2.0), ikkalasi 2026-10-13). Eng oxirgi versiyani oching va faylni yuklab oling:
+Installer [GitHub Releases](https://github.com/azimxxm/wirepane-http-debugger/releases) sahifasida (birinchi release: [v1.1.0](https://github.com/azimxxm/wirepane-http-debugger/releases/tag/v1.1.0), [v1.2.0](https://github.com/azimxxm/wirepane-http-debugger/releases/tag/v1.2.0), oxirgisi: [v1.3.0](https://github.com/azimxxm/wirepane-http-debugger/releases/tag/v1.3.0)). Eng oxirgi versiyani oching va faylni yuklab oling:
 
 | Tizim                                                    | Fayl                                                                                                                                        |
 | -------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -169,6 +169,7 @@ O'zgartirgan kodingiz saqlanib qoladi. Conflict chiqsa, uni oddiy `git merge`dag
   4. App ad-hoc imzolanadi, `.pkg` imzosiz, notarize yo'q. Build sertifikatsiz Mac'da ishlaydi.
   - [x] Birinchi release **v1.1.0** (2026-10-13): macOS arm64 `.pkg`, VPN rejimi va Phone network tool'lari bilan. O'sha kuni Intel Mac'lar uchun `x64` `.pkg` ham qo'shildi.
   - [x] **v1.2.0** (2026-10-13): faqat macOS arm64 `.pkg`. Devices panelida bitta qurilmani tozalash va qurilmani tepaga pin qilish; endi macOS 13.5 yoki yangiroq kerak.
+  - [x] **v1.3.0** (2026-10-14): Send panelida Postman darajasidagi 7 ta tab (Params, Authorization [10 ta auth rejimi], Headers, Body, Scripts, Settings, Docs), headers autocomplete va klaviatura navigatsiyasi, Postman table headers, Bruno `.bru` round-trip saqlash, server redirect va custom HTTP metodlar.
   - [ ] Windows (setup `.exe`, `.zip`) va Linux (`.AppImage`, `.deb`, `.rpm`): **tez orada**, egasi aytganda chiqariladi. Hammasi imzosiz; `./scripts/build-release.sh <mac|win|linux>` va GitHub Actions'dagi `release.yml` tayyor. Birinchi CI run'da mac build o'tdi, Windows va Linux build'lari tugashidan oldin to'xtatildi.
   - Akkaunt kelgach: Developer ID imzosi, hardened runtime va notarize. Ular `ENABLE_SIGNING=true` bilan yoqiladigan yo'lga qo'shiladi, imzosiz yo'l zaxira bo'lib qoladi.
 - [x] Barcha Pro feature'lar hamma uchun bepul. Akkaunt, login va to'lov yo'q. Map Local, Map Remote, mock, rewrite, delay, block, Settings (proxy, connection, API, themes), saqlanadigan rules, HAR import/export va MCP/CLI cheklovsiz ishlaydi.

@@ -8,12 +8,19 @@ import { getQueryParams, sentQueryParams, splitQuery } from './params/query-para
 import { getPathParams } from './params/path-params';
 
 /**
- * The tabs of Send's request pane: Params, Headers, Body and Docs (Docs only for requests
- * from a collection). Until one is picked, a request shows the tab that fits it, and that
- * follows the request as it changes. Picking a tab, or working inside one, keeps it.
+ * The tabs of Send's request pane: Params, Authorization, Headers, Body, Scripts, Settings
+ * and Docs (Docs only for requests from a collection).
  */
 
-export const REQUEST_EDITOR_TABS: readonly RequestEditorTab[] = ['params', 'headers', 'body', 'docs'];
+export const REQUEST_EDITOR_TABS: readonly RequestEditorTab[] = [
+    'params',
+    'authorization',
+    'headers',
+    'body',
+    'scripts',
+    'settings',
+    'docs'
+];
 
 // Methods whose requests usually carry a body
 const BODY_METHODS = ['POST', 'PUT', 'PATCH'];
@@ -22,6 +29,17 @@ type EditorTabInput = Pick<RequestInput, 'method' | 'url' | 'rawBody' | 'extras'
 
 export const hasRequestBody = (input: EditorTabInput) =>
     input.extras.bodyMode !== 'raw' || input.rawBody.decoded.byteLength > 0;
+
+export const hasAuth = (input: EditorTabInput) =>
+    input.extras.auth.mode !== 'none';
+
+export const hasScripts = (input: EditorTabInput) =>
+    !!(input.extras.scripts.preRequest?.trim() || input.extras.scripts.postResponse?.trim());
+
+export const hasCustomSettings = (input: EditorTabInput) => {
+    const s = input.extras.settings;
+    return s.httpVersion !== 'auto' || !s.sslVerification || !s.followRedirects || s.followOriginalMethod || s.followAuthorizationHeader;
+};
 
 /**
  * Body for requests with a body, or whose method usually has one; Params when the URL has
@@ -53,3 +71,4 @@ export const paramsCount = (input: Pick<RequestInput, 'url' | 'extras'>) =>
 
 export const headersCount = (headers: RawHeaders) =>
     headers.filter(([name]) => name !== '').length;
+

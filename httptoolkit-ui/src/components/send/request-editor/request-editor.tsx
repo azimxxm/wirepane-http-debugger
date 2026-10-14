@@ -13,6 +13,9 @@ import { RequestEditorTab } from '../../../model/send/send-extras';
 import { CollectionsStore } from '../../../model/collections/collections-store';
 import {
     hasRequestBody,
+    hasAuth,
+    hasScripts,
+    hasCustomSettings,
     headersCount,
     paramsCount,
     pickEditorTab,
@@ -32,6 +35,9 @@ import {
 } from './request-editor-tab-bar';
 import { ParamsPanel } from './params-panel';
 import { HeadersPanel } from './headers-panel';
+import { AuthPanel } from './auth-panel';
+import { SettingsPanel } from './settings-panel';
+import { ScriptsPanel } from './scripts-panel';
 
 const EditorColumn = styled.div`
     flex: 1 1 auto;
@@ -110,8 +116,11 @@ export const RequestEditor = inject('collectionsStore')(observer((props: {
     const docsShown = !!sendRequest;
     const tabs: EditorTabInfo[] = [
         { id: 'params', label: 'Params', count: paramsCount(requestInput) },
+        { id: 'authorization', label: 'Authorization', marker: hasAuth(requestInput) ? 'has auth' : undefined },
         { id: 'headers', label: 'Headers', count: headersCount(requestInput.headers) },
         { id: 'body', label: 'Body', marker: hasRequestBody(requestInput) ? 'has a body' : undefined },
+        { id: 'scripts', label: 'Scripts', marker: hasScripts(requestInput) ? 'has scripts' : undefined },
+        { id: 'settings', label: 'Settings', marker: hasCustomSettings(requestInput) ? 'has custom settings' : undefined },
         ...(docsShown ? [{
             id: 'docs' as const,
             label: 'Docs',
@@ -152,7 +161,10 @@ export const RequestEditor = inject('collectionsStore')(observer((props: {
         >
             { shown === 'params' && <ParamsPanel requestInput={requestInput} /> }
 
+            { shown === 'authorization' && <AuthPanel requestInput={requestInput} /> }
+
             { shown === 'headers' && <HeadersPanel
+                requestInput={requestInput}
                 headers={requestInput.headers}
                 onChange={props.onHeadersChange}
             /> }
@@ -165,6 +177,10 @@ export const RequestEditor = inject('collectionsStore')(observer((props: {
                 onBodyUpdated={props.onBodyUpdated}
                 editorNode={editorNode}
             /> }
+
+            { shown === 'scripts' && <ScriptsPanel requestInput={requestInput} /> }
+
+            { shown === 'settings' && <SettingsPanel requestInput={requestInput} /> }
 
             { shown === 'docs' && sendRequest && <RequestDocsPanel
                 key={sendRequest.id}

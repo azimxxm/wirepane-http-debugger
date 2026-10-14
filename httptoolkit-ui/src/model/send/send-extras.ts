@@ -88,8 +88,171 @@ export interface QueryParam {
     description?: string;
 }
 
+// A row of the Params tab's query table (see params/query-params.ts)
+export interface QueryParam {
+    // As typed in the table, or as written in the URL
+    name: string;
+    value: string;
+    // Disabled params stay in the table but aren't in the URL
+    enabled: boolean;
+    // Set for "name=" in the URL, so it isn't written back as "name"
+    hasEquals?: boolean;
+    // From the collection request, kept when it's saved
+    description?: string;
+}
+
+// A row of the Headers tab's table
+export interface HeaderRow {
+    id: string;
+    name: string;
+    value: string;
+    enabled: boolean;
+    description?: string;
+}
+
+// Auth Types matching Postman
+export type SendAuthMode =
+    | 'none'
+    | 'inherit'
+    | 'bearer'
+    | 'basic'
+    | 'apikey'
+    | 'digest'
+    | 'hawk'
+    | 'jwt'
+    | 'oauth1'
+    | 'oauth2'
+    | 'aws';
+
+export interface SendBearerAuth {
+    token: string;
+    prefix?: string;
+}
+
+export interface SendBasicAuth {
+    username: string;
+    password: string;
+}
+
+export interface SendApiKeyAuth {
+    key: string;
+    value: string;
+    placement: 'header' | 'queryparams';
+}
+
+export interface SendDigestAuth {
+    username: string;
+    password: string;
+    realm?: string;
+    nonce?: string;
+    algorithm?: string;
+    qop?: string;
+    nonceCount?: string;
+    clientNonce?: string;
+    opaque?: string;
+}
+
+export interface SendHawkAuth {
+    authId: string;
+    authKey: string;
+    algorithm: string;
+    user?: string;
+    nonce?: string;
+    ext?: string;
+    app?: string;
+    dlg?: string;
+    timestamp?: string;
+}
+
+export interface SendJwtAuth {
+    algorithm: string;
+    secret: string;
+    isSecretBase64: boolean;
+    payload: string;
+    headerPrefix?: string;
+}
+
+export interface SendOAuth1Auth {
+    signatureMethod: string;
+    consumerKey: string;
+    consumerSecret: string;
+    accessToken: string;
+    tokenSecret: string;
+    callbackUrl?: string;
+    verifier?: string;
+    timestamp?: string;
+    nonce?: string;
+    version?: string;
+    placement: 'header' | 'queryparams' | 'body';
+}
+
+export interface SendOAuth2Auth {
+    grantType: string;
+    token: string;
+    headerPrefix?: string;
+    autoRefresh?: boolean;
+    callbackUrl?: string;
+    authUrl?: string;
+    accessTokenUrl?: string;
+    clientId?: string;
+    clientSecret?: string;
+    scope?: string;
+}
+
+export interface SendAwsAuth {
+    accessKey: string;
+    secretKey: string;
+    region?: string;
+    service?: string;
+    sessionToken?: string;
+}
+
+export interface SendAuthData {
+    mode: SendAuthMode;
+    bearer?: SendBearerAuth;
+    basic?: SendBasicAuth;
+    apikey?: SendApiKeyAuth;
+    digest?: SendDigestAuth;
+    hawk?: SendHawkAuth;
+    jwt?: SendJwtAuth;
+    oauth1?: SendOAuth1Auth;
+    oauth2?: SendOAuth2Auth;
+    aws?: SendAwsAuth;
+}
+
+export interface SendSettingsData {
+    httpVersion: 'auto' | 'http1.1' | 'http2';
+    sslVerification: boolean;
+    followRedirects: boolean;
+    followOriginalMethod: boolean;
+    followAuthorizationHeader: boolean;
+    maxRedirects?: number;
+}
+
+export interface SendScriptsData {
+    preRequest: string;
+    postResponse: string;
+}
+
+export const defaultSendSettings = (): SendSettingsData => ({
+    httpVersion: 'auto',
+    sslVerification: true,
+    followRedirects: true,
+    followOriginalMethod: false,
+    followAuthorizationHeader: false
+});
+
+export const defaultSendAuth = (): SendAuthData => ({
+    mode: 'none'
+});
+
+export const defaultSendScripts = (): SendScriptsData => ({
+    preRequest: '',
+    postResponse: ''
+});
+
 // The tabs of the request pane
-export type RequestEditorTab = 'params' | 'headers' | 'body' | 'docs';
+export type RequestEditorTab = 'params' | 'authorization' | 'headers' | 'body' | 'scripts' | 'settings' | 'docs';
 
 export interface SendExtrasData {
     requestType: SendRequestType;
@@ -106,6 +269,10 @@ export interface SendExtrasData {
     pathTemplate?: string;
     // The request pane tab picked for this request. Unset: it follows the request (request-editor-tabs.ts).
     editorTab?: RequestEditorTab;
+    auth?: SendAuthData;
+    settings?: SendSettingsData;
+    scripts?: SendScriptsData;
+    headerRows?: HeaderRow[];
 }
 
 const defaultData = (): SendExtrasData => ({
@@ -115,7 +282,11 @@ const defaultData = (): SendExtrasData => ({
     multipartFields: [],
     binaryFile: undefined,
     graphql: { query: '', variables: '' },
-    websocket: { message: '', messageType: 'text', savedMessages: [] }
+    websocket: { message: '', messageType: 'text', savedMessages: [] },
+    auth: defaultSendAuth(),
+    settings: defaultSendSettings(),
+    scripts: defaultSendScripts(),
+    headerRows: undefined
 });
 
 export class SendExtras implements SendExtrasData {
@@ -131,6 +302,10 @@ export class SendExtras implements SendExtrasData {
     @observable.ref queryParams: QueryParam[] | undefined = undefined;
     @observable pathTemplate: string | undefined = undefined;
     @observable editorTab: RequestEditorTab | undefined = undefined;
+    @observable auth: SendAuthData = defaultSendAuth();
+    @observable settings: SendSettingsData = defaultSendSettings();
+    @observable scripts: SendScriptsData = defaultSendScripts();
+    @observable.ref headerRows: HeaderRow[] | undefined = undefined;
 
     constructor(data?: Partial<SendExtrasData>) {
         if (!data) return;
@@ -146,6 +321,10 @@ export class SendExtras implements SendExtrasData {
         this.queryParams = filled.queryParams?.map((param) => ({ ...param }));
         this.pathTemplate = filled.pathTemplate;
         this.editorTab = filled.editorTab;
+        this.auth = filled.auth ? _.cloneDeep(filled.auth) : defaultSendAuth();
+        this.settings = filled.settings ? { ...defaultSendSettings(), ...filled.settings } : defaultSendSettings();
+        this.scripts = filled.scripts ? { ...defaultSendScripts(), ...filled.scripts } : defaultSendScripts();
+        this.headerRows = filled.headerRows?.map((row) => ({ ...row }));
     }
 
     // A plain deep copy, for persisting, snapshots and building copies of a request.
@@ -163,7 +342,11 @@ export class SendExtras implements SendExtrasData {
             // The request pane's state, only once there is some
             ...(this.queryParams ? { queryParams: this.queryParams.map((param) => ({ ...param })) } : {}),
             ...(this.pathTemplate !== undefined ? { pathTemplate: this.pathTemplate } : {}),
-            ...(this.editorTab ? { editorTab: this.editorTab } : {})
+            ...(this.editorTab ? { editorTab: this.editorTab } : {}),
+            auth: toJS(this.auth),
+            settings: toJS(this.settings),
+            scripts: toJS(this.scripts),
+            ...(this.headerRows ? { headerRows: this.headerRows.map((row) => ({ ...row })) } : {})
         };
     }
 

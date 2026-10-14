@@ -1,5 +1,24 @@
 # Project log
 
+## 2026-10-14
+
+### Release v1.3.0 (macOS arm64 only)
+
+- **Version** 1.3.0 (`VERSION`, README, CLAUDE.md). **What's new:**
+  - Send panel full Postman parity: 7 tabs (Params, Authorization, Headers, Body, Scripts, Settings, Docs).
+  - 10 Authorization modes (None, Inherit, Bearer Token, Basic Auth, API Key, Digest, Hawk, JWT, OAuth 1.0, OAuth 2.0, AWS Signature).
+  - Headers autocomplete with keyboard navigation (`ArrowUp`/`ArrowDown`/`Enter`/`Tab`/`Escape`) and popular header prioritization.
+  - Value autocomplete for common headers (`Content-Type`, `Accept`, `Cache-Control`, `Connection`, etc.).
+  - Postman-parity Table Headers with Select-All checkbox.
+  - Unified table row model fixing duplicate row creation on keystrokes.
+  - Pre-request and Post-response script runners with code snippets.
+  - Request settings (HTTP version, SSL verification, redirection rules, max redirects).
+  - Markdown documentation tab.
+  - Full Bruno `.bru` round-trip storage preservation.
+  - Server-side redirect following with method and auth preservation controls.
+- **Checks:** 2212 UI unit tests passing (0 failures), 195 server unit tests passing (0 failures), tsc typecheck clean.
+- **Released:** `Wirepane-1.3.0-mac-arm64.pkg` (SHA-256 `0bc592fb4aefff95d2107df61adc8fa49a7685d7e2d57d6d2fa4aaa6ea7091ca`).
+
 ## 2026-10-13
 
 ### Release v1.2.0 (macOS arm64 only)
