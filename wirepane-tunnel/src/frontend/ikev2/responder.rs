@@ -10,7 +10,7 @@ use smoltcp::wire::{IpProtocol, Ipv4Packet, TcpPacket, UdpPacket};
 
 use super::crypto::{
     GCM_ICV_LEN, GCM_IV_LEN, GcmKey, IkeKeys, child_key_material, dh_agree, dh_supported, gcm_key_bytes,
-    ike_key_material, nat_hash, psk_auth, psk_auth_matches, random_bytes, signed_octets,
+    ike_key_material, ike_rekey_material, nat_hash, psk_auth, psk_auth_matches, random_bytes, signed_octets,
 };
 use super::esp::EspSa;
 use super::wire::*;
@@ -188,6 +188,37 @@ fn choose_ike_proposal(proposals: &[Proposal]) -> Option<IkeChoice> {
             dh: dh.id,
             aes_key_bytes,
         });
+    }
+    None
+}
+
+fn choose_ike_rekey_proposal(proposals: &[Proposal], spi_r: u64) -> Option<(IkeChoice, u64)> {
+    for proposal in proposals {
+        if proposal.protocol != PROTO_IKE || proposal.spi.len() != 8 {
+            continue;
+        }
+        let Some(encr) = first_usable(proposal, TT_ENCR, gcm) else { continue };
+        let Some(prf) = first_usable(proposal, TT_PRF, |t| t.id == PRF_HMAC_SHA2_256) else { continue };
+        let Some(dh) = first_usable(proposal, TT_DH, |t| dh_supported(t.id)) else { continue };
+        let Some(integrity) = integrity_for_aead(proposal) else { continue };
+        let Some(aes_key_bytes) = encr.key_length.and_then(gcm_key_bytes) else { continue };
+        let mut transforms = vec![encr, prf];
+        transforms.extend(integrity);
+        transforms.push(dh);
+        let spi_i = u64::from_be_bytes(proposal.spi[..8].try_into().ok()?);
+        return Some((
+            IkeChoice {
+                proposal: Proposal {
+                    number: proposal.number,
+                    protocol: PROTO_IKE,
+                    spi: spi_r.to_be_bytes().to_vec(),
+                    transforms,
+                },
+                dh: dh.id,
+                aes_key_bytes,
+            },
+            spi_i,
+        ));
     }
     None
 }
@@ -916,6 +947,11 @@ impl<C: Credentials> Responder<C> {
                 _ => {}
             }
         }
+        // If there is no N(REKEY_SA) for ESP, and KE is present without Traffic Selectors,
+        // this is an IKE SA rekey (RFC 7296 §1.3.2).
+        if rekeyed.is_none() && tsi.is_none() && tsr.is_none() && ke.is_some() {
+            return self.rekey_ike_sa(sa, &secret, child_sa, nonce, ke);
+        }
         // The SPI in REKEY_SA is the phone's own (inbound) SPI of the Child SA being replaced.
         let Some(rekeyed) = rekeyed else { return refuse(N_NO_ADDITIONAL_SAS) };
         let known = sa.children.iter().any(|child| {
@@ -954,6 +990,107 @@ impl<C: Credentials> Responder<C> {
         chain.push(PL_NONCE, &nr);
         chain.push(PL_TSI, &build_ts(&[ours_i]));
         chain.push(PL_TSR, &build_ts(&[ours_r]));
+        Reply { chain, outputs: Vec::new(), end: false }
+    }
+
+    fn rekey_ike_sa(
+        &mut self,
+        sa: &mut IkeSa,
+        secret: &PeerSecret,
+        child_sa: Option<&[u8]>,
+        nonce: Option<&[u8]>,
+        ke: Option<&[u8]>,
+    ) -> Reply {
+        let refuse = |code: u16| {
+            let mut chain = ChainBuilder::new();
+            chain.push(PL_NOTIFY, &build_notify(code, &[]));
+            Reply { chain, outputs: Vec::new(), end: false }
+        };
+
+        let (Some(sa_body), Some(ke_body), Some(ni)) = (child_sa, ke, nonce) else {
+            return refuse(N_INVALID_SYNTAX);
+        };
+        if !(MIN_NONCE_LEN..=MAX_NONCE_LEN).contains(&ni.len()) {
+            return refuse(N_INVALID_SYNTAX);
+        }
+        let Ok(proposals) = parse_sa(sa_body) else {
+            return refuse(N_INVALID_SYNTAX);
+        };
+
+        let mut spi_r_bytes = [0u8; 8];
+        if random_bytes(&mut spi_r_bytes).is_none() {
+            return refuse(N_NO_ADDITIONAL_SAS);
+        }
+        let spi_r_new = u64::from_be_bytes(spi_r_bytes);
+
+        let Some((choice, spi_i_new)) = choose_ike_rekey_proposal(&proposals, spi_r_new) else {
+            log::info!("ikev2: no acceptable IKE rekey proposal from {}: {proposals:?}", secret.peer);
+            return refuse(N_NO_PROPOSAL_CHOSEN);
+        };
+
+        let Ok((group, ke_data)) = parse_ke(ke_body) else {
+            return refuse(N_INVALID_SYNTAX);
+        };
+        if group != choice.dh {
+            return refuse(N_INVALID_KE_PAYLOAD);
+        }
+
+        let Some((ker, shared_secret)) = dh_agree(group, ke_data) else {
+            return refuse(N_INVALID_KE_PAYLOAD);
+        };
+
+        let mut nr = vec![0u8; OUR_NONCE_LEN];
+        if random_bytes(&mut nr).is_none() {
+            return refuse(N_NO_ADDITIONAL_SAS);
+        }
+
+        let Some(material) = ike_rekey_material(
+            &sa.keys.sk_d,
+            ni,
+            &nr,
+            &shared_secret,
+            spi_i_new,
+            spi_r_new,
+            choice.aes_key_bytes,
+        ) else {
+            return refuse(N_NO_ADDITIONAL_SAS);
+        };
+
+        let Some(new_keys) = material.into_keys() else {
+            return refuse(N_NO_ADDITIONAL_SAS);
+        };
+
+        let new_sa = IkeSa {
+            spi_i: spi_i_new,
+            spi_r: spi_r_new,
+            ni: ni.to_vec(),
+            nr: nr.clone(),
+            keys: new_keys,
+            init_request: Vec::new(),
+            init_response: Vec::new(),
+            next_message_id: 0,
+            last_response: None,
+            endpoint: sa.endpoint,
+            peer: Some(secret.clone()),
+            children: sa.children.clone(),
+            created: Instant::now(),
+            last_seen: Instant::now(),
+            iv_counter: 0,
+        };
+        // Point the child SAs to the new IKE SA so deleting the old one doesn't tear down the tunnel
+        for child in &sa.children {
+            if let Some(entry) = self.esp.get_mut(child) {
+                entry.ike_spi_r = spi_r_new;
+            }
+        }
+        sa.children.clear();
+        self.sas.insert(spi_r_new, new_sa);
+
+        let mut chain = ChainBuilder::new();
+        chain.push(PL_SA, &build_sa(&choice.proposal));
+        chain.push(PL_KE, &build_ke(group, &ker));
+        chain.push(PL_NONCE, &nr);
+
         Reply { chain, outputs: Vec::new(), end: false }
     }
 

@@ -15,6 +15,7 @@ export const MAX_HOST_ROWS = 8;
 export type DeviceTreeRow =
     | { kind: 'all', id: string, depth: 0, count: number }
     | { kind: 'device', id: string, depth: 0, device: DeviceSummary, isExpandable: boolean, isExpanded: boolean, isPinned: boolean }
+    | { kind: 'divider', id: string, depth: 0 }
     | { kind: 'heading', id: string, depth: 1, label: string }
     | { kind: 'app', id: string, depth: 1, deviceKey: string, app: AppCount }
     | { kind: 'host', id: string, depth: 1, deviceKey: string, host: DeviceHost }
@@ -106,12 +107,21 @@ export function buildDeviceTreeRows(inputs: {
     const unpinnedDevices = [inputs.thisMachine, ...inputs.otherDevices]
         .filter((device) => !pinnedKeys.has(device.key));
 
-    for (const device of [...pinnedDevices, ...unpinnedDevices]) {
+    for (const device of pinnedDevices) {
         const isExpandable = device.apps.length > 0 || device.hosts.length > 0;
         const isExpanded = isExpandable && inputs.isExpanded(device.key);
-        const isPinned = pinnedKeys.has(device.key);
+        rows.push({ kind: 'device', id: deviceRowId(device.key), depth: 0, device, isExpandable, isExpanded, isPinned: true });
+        if (isExpanded) rows.push(...deviceChildRows(device, inputs.selection));
+    }
 
-        rows.push({ kind: 'device', id: deviceRowId(device.key), depth: 0, device, isExpandable, isExpanded, isPinned });
+    if (pinnedDevices.length > 0 && unpinnedDevices.length > 0) {
+        rows.push({ kind: 'divider', id: 'pinned-divider', depth: 0 });
+    }
+
+    for (const device of unpinnedDevices) {
+        const isExpandable = device.apps.length > 0 || device.hosts.length > 0;
+        const isExpanded = isExpandable && inputs.isExpanded(device.key);
+        rows.push({ kind: 'device', id: deviceRowId(device.key), depth: 0, device, isExpandable, isExpanded, isPinned: false });
         if (isExpanded) rows.push(...deviceChildRows(device, inputs.selection));
     }
 

@@ -159,6 +159,45 @@ pub fn ike_key_material(
     })
 }
 
+/// Rekeying an IKE SA (RFC 7296 §2.18):
+/// SKEYSEED = prf(SK_d (old), g^ir (new) | Ni | Nr)
+/// {SK_d | SK_ei | SK_er | SK_pi | SK_pr} = prf+(SKEYSEED, Ni | Nr | SPIi | SPIr)
+pub fn ike_rekey_material(
+    sk_d_old: &[u8; PRF_LEN],
+    ni: &[u8],
+    nr: &[u8],
+    shared_secret: &[u8],
+    spi_i: u64,
+    spi_r: u64,
+    aes_key_bytes: usize,
+) -> Option<IkeKeyMaterial> {
+    let seed_data = [shared_secret, ni, nr].concat();
+    let skeyseed = prf(sk_d_old, &[&seed_data]);
+    let nonces = [ni, nr].concat();
+    let seed = [&nonces[..], &spi_i.to_be_bytes(), &spi_r.to_be_bytes()].concat();
+    let encryption = aes_key_bytes + SALT_LEN;
+    let material = prf_plus(&skeyseed, &seed, 3 * PRF_LEN + 2 * encryption)?;
+    let mut at = 0usize;
+    let mut take = |len: usize| {
+        let part = material.get(at..at + len).map(<[u8]>::to_vec);
+        at += len;
+        part
+    };
+    let sk_d = to_prf_key(&take(PRF_LEN)?)?;
+    let sk_ei = take(encryption)?;
+    let sk_er = take(encryption)?;
+    let sk_pi = to_prf_key(&take(PRF_LEN)?)?;
+    let sk_pr = to_prf_key(&take(PRF_LEN)?)?;
+    Some(IkeKeyMaterial {
+        skeyseed,
+        sk_d,
+        sk_ei,
+        sk_er,
+        sk_pi,
+        sk_pr,
+    })
+}
+
 fn to_prf_key(bytes: &[u8]) -> Option<[u8; PRF_LEN]> {
     bytes.try_into().ok()
 }

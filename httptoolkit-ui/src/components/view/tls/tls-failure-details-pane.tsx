@@ -7,8 +7,9 @@ import { Icon, SourceIcons } from '../../../icons';
 
 import { getReadableIP } from '../../../model/network';
 import { FailedTlsConnection } from '../../../model/tls/failed-tls-connection';
-import { describeJa4, findJa4ForFailure } from '../../../model/interception/vpn-ja4'; // wirepane: JA4 from the VPN
+import { describeJa4, findHelloForFailure, findJa4ForFailure } from '../../../model/interception/vpn-ja4'; // wirepane: JA4 from the VPN
 import type { VpnNetworkStore } from '../../../model/interception/vpn-network'; // wirepane
+import type { DevicesStore } from '../../../model/devices/devices-store'; // wirepane: device attribution
 
 import { MediumCard } from '../../common/card';
 import { ContentLabelBlock, Content, CopyableMonoValue } from '../../common/text-content';
@@ -23,12 +24,16 @@ const AndroidIcon = styled(Icon).attrs({
     color: ${SourceIcons.Android.color};
 `;
 
-@inject('vpnNetworkStore') // wirepane: the VPN's TLS hellos
+@inject((stores: any) => ({
+    vpnNetworkStore: stores.vpnNetworkStore,
+    devicesStore: stores.devicesStore
+}))
 @observer
 export class TlsFailureDetailsPane extends React.Component<{
     failure: FailedTlsConnection,
     certPath: string,
-    vpnNetworkStore?: VpnNetworkStore
+    vpnNetworkStore?: VpnNetworkStore,
+    devicesStore?: DevicesStore
 }> {
 
     private stopReadingHellos: (() => void) | undefined;
@@ -44,7 +49,7 @@ export class TlsFailureDetailsPane extends React.Component<{
     }
 
     render() {
-        const { failure, certPath, vpnNetworkStore } = this.props;
+        const { failure, certPath, vpnNetworkStore, devicesStore } = this.props;
 
         // This _should_ always be available, but due to some awkward & unclear Node issues it isn't,
         // so we need to be a little careful here.
@@ -55,7 +60,14 @@ export class TlsFailureDetailsPane extends React.Component<{
         const sourceDetails = sourceDetailParts?.slice(1).join(' ');
 
         // wirepane: the JA4 fingerprint of the client's hello, when it came through the VPN
+        const matchingHello = findHelloForFailure(failure, vpnNetworkStore?.tlsHellos ?? []);
         const ja4 = findJa4ForFailure(failure, vpnNetworkStore?.tlsHellos ?? []);
+
+        const vpnPeer = matchingHello?.peer;
+        const vpnPeerStats = vpnPeer ? vpnNetworkStore?.stats?.peers?.find(p => p.peer === vpnPeer) : undefined;
+        const vpnDevice = vpnPeer ? devicesStore?.getListedDevice(vpnPeer) : undefined;
+        const vpnDeviceName = vpnPeerStats?.name || vpnDevice?.name;
+        const vpnDeviceIp = vpnPeerStats?.tunnelIp || vpnDevice?.address;
 
         return <PaneScrollContainer>
             <MediumCard>
@@ -87,11 +99,19 @@ export class TlsFailureDetailsPane extends React.Component<{
                             </>,
                         } as _.Dictionary<JSX.Element>)[failure.failureCause]
                     }</p>
-                    { sourceIp && sourceDetails && <p>
-                        The request was sent by <CopyableMonoValue>
-                            { sourceIp }
-                        </CopyableMonoValue> { sourceDetails }.
-                    </p> }
+                    { vpnDeviceName ? (
+                        <p>
+                            The request was sent by <strong>{ vpnDeviceName }</strong>
+                            { vpnDeviceIp && <> ({ vpnDeviceIp })</> } via VPN tunnel
+                            { sourceIp && <> (local proxy: <CopyableMonoValue>{ sourceIp }</CopyableMonoValue>)</> }.
+                        </p>
+                    ) : (
+                        sourceIp && sourceDetails && <p>
+                            The request was sent by <CopyableMonoValue>
+                                { sourceIp }
+                            </CopyableMonoValue> { sourceDetails }.
+                        </p>
+                    ) }
                     { ja4 && <p>
                         { /* wirepane: JA4 */ }
                         The client's TLS fingerprint (JA4) is <CopyableMonoValue title={describeJa4(ja4)}>

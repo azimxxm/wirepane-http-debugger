@@ -85,10 +85,11 @@ describe('Device tree rows', () => {
             ALL_DEVICES_ROW_ID,
             'device:192.168.0.42',
             'device:192.168.0.23',
+            'pinned-divider',
             'device:this-machine',
             'device:192.168.0.24'
         ]);
-        expect(rows.map((row) => row.kind === 'device' && row.isPinned)).to.deep.equal([false, true, true, false, false]);
+        expect(rows.map((row) => row.kind === 'device' && row.isPinned)).to.deep.equal([false, true, true, false, false, false]);
     });
 
     it('lists this machine with the pinned devices when it is pinned too', () => {
@@ -117,13 +118,34 @@ describe('Device tree rows', () => {
             isExpanded: () => true
         });
 
-        expect(rowIds(rows).slice(0, 4)).to.deep.equal([
+        expect(rowIds(rows).slice(0, 5)).to.deep.equal([
             ALL_DEVICES_ROW_ID,
             'device:192.168.0.42',
+            'pinned-divider',
             'device:this-machine',
             'device:192.168.0.23'
         ]);
         expect(rows[1].kind === 'device' && rows[1].isExpandable).to.equal(false);
+    });
+
+    it('places a visual divider between pinned devices and active unpinned devices', () => {
+        const rows = buildDeviceTreeRows({
+            totalCount: 5,
+            thisMachine,
+            otherDevices: [iphone],
+            pinnedDevices: [iphone],
+            selection: undefined,
+            isExpanded: () => false
+        });
+
+        expect(rowIds(rows)).to.deep.equal([
+            ALL_DEVICES_ROW_ID,
+            'device:192.168.0.23',
+            'pinned-divider',
+            'device:this-machine'
+        ]);
+        const divider = rows.find((r) => r.id === 'pinned-divider');
+        expect(divider?.kind).to.equal('divider');
     });
 
     it("shows an open device's apps and domains under headings", () => {

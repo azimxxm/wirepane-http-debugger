@@ -1,5 +1,25 @@
 # Project log
 
+## 2026-10-20
+
+### Release v1.4.0 (macOS arm64 only)
+
+- **Version** 1.4.0 (`VERSION`, `PROJECT_LOG.md`). **What's new:**
+  - **Rust Sidecar (`wirepane-tunnel`):**
+    - IKEv2 HTTP/3 Decryption Gateway: decrypted QUIC packet routing unified for both WireGuard and IKEv2 frontends.
+    - IKE SA Rekeying (RFC 7296 §1.3.2): seamless IKE SA key derivation and exchange preserving active Child SAs.
+    - Unified `CoreStats` drop counters (`packets_dropped`, `shaper_dropped`) across WireGuard and IKEv2 cores.
+    - `DelayQueue` fair-share queueing preventing single-peer starvation (75% cap per peer).
+  - **Collections Secret Storage (`httptoolkit-server`):**
+    - macOS Keychain integration using `/usr/bin/security` under `tech.httptoolkit.desktop.collections`.
+    - Automatic fallback and synchronization with mode 0600 file storage.
+  - **UI Polish & Pinning Attribution (`httptoolkit-ui`):**
+    - Real device attribution for TLS handshake failures (e.g. certificate pinning) over VPN, displaying the actual device name (e.g. iPhone 15 Pro) instead of `127.0.0.1`.
+    - Devices panel visual divider separating pinned devices from active unpinned devices.
+    - Startup fallback alert URL updated to `github.com/azimxxm/wirepane-http-debugger`.
+- **Checks:** 2214 UI unit tests passing (0 failures), 200 server unit tests passing (0 failures), 223 Rust tunnel tests passing (0 failures).
+- **Released:** `Wirepane-1.4.0-mac-arm64.pkg` (SHA-256 `42a6c017b14607cb7c538555950f8693e967617cd1bdda065abd6acefeeb07ad`).
+
 ## 2026-10-14
 
 ### Release v1.3.0 (macOS arm64 only)

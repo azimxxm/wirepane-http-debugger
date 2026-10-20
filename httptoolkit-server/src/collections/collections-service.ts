@@ -27,6 +27,12 @@ import {
     storeAttachment,
     writeAttachments
 } from './attachments';
+import {
+    deleteFromKeychain,
+    readFromKeychain,
+    storeInKeychain,
+    StoredSecret
+} from './keychain-store';
 
 export interface CollectionSummary {
     id: string;
@@ -53,13 +59,6 @@ export interface CollectionFile {
     path: string;
     name: string;
     bytes: Buffer;
-}
-
-// A secret environment value, kept only on this machine
-interface StoredSecret {
-    environment: string;
-    variable: string;
-    value: unknown;
 }
 
 const isEnoent = (error: unknown) => isRecord(error) && error.code === 'ENOENT';
@@ -177,6 +176,7 @@ export class CollectionsService {
 
             await fs.promises.rm(dir, { recursive: true, force: true });
             await fs.promises.rm(this.secretsFile(id), { force: true });
+            await deleteFromKeychain(id).catch(() => {});
         });
     }
 
@@ -294,32 +294,38 @@ export class CollectionsService {
         const file = this.secretsFile(collection.uid);
         if (!secrets.length) {
             await fs.promises.rm(file, { force: true });
+            await deleteFromKeychain(collection.uid).catch(() => {});
             return;
         }
 
         await fs.promises.mkdir(this.secretsDir, { recursive: true, mode: 0o700 });
         await fs.promises.writeFile(file, JSON.stringify(secrets), { mode: 0o600 });
+        await storeInKeychain(collection.uid, secrets).catch(() => {});
     }
 
     private async restoreSecrets(collection: BrunoCollection) {
-        const content = await fs.promises.readFile(this.secretsFile(collection.uid), 'utf8').catch((error) => {
-            if (isEnoent(error)) return undefined;
-            throw error;
-        });
-        if (content === undefined) return;
+        let secrets: StoredSecret[] | undefined = await readFromKeychain(collection.uid).catch(() => undefined);
 
-        let stored: unknown;
-        try {
-            stored = JSON.parse(content);
-        } catch {
-            // The values are lost, but the collection still opens and they can be entered again
-            console.warn(`Ignoring unreadable secrets file for collection ${collection.uid}`);
-            return;
+        if (!secrets || secrets.length === 0) {
+            const content = await fs.promises.readFile(this.secretsFile(collection.uid), 'utf8').catch((error) => {
+                if (isEnoent(error)) return undefined;
+                throw error;
+            });
+            if (content !== undefined) {
+                try {
+                    const stored = JSON.parse(content);
+                    secrets = Array.isArray(stored) ? stored.filter(isRecord) as unknown as StoredSecret[] : [];
+                } catch {
+                    // The values are lost, but the collection still opens and they can be entered again
+                    console.warn(`Ignoring unreadable secrets file for collection ${collection.uid}`);
+                }
+            }
         }
-        const secrets = Array.isArray(stored) ? stored.filter(isRecord) : [];
+
+        if (!secrets || secrets.length === 0) return;
 
         for (const environment of collection.environments) {
-            restoreEnvironmentSecrets(environment, secrets);
+            restoreEnvironmentSecrets(environment, secrets as unknown as Record<string, unknown>[]);
         }
     }
 }

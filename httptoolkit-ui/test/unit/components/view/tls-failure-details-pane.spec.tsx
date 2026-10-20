@@ -19,6 +19,7 @@ const STARTED = 1_760_000_000_000;
 // The part of the Network page's store that the pane uses
 class FakeNetworkStore {
     @observable.shallow tlsHellos: VpnTlsHello[] = [];
+    @observable.ref stats: any = undefined;
 
     started = 0;
     stopped = 0;
@@ -136,6 +137,18 @@ describe('The failed TLS connection pane', () => {
 
             expect(container.textContent).to.contain('Failed HTTPS request');
             expect(container.textContent).to.not.contain('fingerprint');
+        });
+
+        it('shows the device name when a matching VPN hello and peer stats are found', () => {
+            store.tlsHellos.push(hello({ peer: 'p1' }));
+            store.stats = {
+                peers: [
+                    { peer: 'p1', name: 'iPhone 15 Pro', tunnelIp: '10.0.0.2' }
+                ]
+            };
+            renderFailure(failureEvent([], 'pinned.example.org', STARTED));
+
+            expect(container.textContent).to.contain('The request was sent by iPhone 15 Pro (10.0.0.2) via VPN tunnel');
         });
 
         it('shows the fingerprint as soon as the hello arrives', () => {

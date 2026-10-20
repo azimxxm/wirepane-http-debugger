@@ -226,6 +226,13 @@ const MoreText = styled.div`
     color: ${p => p.theme.mainLowlightColor};
 `;
 
+const TreeDivider = styled.div`
+    height: 1px;
+    margin: 6px 4px;
+    background-color: ${p => p.theme.containerBorder};
+    opacity: 0.6;
+`;
+
 const RenameInput = styled.input`
     width: 100%;
     height: 22px;
@@ -540,6 +547,9 @@ export const DeviceTree = observer((props: {
             }
             if (row.kind === 'more') {
                 return <MoreText key={row.id} role='none'>{ row.text }</MoreText>;
+            }
+            if (row.kind === 'divider') {
+                return <TreeDivider key={row.id} role='separator' aria-hidden={true} />;
             }
 
             const isSelected = row.id === selectedId;

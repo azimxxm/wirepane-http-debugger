@@ -16,6 +16,7 @@ use std::time::{Instant, SystemTime};
 use serde_json::json;
 
 use super::QuicMode;
+use crate::core::stats::CoreStats;
 use crate::events::EventSink;
 use crate::features::Direction;
 use crate::features::capture::{CaptureSummary, PcapWriter};
@@ -41,6 +42,8 @@ pub struct Hooks {
     peer_names: Mutex<HashMap<String, String>>,
     /// Where a capture that ends on its own says so (`capture-stopped`).
     events: Option<EventSink>,
+    /// Global packet and drop counters.
+    pub stats: Option<Arc<CoreStats>>,
     /// True while any phone has conditions or a capture runs. Lets the packet path skip the locks.
     packets_hooked: AtomicBool,
     /// Test-only: a verdict for every packet instead of the shapers' (the shaper stub says Now).
@@ -64,6 +67,7 @@ impl Hooks {
             ended_capture: Mutex::new(None),
             peer_names: Mutex::new(HashMap::new()),
             events: None,
+            stats: None,
             packets_hooked: AtomicBool::new(false),
             #[cfg(test)]
             forced_verdict: Mutex::new(None),
@@ -78,6 +82,19 @@ impl Hooks {
     pub fn with_events(mut self, events: EventSink) -> Self {
         self.events = Some(events);
         self
+    }
+
+    /// Attaches the global core stats to count shaper and queue drops.
+    pub fn with_stats(mut self, stats: Arc<CoreStats>) -> Self {
+        self.stats = Some(stats);
+        self
+    }
+
+    /// Counts an externally dropped packet (e.g. from a full DelayQueue).
+    pub fn count_dropped_packet(&self) {
+        if let Some(stats) = &self.stats {
+            stats.packets_dropped.fetch_add(1, Ordering::Relaxed);
+        }
     }
 
     /// The name a phone's owner gave it. The capture names the phone's interface after it.
@@ -236,6 +253,11 @@ impl Hooks {
         let verdict = self.verdict(peer, direction, packet.len(), now);
         if verdict == Verdict::Now {
             self.write_to_capture(peer, direction, packet);
+        } else if verdict == Verdict::Drop {
+            if let Some(stats) = &self.stats {
+                stats.shaper_dropped.fetch_add(1, Ordering::Relaxed);
+                stats.packets_dropped.fetch_add(1, Ordering::Relaxed);
+            }
         }
         verdict
     }
@@ -319,6 +341,7 @@ struct Delayed<T> {
     at: Instant,
     seq: u64,
     bytes: usize,
+    peer: Option<String>,
     item: T,
 }
 
@@ -354,11 +377,22 @@ pub struct DelayQueue<T> {
     max_bytes: usize,
     /// Items refused because the queue was full, since it was made.
     dropped: u64,
+    peer_counts: HashMap<String, usize>,
+    peer_bytes: HashMap<String, usize>,
 }
 
 impl<T> DelayQueue<T> {
     pub fn new(cap: usize) -> Self {
-        Self { heap: BinaryHeap::new(), next_seq: 0, cap, bytes: 0, max_bytes: MAX_DELAYED_BYTES, dropped: 0 }
+        Self {
+            heap: BinaryHeap::new(),
+            next_seq: 0,
+            cap,
+            bytes: 0,
+            max_bytes: MAX_DELAYED_BYTES,
+            dropped: 0,
+            peer_counts: HashMap::new(),
+            peer_bytes: HashMap::new(),
+        }
     }
 
     /// The same queue with another byte budget.
@@ -370,19 +404,49 @@ impl<T> DelayQueue<T> {
     /// Queues an item the byte budget doesn't know about. False (and the item is dropped, and
     /// counted) when the queue is full.
     pub fn push(&mut self, at: Instant, item: T) -> bool {
-        self.push_bytes(at, item, 0)
+        self.push_peer_bytes(at, item, 0, None)
     }
 
     /// Queues an item of `bytes` bytes. False (and the item is dropped, and counted) when the queue
     /// is full, by count or by bytes.
     pub fn push_bytes(&mut self, at: Instant, item: T, bytes: usize) -> bool {
+        self.push_peer_bytes(at, item, bytes, None)
+    }
+
+    /// Queues an item of `bytes` bytes for `peer`. False (and the item is dropped, and counted)
+    /// when the queue is full, by count or by bytes, or when a single peer exceeds fair share.
+    pub fn push_peer_bytes(&mut self, at: Instant, item: T, bytes: usize, peer: Option<&str>) -> bool {
         if self.heap.len() >= self.cap || self.bytes.saturating_add(bytes) > self.max_bytes {
             self.dropped += 1;
             return false;
         }
+
+        // Fair share per phone: if multiple peers are active in the queue, no single peer may
+        // monopolize more than 75% of the total budget or capacity.
+        if let Some(p) = peer {
+            if self.peer_counts.len() > 1 || (!self.peer_counts.contains_key(p) && !self.peer_counts.is_empty()) {
+                let max_peer_share = (self.max_bytes * 3) / 4;
+                let max_peer_count = (self.cap * 3) / 4;
+                let current_bytes = self.peer_bytes.get(p).copied().unwrap_or(0);
+                let current_count = self.peer_counts.get(p).copied().unwrap_or(0);
+                if current_bytes.saturating_add(bytes) > max_peer_share || current_count >= max_peer_count {
+                    self.dropped += 1;
+                    return false;
+                }
+            }
+            *self.peer_counts.entry(p.to_string()).or_default() += 1;
+            *self.peer_bytes.entry(p.to_string()).or_default() += bytes;
+        }
+
         self.next_seq += 1;
         self.bytes += bytes;
-        self.heap.push(Delayed { at, seq: self.next_seq, bytes, item });
+        self.heap.push(Delayed {
+            at,
+            seq: self.next_seq,
+            bytes,
+            peer: peer.map(str::to_string),
+            item,
+        });
         true
     }
 
@@ -394,6 +458,22 @@ impl<T> DelayQueue<T> {
         if self.heap.peek().is_some_and(|delayed| delayed.at <= now) {
             let delayed = self.heap.pop()?;
             self.bytes -= delayed.bytes;
+            if let Some(p) = &delayed.peer {
+                if let Some(count) = self.peer_counts.get_mut(p) {
+                    if *count <= 1 {
+                        self.peer_counts.remove(p);
+                    } else {
+                        *count -= 1;
+                    }
+                }
+                if let Some(b) = self.peer_bytes.get_mut(p) {
+                    if *b <= delayed.bytes {
+                        self.peer_bytes.remove(p);
+                    } else {
+                        *b -= delayed.bytes;
+                    }
+                }
+            }
             Some(delayed.item)
         } else {
             None
@@ -407,6 +487,16 @@ impl<T> DelayQueue<T> {
     /// Bytes of the queued items that were pushed with a size.
     pub fn bytes(&self) -> usize {
         self.bytes
+    }
+
+    /// Queued bytes for a specific peer.
+    pub fn peer_bytes(&self, peer: &str) -> usize {
+        self.peer_bytes.get(peer).copied().unwrap_or(0)
+    }
+
+    /// Queued packet count for a specific peer.
+    pub fn peer_count(&self, peer: &str) -> usize {
+        self.peer_counts.get(peer).copied().unwrap_or(0)
     }
 
     /// How many items the queue has refused for being full, since it was made.
@@ -505,6 +595,30 @@ mod tests {
         assert!(held * 65_535 <= MAX_DELAYED_BYTES, "{held} packets hold more than the budget");
         assert!((1000..MAX_DELAYED_PACKETS).contains(&held), "{held} packets");
         assert_eq!(queue.dropped(), 1);
+    }
+
+    #[test]
+    fn fair_share_delay_queue_prevents_a_single_peer_from_starving_others() {
+        let now = Instant::now();
+        // A queue with 10 packet capacity and 1000 byte budget
+        let mut queue = DelayQueue::new(10).with_byte_budget(1_000);
+        // Peer 1 pushes up to its fair share (75% = 750 bytes, or 7 packets)
+        for i in 0..7 {
+            assert!(queue.push_peer_bytes(now, i, 100, Some("p1")), "p1 packet {i} should be accepted");
+        }
+        // Now peer 2 tries to queue a packet
+        assert!(queue.push_peer_bytes(now, 100, 100, Some("p2")), "p2 packet should be accepted");
+        // Peer 1 tries to push an 8th packet (800 bytes > 750 max share)
+        assert!(!queue.push_peer_bytes(now, 8, 100, Some("p1")), "p1 exceeds fair share and is dropped");
+        assert_eq!(queue.peer_count("p1"), 7);
+        assert_eq!(queue.peer_count("p2"), 1);
+        assert_eq!(queue.peer_bytes("p1"), 700);
+        assert_eq!(queue.peer_bytes("p2"), 100);
+
+        // Once p1 drains one packet, p1 can push again
+        assert_eq!(queue.pop_due(now), Some(0));
+        assert_eq!(queue.peer_count("p1"), 6);
+        assert!(queue.push_peer_bytes(now, 9, 100, Some("p1")));
     }
 
     #[test]

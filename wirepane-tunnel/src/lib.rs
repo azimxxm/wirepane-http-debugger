@@ -36,6 +36,7 @@ use crate::features::dns_rules::{DnsAction, DnsRule, DnsRules};
 use crate::features::quic::QuicGateway;
 use crate::frontend::ikev2::listener::{Ikev2Peers, Ikev2Side, Ikev2SideParams};
 use crate::frontend::wireguard::{self, WgDirectory, WgPeers, WireGuardParams, lock};
+use crate::frontend::InjectedPacket;
 use crate::net::TunnelNet;
 use crate::state::{StateFile, StoredPeer};
 
@@ -116,6 +117,8 @@ pub struct Tunnel {
     shutdown_tx: watch::Sender<()>,
     frontend_task: Option<JoinHandle<Result<()>>>,
     core_task: JoinHandle<()>,
+    #[allow(dead_code)]
+    router_task: JoinHandle<()>,
 }
 
 fn generate_secret() -> Result<StaticSecret> {
@@ -196,17 +199,19 @@ impl Tunnel {
 
         let (commands_tx, commands_rx) = mpsc::unbounded_channel();
         let (flows_tx, flows_rx) = mpsc::channel(256);
-        // ICMP errors for blocked QUIC travel from the core to the front-end through this.
-        let (injector_tx, injector_rx) = mpsc::channel(256);
+        // ICMP errors for blocked QUIC and HTTP/3 responses travel from the core/driver to the front-ends.
+        let (wg_injector_tx, wg_injector_rx) = mpsc::channel(256);
+        let (unified_injector_tx, mut unified_injector_rx) = mpsc::channel::<InjectedPacket>(256);
         let (shutdown_tx, shutdown_rx) = shutdown::channel();
 
-        let hooks = Arc::new(Hooks::new(config.quic).with_events(events.clone()));
+        let core_stats = Arc::new(CoreStats::default());
+        let hooks = Arc::new(Hooks::new(config.quic).with_events(events.clone()).with_stats(core_stats.clone()));
         // The capture names each phone's interface after its device.
         for stored in &state.peers {
             hooks.set_peer_name(&stored.peer, &stored.name);
         }
         let socks = Arc::new(Mutex::new(config.socks.clone()));
-        let quic_driver = start_quic_gateway(&config, socks.clone(), &events, injector_tx.clone());
+        let quic_driver = start_quic_gateway(&config, socks.clone(), &events, unified_injector_tx.clone());
 
         let ikev2_shutdown = shutdown_rx.clone();
         let frontend = wireguard::start(
@@ -215,7 +220,7 @@ impl Tunnel {
                 server_private: server_private.clone(),
                 peers: peers.clone(),
                 events: events.clone(),
-                injected: injector_rx,
+                injected: wg_injector_rx,
                 hooks: hooks.clone(),
             },
             flows_tx,
@@ -224,7 +229,7 @@ impl Tunnel {
         )
         .await?;
 
-        let core = Arc::new(Core::new(
+        let core = Arc::new(Core::with_stats(
             CoreConfig {
                 net: config.tunnel_net,
                 quic: config.quic,
@@ -234,14 +239,15 @@ impl Tunnel {
             events.clone(),
             socks.clone(),
             commands_tx,
-            injector_tx,
+            unified_injector_tx.clone(),
             hooks.clone(),
             quic_driver.clone(),
+            core_stats.clone(),
         ));
-        let core_stats = core.stats.clone();
+        let quic_timers = quic_driver.clone();
         let core_task = tokio::spawn(async move {
             // The gateway's timers live as long as the core does.
-            let timers = quic_driver.map(|driver| tokio::spawn(driver.run()));
+            let timers = quic_timers.map(|driver| tokio::spawn(driver.run()));
             core::run(core, flows_rx).await;
             if let Some(timers) = timers {
                 timers.abort();
@@ -264,6 +270,9 @@ impl Tunnel {
                     events: events.clone(),
                     socks: socks.clone(),
                     hooks: hooks.clone(),
+                    stats: core_stats.clone(),
+                    quic_driver: quic_driver.clone(),
+                    injector: unified_injector_tx.clone(),
                 };
                 match frontend::ikev2::listener::start_side(params, ikev2_shutdown).await {
                     Ok(side) => Some(side),
@@ -275,6 +284,20 @@ impl Tunnel {
             }
             _ => None,
         };
+
+        let ikev2_peers_ref = ikev2_peers.clone();
+        let ikev2_injector_tx = ikev2.as_ref().map(|side| side.injector.clone());
+        let router_task = tokio::spawn(async move {
+            while let Some(packet) = unified_injector_rx.recv().await {
+                if lock(&ikev2_peers_ref).contains_ip(&packet.to) {
+                    if let Some(ikev2_tx) = &ikev2_injector_tx {
+                        let _ = ikev2_tx.send(packet).await;
+                    }
+                } else {
+                    let _ = wg_injector_tx.send(packet).await;
+                }
+            }
+        });
 
         events.emit(json!({
             "event": "ready",
@@ -305,6 +328,7 @@ impl Tunnel {
             shutdown_tx,
             frontend_task: Some(frontend.task),
             core_task,
+            router_task,
         })
     }
 

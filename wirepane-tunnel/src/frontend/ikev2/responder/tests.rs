@@ -820,6 +820,61 @@ fn rekeying_the_child_sa_keeps_the_tunnel_up() {
 }
 
 #[test]
+fn rekeying_the_ike_sa_keeps_the_tunnel_and_child_sas() {
+    let mut responder = new_responder();
+    let now = Instant::now();
+    let mut phone = connect(&mut responder, DH_ECP_256, now);
+
+    // Send a packet through the Child SA first to verify it works
+    let packet = udp_packet(Ipv4Addr::new(10, 73, 0, 2), Ipv4Addr::new(1, 1, 1, 1));
+    let sealed = phone.esp.as_mut().expect("ESP").seal(&packet).expect("seal");
+    assert_eq!(
+        responder.handle_datagram(Port::NatT, &sealed, phone_nat_t(), now),
+        vec![Output::Packet { peer: "p1".to_string(), packet: packet.clone() }]
+    );
+
+    // Rekey the IKE SA (RFC 7296 §1.3.2)
+    let new_spi_i: u64 = 0xA1A2_A3A4_A5A6_A7A8;
+    let private = EphemeralPrivateKey::generate(&ECDH_P256, &SystemRandom::new()).expect("key");
+    let public = private.compute_public_key().expect("public key");
+    let ke_data = public.as_ref()[1..].to_vec();
+
+    let mut chain = ChainBuilder::new();
+    chain.push(
+        PL_SA,
+        &build_sa(&Proposal {
+            number: 1,
+            protocol: PROTO_IKE,
+            spi: new_spi_i.to_be_bytes().to_vec(),
+            transforms: vec![
+                transform(TT_ENCR, ENCR_AES_GCM_16, Some(256)),
+                transform(TT_PRF, PRF_HMAC_SHA2_256, None),
+                transform(TT_DH, DH_ECP_256, None),
+            ],
+        }),
+    );
+    chain.push(PL_KE, &build_ke(DH_ECP_256, &ke_data));
+    chain.push(PL_NONCE, &phone.ni);
+    let request = phone.encrypted(CREATE_CHILD_SA, chain);
+
+    let (_, _, answer) = only_send(responder.handle_datagram(Port::NatT, &request, phone_nat_t(), now));
+    let payloads = phone.decrypt(&answer, CREATE_CHILD_SA);
+
+    // The answer must have SA, KE, and Nonce payloads
+    assert_eq!(payloads.len(), 3);
+    assert_eq!(payloads[0].0, PL_SA);
+    assert_eq!(payloads[1].0, PL_KE);
+    assert_eq!(payloads[2].0, PL_NONCE);
+
+    // Verify Child SA traffic still flows without interruption
+    let sealed = phone.esp.as_mut().expect("ESP").seal(&packet).expect("seal");
+    assert_eq!(
+        responder.handle_datagram(Port::NatT, &sealed, phone_nat_t(), now),
+        vec![Output::Packet { peer: "p1".to_string(), packet: packet.clone() }]
+    );
+}
+
+#[test]
 fn rekeying_an_unknown_child_sa_is_refused() {
     let mut responder = new_responder();
     let now = Instant::now();

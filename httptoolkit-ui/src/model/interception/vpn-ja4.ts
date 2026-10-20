@@ -131,15 +131,9 @@ function isHelloForName(hello: VpnTlsHello, name: string | undefined): boolean {
 }
 
 /**
- * The JA4 of a failed TLS connection. Mockttp's failure events carry no SOCKS tags (its requests
- * do), so when the connection has none, the hello the tunnel reported for it is found by the name
- * it asked for and by time. A pinned app's connection fails before any request, so this is the
- * only way to see its fingerprint.
+ * Finds the matching VPN TLS Hello event for a failed TLS connection, by hostname and time window.
  */
-export function findJa4ForFailure(failure: Ja4Failure, hellos: readonly VpnTlsHello[]): string | undefined {
-    const tagged = getJa4FromTags(failure.tags);
-    if (tagged) return tagged;
-
+export function findHelloForFailure(failure: Ja4Failure, hellos: readonly VpnTlsHello[]): VpnTlsHello | undefined {
     const startTime = failure.timingEvents?.startTime;
     if (typeof startTime !== 'number' || !Number.isFinite(startTime)) return undefined;
 
@@ -159,7 +153,19 @@ export function findJa4ForFailure(failure: Ja4Failure, hellos: readonly VpnTlsHe
             closestGap = gap;
         }
     }
-    return closest?.ja4;
+    return closest;
+}
+
+/**
+ * The JA4 of a failed TLS connection. Mockttp's failure events carry no SOCKS tags (its requests
+ * do), so when the connection has none, the hello the tunnel reported for it is found by the name
+ * it asked for and by time. A pinned app's connection fails before any request, so this is the
+ * only way to see its fingerprint.
+ */
+export function findJa4ForFailure(failure: Ja4Failure, hellos: readonly VpnTlsHello[]): string | undefined {
+    const tagged = getJa4FromTags(failure.tags);
+    if (tagged) return tagged;
+    return findHelloForFailure(failure, hellos)?.ja4;
 }
 
 export interface Ja4Count {

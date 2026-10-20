@@ -19,6 +19,8 @@ pub struct CoreStats {
     pub dns_queries: AtomicU64,
     pub quic_blocked: AtomicU64,
     pub quic_icmp_sent: AtomicU64,
+    pub packets_dropped: AtomicU64,
+    pub shaper_dropped: AtomicU64,
 }
 
 impl CoreStats {
@@ -45,6 +47,7 @@ impl CoreStats {
             },
             "dns": { "queries": get(&self.dns_queries) },
             "quic": { "blocked": get(&self.quic_blocked), "icmpSent": get(&self.quic_icmp_sent) },
+            "dropped": { "total": get(&self.packets_dropped), "shaper": get(&self.shaper_dropped) },
         })
     }
 }

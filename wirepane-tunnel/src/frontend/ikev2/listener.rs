@@ -23,13 +23,14 @@ use tokio::time::{MissedTickBehavior, interval};
 use super::responder::{Credentials, Output, PeerSecret, Port, Responder, ResponderConfig, DEFAULT_MAX_HALF_OPEN};
 use super::{SERVER_IDENTITY, peer_from_identity};
 use crate::core::hooks::{DelayQueue, Hooks, MAX_DELAYED_PACKETS};
+use crate::core::quic::QuicDriver;
 use crate::core::stats::CoreStats;
 use crate::core::{self, Core, CoreConfig};
 use crate::events::EventSink;
 use crate::features::Direction;
 use crate::features::conditions::Verdict;
 use crate::frontend::wireguard::{PeerSummary, lock, now_ms};
-use crate::frontend::{InjectedPacket, PeerDirectory, PeerView};
+use crate::frontend::{InjectedPacket, PacketInjector, PeerDirectory, PeerView};
 
 /// Timeouts and revocations are checked this often.
 const TICK: Duration = Duration::from_millis(250);
@@ -86,6 +87,10 @@ impl Ikev2Peers {
 
     pub fn contains(&self, id: &str) -> bool {
         self.by_id.contains_key(id)
+    }
+
+    pub fn contains_ip(&self, ip: &Ipv4Addr) -> bool {
+        self.by_ip.contains_key(ip)
     }
 
     pub fn summaries(&self) -> Vec<PeerSummary> {
@@ -362,13 +367,17 @@ pub struct Ikev2SideParams {
     pub events: EventSink,
     pub socks: Arc<Mutex<String>>,
     pub hooks: Arc<Hooks>,
+    pub stats: Arc<CoreStats>,
+    pub quic_driver: Option<Arc<QuicDriver>>,
+    pub injector: PacketInjector,
 }
 
 pub struct Ikev2Side {
     pub ike_addr: SocketAddr,
     pub nat_t_addr: SocketAddr,
-    /// The IKEv2 phones' flow counters (the WireGuard core has its own).
+    /// The IKEv2 phones' flow counters (shared with the WireGuard core).
     pub stats: Arc<CoreStats>,
+    pub injector: PacketInjector,
     tasks: Vec<JoinHandle<()>>,
     listener: tokio::task::AbortHandle,
 }
@@ -390,7 +399,7 @@ impl Ikev2Side {
 pub async fn start_side(params: Ikev2SideParams, shutdown: shutdown::Receiver) -> Result<Ikev2Side> {
     let (commands_tx, commands_rx) = mpsc::unbounded_channel();
     let (flows_tx, flows_rx) = mpsc::channel(256);
-    let (injector_tx, injector_rx) = mpsc::channel(256);
+    let (local_injector_tx, injector_rx) = mpsc::channel(256);
     let (inbound_tx, inbound_rx) = mpsc::channel(256);
     let (outbound_tx, outbound_rx) = mpsc::channel(256);
 
@@ -409,16 +418,16 @@ pub async fn start_side(params: Ikev2SideParams, shutdown: shutdown::Receiver) -
     .await?;
     let (network_task, net_tx, net_rx) = add_network_layer(flows_tx, commands_rx, shutdown.clone());
 
-    let core = Arc::new(Core::new(
+    let core = Arc::new(Core::with_stats(
         params.core,
         Arc::new(Ikev2Directory(params.peers.clone())),
         params.events.clone(),
         params.socks,
         commands_tx,
-        injector_tx,
+        params.injector,
         params.hooks.clone(),
-        // HTTP/3 decryption injects into the WireGuard front-end; IKEv2 phones get block or relay.
-        None,
+        params.quic_driver,
+        params.stats.clone(),
     ));
     let stats = core.stats.clone();
     let core_task = tokio::spawn(core::run(core, flows_rx));
@@ -450,6 +459,7 @@ pub async fn start_side(params: Ikev2SideParams, shutdown: shutdown::Receiver) -
         ike_addr: frontend.ike_addr,
         nat_t_addr: frontend.nat_t_addr,
         stats,
+        injector: local_injector_tx,
         tasks: vec![core_task, pump_task],
         listener: listener_abort,
     })
@@ -514,7 +524,12 @@ impl Pump {
     }
 
     fn hold(&mut self, due: Instant, held: Held, bytes: usize) {
-        if !self.delayed.push_bytes(due, held, bytes) {
+        let peer = match &held {
+            Held::FromPhone(p, _, _) => p.clone(),
+            Held::ToPhone(p, _) => p.clone(),
+        };
+        if !self.delayed.push_peer_bytes(due, held, bytes, Some(&peer)) {
+            self.hooks.count_dropped_packet();
             log::debug!("ikev2: the delay queue is full, dropped {} packets so far", self.delayed.dropped());
         }
     }
@@ -724,6 +739,7 @@ mod tests {
         };
         let (shutdown_tx, shutdown_rx) = shutdown::channel();
         let hooks = Arc::new(Hooks::new(crate::core::QuicMode::Block));
+        let (injector_tx, _injector_rx) = mpsc::channel(16);
         let side = start_side(
             Ikev2SideParams {
                 ike: "127.0.0.1:0".parse().expect("address"),
@@ -736,6 +752,9 @@ mod tests {
                 events,
                 socks: Arc::new(Mutex::new("127.0.0.1:9".to_string())),
                 hooks: hooks.clone(),
+                stats: Arc::new(CoreStats::default()),
+                quic_driver: None,
+                injector: injector_tx,
             },
             shutdown_rx,
         )

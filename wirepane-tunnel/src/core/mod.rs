@@ -130,6 +130,31 @@ impl Core {
         hooks: Arc<Hooks>,
         quic: Option<Arc<QuicDriver>>,
     ) -> Self {
+        Self::with_stats(
+            cfg,
+            dir,
+            events,
+            socks,
+            commands,
+            injector,
+            hooks,
+            quic,
+            Arc::new(CoreStats::default()),
+        )
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub fn with_stats(
+        cfg: CoreConfig,
+        dir: Arc<dyn PeerDirectory>,
+        events: EventSink,
+        socks: Arc<Mutex<String>>,
+        commands: mpsc::UnboundedSender<TransportCommand>,
+        injector: PacketInjector,
+        hooks: Arc<Hooks>,
+        quic: Option<Arc<QuicDriver>>,
+        stats: Arc<CoreStats>,
+    ) -> Self {
         Self {
             cfg,
             dir,
@@ -139,7 +164,7 @@ impl Core {
             flow_ids: AtomicU64::new(1),
             commands,
             injector,
-            stats: Arc::new(CoreStats::default()),
+            stats,
             hooks,
             quic,
         }

@@ -566,7 +566,8 @@ impl WgTask {
                 Verdict::Now => self.deliver_inbound(packet, src),
                 Verdict::At(due) => {
                     let size = packet.len();
-                    if !self.delayed.push_bytes(due, Held::FromPhone(peer.clone(), packet, src), size) {
+                    if !self.delayed.push_peer_bytes(due, Held::FromPhone(peer.clone(), packet, src), size, Some(&peer)) {
+                        self.hooks.count_dropped_packet();
                         log::debug!("the delay queue is full, dropping a packet from {peer} ({} so far)", self.delayed.dropped());
                     }
                 }
@@ -644,7 +645,8 @@ impl WgTask {
         match self.hooks.admit(&peer, Direction::ToPhone, bytes, Instant::now()) {
             Verdict::Now => self.seal_and_send(dst, bytes).await,
             Verdict::At(due) => {
-                if !self.delayed.push_bytes(due, Held::ToPhone(peer.clone(), dst, bytes.to_vec()), bytes.len()) {
+                if !self.delayed.push_peer_bytes(due, Held::ToPhone(peer.clone(), dst, bytes.to_vec()), bytes.len(), Some(&peer)) {
+                    self.hooks.count_dropped_packet();
                     log::debug!("the delay queue is full, dropping a packet for {peer} ({} so far)", self.delayed.dropped());
                 }
             }
